@@ -106,46 +106,46 @@ Deferred to future release. Tracked but not in current roadmap.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SYNC-01 | — | Pending |
-| SYNC-02 | — | Pending |
-| SYNC-03 | — | Pending |
-| SYNC-04 | — | Pending |
-| SYNC-05 | — | Pending |
-| ACCT-01 | — | Pending |
-| ACCT-02 | — | Pending |
-| ACCT-03 | — | Pending |
-| ACCT-04 | — | Pending |
-| ACCT-05 | — | Pending |
-| BUDG-01 | — | Pending |
-| BUDG-02 | — | Pending |
-| BUDG-03 | — | Pending |
-| BUDG-04 | — | Pending |
-| BUDG-05 | — | Pending |
-| BUDG-06 | — | Pending |
-| BUDG-07 | — | Pending |
-| CATG-01 | — | Pending |
-| CATG-02 | — | Pending |
-| CATG-03 | — | Pending |
-| CATG-04 | — | Pending |
-| CATG-05 | — | Pending |
-| CATG-06 | — | Pending |
-| CATG-07 | — | Pending |
-| CATG-08 | — | Pending |
-| CATG-09 | — | Pending |
-| REPT-01 | — | Pending |
-| REPT-02 | — | Pending |
-| REPT-03 | — | Pending |
-| TXNR-01 | — | Pending |
-| INFR-01 | — | Pending |
-| INFR-02 | — | Pending |
-| INFR-03 | — | Pending |
-| INFR-04 | — | Pending |
+| SYNC-01 | Phase 2 | Pending |
+| SYNC-02 | Phase 2 | Pending |
+| SYNC-03 | Phase 3 | Pending |
+| SYNC-04 | Phase 3 | Pending |
+| SYNC-05 | Phase 2 | Pending |
+| ACCT-01 | Phase 9 | Pending |
+| ACCT-02 | Phase 2 | Pending |
+| ACCT-03 | Phase 3 | Pending |
+| ACCT-04 | Phase 3 | Pending |
+| ACCT-05 | Phase 3 | Pending |
+| BUDG-01 | Phase 4 | Pending |
+| BUDG-02 | Phase 7 | Pending |
+| BUDG-03 | Phase 7 | Pending |
+| BUDG-04 | Phase 7 | Pending |
+| BUDG-05 | Phase 7 | Pending |
+| BUDG-06 | Phase 7 | Pending |
+| BUDG-07 | Phase 8 | Pending |
+| CATG-01 | Phase 4 | Pending |
+| CATG-02 | Phase 5 | Pending |
+| CATG-03 | Phase 5 | Pending |
+| CATG-04 | Phase 5 | Pending |
+| CATG-05 | Phase 5 | Pending |
+| CATG-06 | Phase 4 | Pending |
+| CATG-07 | Phase 6 | Pending |
+| CATG-08 | Phase 6 | Pending |
+| CATG-09 | Phase 6 | Pending |
+| REPT-01 | Phase 9 | Pending |
+| REPT-02 | Phase 9 | Pending |
+| REPT-03 | Phase 9 | Pending |
+| TXNR-01 | Phase 4 | Pending |
+| INFR-01 | Phase 1 | Pending |
+| INFR-02 | Phase 1 | Pending |
+| INFR-03 | Phase 1 | Pending |
+| INFR-04 | Phase 1 | Pending |
 
 **Coverage:**
 - v1 requirements: 34 total
-- Mapped to phases: 0
-- Unmapped: 34 ⚠️
+- Mapped to phases: 34
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-03-22*
-*Last updated: 2026-03-22 after initial definition*
+*Last updated: 2026-03-22 after roadmap creation — all 34 requirements mapped*
