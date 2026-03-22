@@ -95,4 +95,43 @@ describe('trpc-router', () => {
       expect(account.last_synced).toBeTruthy();
     }
   });
+
+  it('accounts.list returns all accounts with correct shape', async () => {
+    const caller = createCaller();
+    await caller.sync.trigger();
+
+    const accounts = await caller.accounts.list();
+
+    expect(accounts.length).toBe(3);
+    for (const account of accounts) {
+      expect(account.id).toBeTruthy();
+      expect(account.name).toBeTruthy();
+      expect(account.institution).toBeTruthy();
+      expect(account.type).toBeTruthy();
+      expect(typeof account.balance).toBe('number');
+      expect('lastSynced' in account).toBe(true);
+    }
+  });
+
+  it('accounts.list returns accounts ordered by type then name', async () => {
+    const caller = createCaller();
+    await caller.sync.trigger();
+
+    const accounts = await caller.accounts.list();
+
+    // Banking accounts should come before investment accounts (type ASC)
+    const types = accounts.map(a => a.type);
+    const bankingEnd = types.lastIndexOf('banking');
+    const investmentStart = types.indexOf('investment');
+    if (investmentStart !== -1 && bankingEnd !== -1) {
+      expect(bankingEnd).toBeLessThan(investmentStart);
+    }
+  });
+
+  it('accounts.list returns empty array when no accounts exist', async () => {
+    const caller = createCaller();
+    const accounts = await caller.accounts.list();
+
+    expect(accounts).toEqual([]);
+  });
 });

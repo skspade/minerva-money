@@ -62,8 +62,29 @@ const syncRouter = router({
   }),
 });
 
+const accountsRouter = router({
+  list: publicProcedure.query(({ ctx }) => {
+    const accounts = ctx.db.prepare(
+      'SELECT id, name, institution, type, balance, last_synced FROM accounts ORDER BY type ASC, name ASC',
+    ).all() as {
+      id: string; name: string; institution: string; type: string;
+      balance: number; last_synced: string | null;
+    }[];
+
+    return accounts.map(a => ({
+      id: a.id,
+      name: a.name,
+      institution: a.institution,
+      type: a.type,
+      balance: a.balance,
+      lastSynced: a.last_synced,
+    }));
+  }),
+});
+
 export const appRouter = router({
   sync: syncRouter,
+  accounts: accountsRouter,
 });
 
 export type AppRouter = typeof appRouter;
