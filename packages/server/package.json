@@ -7,9 +7,11 @@
     "build": "tsc"
   },
   "dependencies": {
+    "@trpc/server": "^11.14.1",
     "better-sqlite3": "^11.7.0",
     "croner": "^10.0.1",
-    "express": "^4.21.0"
+    "express": "^4.21.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.12",

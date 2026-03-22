@@ -1,4 +1,11 @@
 import express from 'express';
+import * as trpcExpress from '@trpc/server/adapters/express';
+import { createDatabase } from './db/connection.js';
+import { appRouter } from './sync/trpc-router.js';
+import { getSimpleFINClient } from './sync/simplefin-client.js';
+import { createRateLimiter } from './sync/rate-limiter.js';
+import { startSyncScheduler, stopSyncScheduler } from './sync/sync-scheduler.js';
+import type { Context } from './sync/trpc.js';
 
 const app = express();
 const PORT = 3001;
@@ -10,9 +17,29 @@ app.get('/health', (_req, res) => {
 });
 
 if (process.env.NODE_ENV !== 'test') {
-  app.listen(PORT, () => {
+  const db = createDatabase();
+  const rateLimiter = createRateLimiter();
+  const client = getSimpleFINClient();
+
+  app.use(
+    '/trpc',
+    trpcExpress.createExpressMiddleware({
+      router: appRouter,
+      createContext: (): Context => ({ db, rateLimiter, client }),
+    }),
+  );
+
+  startSyncScheduler(db);
+
+  const server = app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
+  });
+
+  process.on('SIGTERM', () => {
+    stopSyncScheduler();
+    server.close();
   });
 }
 
 export { app };
+export type { AppRouter } from './sync/trpc-router.js';
