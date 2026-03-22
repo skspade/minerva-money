@@ -12,7 +12,7 @@ Minerva Money is built in strict dependency order: schema and data integrity dec
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Foundation** - Project scaffolding, SQLite schema with integer-cent money storage, migration runner, and iCloud backup module
+- [x] **Phase 1: Foundation** - Project scaffolding, SQLite schema with integer-cent money storage, migration runner, and iCloud backup module (completed 2026-03-22)
 - [ ] **Phase 2: SimpleFIN Data Pipeline** - SimpleFIN client with mock fixtures, sync service with layered deduplication, scheduled auto-sync, and sync error logging
 - [ ] **Phase 3: Accounts and Transactions UI** - React app shell, account list with balances, transaction list with sort/filter/search, and sync status controls
 - [ ] **Phase 4: Category Management** - Category groups and categories CRUD, manual transaction categorization, transaction split across categories, and manual transaction entry
@@ -36,9 +36,9 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 3 plans (2 waves)
 
 Plans:
-- [ ] 01-01-PLAN.md — Monorepo scaffold: npm workspaces, TypeScript strict, Vite + Express dev servers, ESLint, Vitest (Wave 1)
-- [ ] 01-02-PLAN.md — SQLite schema + migration runner: all 9 tables, INTEGER cents, dedup constraints, PRAGMA user_version (Wave 2, TDD)
-- [ ] 01-03-PLAN.md — iCloud Drive backup module: better-sqlite3 .backup(), integrity check, 30-day retention, launchd plist (Wave 2, TDD)
+- [x] 01-01-PLAN.md — Monorepo scaffold: npm workspaces, TypeScript strict, Vite + Express dev servers, ESLint, Vitest (Wave 1)
+- [x] 01-02-PLAN.md — SQLite schema + migration runner: all 9 tables, INTEGER cents, dedup constraints, PRAGMA user_version (Wave 2, TDD)
+- [x] 01-03-PLAN.md — iCloud Drive backup module: better-sqlite3 .backup(), integrity check, 30-day retention, launchd plist (Wave 2, TDD)
 
 ### Phase 2: SimpleFIN Data Pipeline
 **Goal**: Real bank transactions flow into the database with correct deduplication, rate-limit safety, and full error observability — before any UI exists
@@ -192,7 +192,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 0/3 | Not started | - |
+| 1. Foundation | 3/3 | Complete | 2026-03-22 |
 | 2. SimpleFIN Data Pipeline | 0/4 | Not started | - |
 | 3. Accounts and Transactions UI | 0/4 | Not started | - |
 | 4. Category Management | 0/4 | Not started | - |

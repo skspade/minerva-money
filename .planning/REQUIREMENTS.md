@@ -57,10 +57,10 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Infrastructure
 
-- [ ] **INFR-01**: App performs atomic SQLite backups to iCloud Drive every 6 hours via launchd
-- [ ] **INFR-02**: App triggers SQLite backup after every SimpleFIN sync completion
-- [ ] **INFR-03**: App retains 30 days of timestamped backup snapshots plus a latest copy
-- [ ] **INFR-04**: All money values are stored as integers (cents) to avoid floating-point errors
+- [x] **INFR-01**: App performs atomic SQLite backups to iCloud Drive every 6 hours via launchd
+- [x] **INFR-02**: App triggers SQLite backup after every SimpleFIN sync completion
+- [x] **INFR-03**: App retains 30 days of timestamped backup snapshots plus a latest copy
+- [x] **INFR-04**: All money values are stored as integers (cents) to avoid floating-point errors
 
 ## v2 Requirements
 
@@ -136,10 +136,10 @@ Deferred to future release. Tracked but not in current roadmap.
 | REPT-02 | Phase 9 | Pending |
 | REPT-03 | Phase 9 | Pending |
 | TXNR-01 | Phase 4 | Pending |
-| INFR-01 | Phase 1 | Pending |
-| INFR-02 | Phase 1 | Pending |
-| INFR-03 | Phase 1 | Pending |
-| INFR-04 | Phase 1 | Pending |
+| INFR-01 | Phase 1 | Done |
+| INFR-02 | Phase 1 | Done |
+| INFR-03 | Phase 1 | Done |
+| INFR-04 | Phase 1 | Done |
 
 **Coverage:**
 - v1 requirements: 34 total

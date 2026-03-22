@@ -18,21 +18,21 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-22)
 
 **Core value:** Accurate, auto-synced financial data with envelope budgeting that lets you see where every dollar goes and how spending trends over time.
-**Current focus:** Phase 1 — Foundation
+**Current focus:** Phase 2 — SimpleFIN Data Pipeline
 
 ## Current Position
 
-Phase: 1 of 9 (Foundation)
-Plan: 0 of 3 in current phase
+Phase: 2 of 9 (SimpleFIN Data Pipeline)
+Plan: 0 of 4 in current phase
 Status: Ready to plan
-Last activity: 2026-03-22 — Roadmap created, phases derived from requirements
+Last activity: 2026-03-22 — Phase 1 Foundation complete (3/3 plans, 16 tests passing)
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [█░░░░░░░░░] 11%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 0
+- Total plans completed: 3
 - Average duration: —
 - Total execution time: —
 
