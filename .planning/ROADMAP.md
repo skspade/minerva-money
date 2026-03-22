@@ -33,12 +33,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. Running migrations creates all database tables with INTEGER columns for every money value
   3. A backup is written to the iCloud Drive path as an atomic SQLite snapshot, passing PRAGMA integrity_check
   4. Running `npm test` executes the test suite with at least the migration runner and backup module covered
-**Plans**: TBD
+**Plans**: 3 plans (2 waves)
 
 Plans:
-- [ ] 01-01: Monorepo setup (packages: client, server, shared), TypeScript configs, Vite, ESLint, Vitest
-- [ ] 01-02: SQLite schema design — all tables, INTEGER cents enforcement, UNIQUE dedup constraints, PRAGMA user_version migration runner
-- [ ] 01-03: iCloud Drive backup module — better-sqlite3 .backup() API, integrity_check, 30-day rotation, launchd plist for 6-hour schedule
+- [ ] 01-01-PLAN.md — Monorepo scaffold: npm workspaces, TypeScript strict, Vite + Express dev servers, ESLint, Vitest (Wave 1)
+- [ ] 01-02-PLAN.md — SQLite schema + migration runner: all 9 tables, INTEGER cents, dedup constraints, PRAGMA user_version (Wave 2, TDD)
+- [ ] 01-03-PLAN.md — iCloud Drive backup module: better-sqlite3 .backup(), integrity check, 30-day retention, launchd plist (Wave 2, TDD)
 
 ### Phase 2: SimpleFIN Data Pipeline
 **Goal**: Real bank transactions flow into the database with correct deduplication, rate-limit safety, and full error observability — before any UI exists
