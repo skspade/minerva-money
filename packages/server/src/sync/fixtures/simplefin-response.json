@@ -1,0 +1,128 @@
+{
+  "errlist": [],
+  "connections": [
+    {
+      "conn_id": "conn-discover",
+      "name": "Discover",
+      "org_id": "discover-bank",
+      "sfin_url": "https://bridge.simplefin.org/simplefin/discover"
+    },
+    {
+      "conn_id": "conn-fidelity",
+      "name": "Fidelity Investments",
+      "org_id": "fidelity",
+      "sfin_url": "https://bridge.simplefin.org/simplefin/fidelity"
+    },
+    {
+      "conn_id": "conn-consumers",
+      "name": "Consumers Credit Union",
+      "org_id": "consumers-cu",
+      "sfin_url": "https://bridge.simplefin.org/simplefin/consumers"
+    }
+  ],
+  "accounts": [
+    {
+      "id": "acct-discover-checking",
+      "name": "Discover Cashback Checking",
+      "conn_id": "conn-discover",
+      "currency": "USD",
+      "balance": "2847.53",
+      "available-balance": "2847.53",
+      "balance-date": 1711065600,
+      "transactions": [
+        {
+          "id": "txn-disc-001",
+          "posted": 1711065600,
+          "amount": "-45.67",
+          "description": "AMAZON.COM",
+          "pending": false
+        },
+        {
+          "id": "txn-disc-002",
+          "posted": 1710979200,
+          "amount": "-128.34",
+          "description": "COSTCO WHOLESALE",
+          "pending": false
+        },
+        {
+          "id": "txn-disc-003",
+          "posted": 1710892800,
+          "amount": "3250.00",
+          "description": "PAYROLL DEPOSIT - ACME CORP",
+          "pending": false
+        },
+        {
+          "id": "txn-disc-004",
+          "posted": 0,
+          "amount": "-12.99",
+          "description": "NETFLIX",
+          "transacted_at": 1711152000,
+          "pending": true
+        }
+      ]
+    },
+    {
+      "id": "acct-fidelity-invest",
+      "name": "Fidelity 401(k)",
+      "conn_id": "conn-fidelity",
+      "currency": "USD",
+      "balance": "145230.87",
+      "balance-date": 1711065600,
+      "transactions": []
+    },
+    {
+      "id": "acct-consumers-checking",
+      "name": "Consumers CU Checking",
+      "conn_id": "conn-consumers",
+      "currency": "USD",
+      "balance": "1523.41",
+      "available-balance": "1423.41",
+      "balance-date": 1711065600,
+      "transactions": [
+        {
+          "id": "txn-cons-001",
+          "posted": 1711065600,
+          "amount": "-85.23",
+          "description": "MEIJER #242",
+          "pending": false
+        },
+        {
+          "id": "txn-cons-002",
+          "posted": 1710979200,
+          "amount": "-42.00",
+          "description": "CONSUMERS ENERGY",
+          "pending": false
+        },
+        {
+          "id": "txn-cons-003",
+          "posted": 1710892800,
+          "amount": "-9.99",
+          "description": "SPOTIFY USA",
+          "pending": false
+        },
+        {
+          "id": "txn-cons-004",
+          "posted": 1710806400,
+          "amount": "1500.00",
+          "description": "PAYROLL DEPOSIT - ACME CORP",
+          "pending": false
+        },
+        {
+          "id": "txn-cons-005",
+          "posted": 0,
+          "amount": "-23.45",
+          "description": "SHELL OIL",
+          "transacted_at": 1711152000,
+          "pending": true
+        },
+        {
+          "id": "txn-cons-006",
+          "posted": 1710720000,
+          "amount": "0.00",
+          "description": "ACCOUNT ADJUSTMENT",
+          "pending": false
+        }
+      ]
+    }
+  ]
+}
