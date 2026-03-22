@@ -70,13 +70,13 @@ Plans:
   4. A search box filters transactions by payee or memo text as the user types
   5. The sync status indicator shows last sync time and displays any errors in plain language
   6. Clicking "Sync Now" triggers an immediate sync and updates the status indicator on completion
-**Plans**: TBD
+**Plans**: 4 plans (3 waves)
 
 Plans:
-- [ ] 03-01: React app shell — tRPC client setup, TanStack Query provider, layout with navigation, Tailwind base styles
-- [ ] 03-02: Accounts page — account list grouped by type, balance display using currency.js formatting, investment account balance-only treatment
-- [ ] 03-03: Transactions page — sortable/filterable table, date range picker, payee/memo search, category column (empty until Phase 4)
-- [ ] 03-04: Sync controls — Sync Now button, status indicator component, error message display, last sync timestamp
+- [ ] 03-01-PLAN.md — React app shell: tRPC client + TanStack Query providers, React Router, Tailwind CSS v4, Layout with navigation (Wave 1)
+- [ ] 03-02-PLAN.md — Accounts page: accounts.list tRPC query, grouped account cards, investment balance-only treatment (Wave 2)
+- [ ] 03-03-PLAN.md — Transactions page: transactions.list tRPC query, sortable/filterable table, debounced search, category placeholder (Wave 2)
+- [ ] 03-04-PLAN.md — Sync controls: SyncStatus indicator, Sync Now button, cache invalidation on sync completion (Wave 3)
 
 ### Phase 4: Category Management and Manual Categorization
 **Goal**: Users can organize spending into categories, assign categories to transactions by hand, split transactions, and enter manual transactions
