@@ -51,13 +51,13 @@ Plans:
   4. The server hard-caps SimpleFIN requests at 20/day per account, reserving 4 for manual syncs
   5. Sync failures are written to the sync_log table with timestamp, error message, and account context
   6. Balance snapshots are recorded per account after every successful sync
-**Plans**: TBD
+**Plans**: 4 plans (3 waves)
 
 Plans:
-- [ ] 02-01: SimpleFIN HTTP client — token handling, accounts+transactions fetch, typed response normalization, mock fixture mode
-- [ ] 02-02: Sync service — layered dedup (transactionId primary, hash fallback), INSERT OR IGNORE strategy, rate-limit counter, balance snapshot recording
-- [ ] 02-03: Sync scheduler (croner) — twice-daily auto-sync, post-sync backup trigger, sync error logging to sync_log table
-- [ ] 02-04: tRPC sync procedures — manual sync trigger, sync status query (last sync time, error count, per-account status)
+- [ ] 02-01-PLAN.md — SimpleFIN HTTP client: typed response normalization, mock fixture mode, dedup hash generation (Wave 1, TDD)
+- [ ] 02-02-PLAN.md — Sync service: layered dedup, INSERT OR IGNORE, rate-limit counter, balance snapshots, sync logging (Wave 2, TDD)
+- [ ] 02-03-PLAN.md — Sync scheduler: croner twice-daily auto-sync, post-sync backup trigger (Wave 3)
+- [ ] 02-04-PLAN.md — tRPC sync procedures: manual sync trigger, sync status query, Express server wiring (Wave 3)
 
 ### Phase 3: Accounts and Transactions UI
 **Goal**: Users can see their accounts, balances, and full transaction history in the browser, and control sync from the UI
