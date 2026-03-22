@@ -30,6 +30,8 @@ Accurate, auto-synced financial data with envelope budgeting that lets you see w
 - [ ] Sync error logging + in-app status indicator (last sync time, errors)
 - [ ] iCloud Drive backup via atomic SQLite snapshots (every 6 hours + post-sync)
 
+- [ ] Claude integration via MCP server or CLI (v2 — design API surface with this in mind)
+
 ### Out of Scope
 
 - Portfolio breakdown / gain-loss tracking — just need balance for net worth
@@ -66,6 +68,7 @@ Accurate, auto-synced financial data with envelope budgeting that lets you see w
 | Most-specific-rule-wins for categorization | Intuitive behavior without manual priority ordering | — Pending |
 | Hash-based dedup fallback | Some providers reuse/change transactionIds — hash of account+date+amount+merchant as safety net | — Pending |
 | Balance-only for investments | Keeps scope minimal — net worth is the goal, not portfolio management | — Pending |
+| Design tRPC API with future MCP/CLI exposure in mind | Claude integration planned for v2; service layer should be cleanly separable from tRPC routers | — Pending |
 | No auth layer | Single user on private home server — unnecessary complexity | — Pending |
 | .env for secrets | Simple and sufficient for single-user home server | — Pending |
 
