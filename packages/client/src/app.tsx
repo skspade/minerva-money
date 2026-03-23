@@ -3,6 +3,7 @@ import Layout from './components/Layout';
 import AccountsPage from './pages/AccountsPage';
 import TransactionsPage from './pages/TransactionsPage';
 import CategoriesPage from './pages/CategoriesPage';
+import RulesPage from './pages/RulesPage';
 
 export default function App() {
   return (
@@ -13,6 +14,7 @@ export default function App() {
           <Route path="accounts" element={<AccountsPage />} />
           <Route path="transactions" element={<TransactionsPage />} />
           <Route path="categories" element={<CategoriesPage />} />
+          <Route path="rules" element={<RulesPage />} />
         </Route>
       </Routes>
     </BrowserRouter>
