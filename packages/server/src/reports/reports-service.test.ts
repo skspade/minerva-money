@@ -94,6 +94,14 @@ describe('reports-service', () => {
       expect(result[0].total).toBe(3000);
     });
 
+    it('includes transactions on endDate boundary', () => {
+      db.prepare('INSERT INTO transactions (id, account_id, date, amount, category_id) VALUES (?, ?, ?, ?, ?)').run('t1', 'acct-1', '2026-03-15', -5000, catGroceries);
+
+      const result = getSpendingByCategory(db, '2026-03-01', '2026-03-15');
+      expect(result).toHaveLength(1);
+      expect(result[0].total).toBe(5000);
+    });
+
     it('combines unsplit and split spending for same category', () => {
       // Unsplit transaction
       db.prepare('INSERT INTO transactions (id, account_id, date, amount, category_id) VALUES (?, ?, ?, ?, ?)').run('t1', 'acct-1', '2026-03-05', -5000, catGroceries);
@@ -139,6 +147,14 @@ describe('reports-service', () => {
       const result = getSpendingOverTime(db, '2026-01-01', '2026-02-01');
       expect(result).toHaveLength(1);
       expect(result[0].total).toBe(10000);
+    });
+
+    it('includes transactions on endDate boundary', () => {
+      db.prepare('INSERT INTO transactions (id, account_id, date, amount, category_id) VALUES (?, ?, ?, ?, ?)').run('t1', 'acct-1', '2026-03-15', -5000, catGroceries);
+
+      const result = getSpendingOverTime(db, '2026-03-01', '2026-03-15');
+      expect(result).toHaveLength(1);
+      expect(result[0].total).toBe(5000);
     });
 
     it('returns empty array when no transactions in range', () => {
