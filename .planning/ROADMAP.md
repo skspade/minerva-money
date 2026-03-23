@@ -63,7 +63,9 @@ Full details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
   3. User sees a loading indicator while the agent is processing and cannot double-send messages
   4. Errors from the agent display as readable messages in the chat thread (not silent failures or raw stack traces)
   5. Confirmation buttons appear inline when the agent proposes actions that require approval
-**Plans**: TBD
+**Plans**: 2 plans
+- [ ] 15-01-PLAN.md — Dependencies, routing, nav link, and ChatPage shell with full-height layout
+- [ ] 15-02-PLAN.md — Chat message flow, markdown rendering, loading states, errors, and confirmation buttons
 
 ### Phase 16: Action Tools and Confirmation Flow
 **Goal**: Users can modify financial data through chat — categorize transactions, manage rules, adjust budgets, handle transfers, and trigger sync
