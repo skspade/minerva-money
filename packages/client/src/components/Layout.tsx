@@ -1,4 +1,6 @@
 import { NavLink, Outlet } from 'react-router';
+import SyncStatus from './SyncStatus';
+import SyncButton from './SyncButton';
 
 export default function Layout() {
   return (
@@ -27,7 +29,8 @@ export default function Layout() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            {/* Sync status placeholder — filled by plan 04 */}
+            <SyncStatus />
+            <SyncButton />
           </div>
         </div>
       </nav>
