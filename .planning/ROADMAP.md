@@ -88,13 +88,13 @@ Plans:
   3. User can split a transaction across multiple categories with custom amounts that sum to the transaction total
   4. User can manually enter a transaction with amount, payee, date, category, and account
   5. Category assignments are reflected immediately in the transaction list without a full page reload
-**Plans**: TBD
+**Plans**: 4 plans (2 waves)
 
 Plans:
-- [ ] 04-01: Category service and DAOs — category_groups and categories CRUD, tRPC procedures
-- [ ] 04-02: Category management UI — category group and category list, inline rename, drag-to-reorder, delete with confirmation
-- [ ] 04-03: Manual categorization UI — category picker on transaction row, split transaction modal with per-split amount validation
-- [ ] 04-04: Manual transaction entry — form with account/payee/date/amount/category fields, tRPC mutation, optimistic UI update
+- [ ] 04-01-PLAN.md — Category service: migration, CRUD, categorization, splits, manual entry (TDD) (Wave 1)
+- [ ] 04-02-PLAN.md — Category management UI: groups/categories page with inline rename, drag-to-reorder, delete (Wave 2)
+- [ ] 04-03-PLAN.md — Manual categorization UI: category picker on transaction rows, split transaction modal (Wave 2)
+- [ ] 04-04-PLAN.md — Manual transaction entry: inline form with validation, dollar-to-cents conversion (Wave 2)
 
 ### Phase 5: Categorization Rules Engine
 **Goal**: Users can define rules that categorize transactions automatically — retroactively and going forward — with deterministic conflict resolution
