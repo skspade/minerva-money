@@ -24,7 +24,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 10: Foundation Bug Fix & Verification** - Fix missing run-backup.ts, create Phase 1 VERIFICATION.md (Gap Closure) (completed 2026-03-23)
 - [x] **Phase 11: Reporting Date Fix & Verification Sweep** - Fix off-by-one date bug, create VERIFICATION.md for Phases 5, 6, 9 (Gap Closure) (completed 2026-03-23)
 - [x] **Phase 12: Budget Defaults UI** - Add budget defaults management UI, wire to existing tRPC procedures (Gap Closure) (completed 2026-03-23)
-- [ ] **Phase 13: Transaction Filter Completion** - Add amount range and category dropdown filters to TransactionsPage (Gap Closure)
+- [x] **Phase 13: Transaction Filter Completion** - Add amount range and category dropdown filters to TransactionsPage (Gap Closure) (completed 2026-03-23)
 
 ## Phase Details
 
@@ -242,7 +242,7 @@ Plans:
   1. TransactionsPage has amount range filter inputs (min/max) that filter the transaction list
   2. TransactionsPage has a category dropdown filter that filters transactions by assigned category
   3. All four filter types (date range, payee/memo, amount range, category) work together
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 Plans:
 - [ ] 13-01-PLAN.md — Add amount range and category dropdown filters
 
@@ -265,4 +265,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 10. Foundation Bug Fix & Verification | 2/2 | Complete    | 2026-03-23 |
 | 11. Reporting Date Fix & Verification Sweep | 0/0 | Complete    | 2026-03-23 |
 | 12. Budget Defaults UI | 1/1 | Complete    | 2026-03-23 |
-| 13. Transaction Filter Completion | 0/1 | Not started | - |
+| 13. Transaction Filter Completion | 1/1 | Complete   | 2026-03-23 |
