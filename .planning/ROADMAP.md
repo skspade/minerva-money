@@ -250,4 +250,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 9. Dashboard and Reporting | 0/4 | Not started | - |
 | 10. Foundation Bug Fix & Verification | 2/2 | Complete    | 2026-03-23 |
 | 11. Reporting Date Fix & Verification Sweep | 0/0 | Complete    | 2026-03-23 |
-| 12. Budget Defaults UI | 1/1 | Complete   | 2026-03-23 |
+| 12. Budget Defaults UI | 1/1 | Complete    | 2026-03-23 |
