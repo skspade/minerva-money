@@ -2,6 +2,46 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
+## Milestone: v2.0 — Claude Agent
+
+**Shipped:** 2026-03-23
+**Phases:** 4 | **Plans:** 8 | **Requirements:** 34/34
+
+### What Was Built
+- Claude Agent SDK integration with server-side execution and collect-and-return pattern
+- 11 read-only query tools covering all financial data surfaces
+- 10 action tools for categorization, rules, budgets, transfers, and sync
+- Chat UI with markdown rendering, loading states, and inline confirmation buttons
+- Safety layer: confirmation for budget amounts, prompt injection prevention, rate limiter enforcement
+
+### What Worked
+- Service layer separation from v1.0 made agent tool creation trivial — each tool wraps an existing service function
+- Milestone audit before completion caught a rate limiter bypass in trigger_sync (SAFE-04 fix in Phase 17)
+- Gap closure phase (17) was minimal (1 plan) because most requirements were satisfied during original phases
+- Per-request MCP server instantiation avoids stale DB references
+
+### What Was Inefficient
+- SUMMARY.md files across all phases lack `requirements-completed` frontmatter — the summary-extract tool couldn't find accomplishments
+- Phase 14 VERIFICATION.md created retroactively in Phase 17 instead of during Phase 14 execution
+- 3 tool names in Phase 14 VERIFICATION.md don't match actual code names — documentation drift
+
+### Patterns Established
+- XML-wrapped bank strings for prompt injection prevention in agent tools
+- System prompt confirmation rules (numbered rules 12-13) for budget amount changes
+- Shared tool-helpers.ts for common MCP tool patterns (date formatting, cents conversion, error handling)
+
+### Key Lessons
+1. Create VERIFICATION.md during phase execution, not retroactively — same lesson as v1.0 but now proven across 2 milestones
+2. Service layer separation pays compound dividends — v1.0 design decision enabled v2.0 agent tools with zero business logic duplication
+3. Audit found real safety issues (rate limiter bypass) — always audit before milestone completion
+
+### Cost Observations
+- Model mix: primarily opus for execution, sonnet for research/planning
+- Sessions: autopilot mode
+- Notable: entire v2.0 built in same day as v1.0 completion — 4 phases, 8 plans in ~1 hour
+
+---
+
 ## Milestone: v1.0 — MVP
 
 **Shipped:** 2026-03-22
@@ -53,14 +93,18 @@
 | Milestone | Phases | Plans | Key Change |
 |-----------|--------|-------|------------|
 | v1.0 | 13 | 39 | Initial build with gap closure phases |
+| v2.0 | 4 | 8 | Agent integration leveraging existing service layer |
 
 ### Cumulative Quality
 
 | Milestone | Tests | Requirements | Gap Closure Phases |
 |-----------|-------|--------------|-------------------|
 | v1.0 | 237 | 34/34 | 4 (Phases 10-13) |
+| v2.0 | 259 | 34/34 | 1 (Phase 17) |
 
 ### Top Lessons (Verified Across Milestones)
 
-1. Per-phase verification prevents gap closure phases — verify as you go
+1. Per-phase verification prevents gap closure phases — verify as you go (confirmed v1.0 + v2.0)
 2. Integer cents from day one is non-negotiable for financial apps
+3. Service layer separation enables future integration with zero business logic duplication (v1.0 design → v2.0 agent tools)
+4. Milestone audit always finds real issues — never skip it

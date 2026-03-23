@@ -1,5 +1,22 @@
 # Milestones
 
+## v2.0 Claude Agent (Shipped: 2026-03-23)
+
+**Phases:** 4 | **Plans:** 8 | **Requirements:** 34/34
+**LOC added:** 5,983 TypeScript | **Files modified:** 40
+**Timeline:** 2026-03-22 → 2026-03-23 (1 day)
+**Git range:** feat(14-01) → feat(17-01)
+
+**Key accomplishments:**
+1. Claude Agent SDK integration — server-side agent with system prompt, MCP server, session management, and tRPC endpoint
+2. 11 query tools — natural language access to all financial data (balances, budgets, spending, net worth, transactions, categories, rules, sync status, transfers)
+3. 10 action tools — modify data via chat (categorize, rules, budgets, transfers, sync) with input validation
+4. Chat UI — full-height chat page with markdown rendering, loading states, error handling, and inline confirmation buttons
+5. Confirmation flow — budget changes require explicit user approval; all other operations auto-execute
+6. Safety hardening — rate limiter pre-check on sync, prompt injection prevention, no destructive tools, API key server-side only
+
+---
+
 ## v1.0 MVP (Shipped: 2026-03-23)
 
 **Phases:** 13 | **Plans:** 39 | **Requirements:** 34/34
