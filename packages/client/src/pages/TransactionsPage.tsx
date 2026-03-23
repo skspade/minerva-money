@@ -9,6 +9,64 @@ import ManualTransactionForm from '../components/ManualTransactionForm';
 type SortColumn = 'date' | 'payee' | 'amount' | 'account';
 type SortDirection = 'asc' | 'desc';
 
+export interface TransactionFilters {
+  dateFrom: string;
+  dateTo: string;
+  search: string;
+  amountMin: string;
+  amountMax: string;
+  categoryFilter: string;
+}
+
+interface FilterableTransaction {
+  date: string;
+  payee: string;
+  memo: string | null;
+  amount: number;
+  categoryId: number | null;
+}
+
+export function filterTransactions<T extends FilterableTransaction>(
+  transactions: T[],
+  filters: TransactionFilters,
+): T[] {
+  let result = [...transactions];
+
+  if (filters.dateFrom) {
+    result = result.filter(t => t.date >= filters.dateFrom);
+  }
+  if (filters.dateTo) {
+    result = result.filter(t => t.date <= filters.dateTo);
+  }
+
+  if (filters.search) {
+    const search = filters.search.toLowerCase();
+    result = result.filter(
+      t =>
+        t.payee.toLowerCase().includes(search) ||
+        (t.memo && t.memo.toLowerCase().includes(search)),
+    );
+  }
+
+  if (filters.amountMin) {
+    const minCents = Math.round(parseFloat(filters.amountMin) * 100);
+    result = result.filter(t => Math.abs(t.amount) >= minCents);
+  }
+  if (filters.amountMax) {
+    const maxCents = Math.round(parseFloat(filters.amountMax) * 100);
+    result = result.filter(t => Math.abs(t.amount) <= maxCents);
+  }
+
+  if (filters.categoryFilter === 'uncategorized') {
+    result = result.filter(t => t.categoryId === null);
+  } else if (filters.categoryFilter !== '') {
+    const catId = parseInt(filters.categoryFilter, 10);
+    result = result.filter(t => t.categoryId === catId);
+  }
+
+  return result;
+}
+
 export default function TransactionsPage() {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
@@ -21,6 +79,9 @@ export default function TransactionsPage() {
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [amountMin, setAmountMin] = useState('');
+  const [amountMax, setAmountMax] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
   const [splitTransactionId, setSplitTransactionId] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
 
@@ -96,23 +157,14 @@ export default function TransactionsPage() {
   const filtered = useMemo(() => {
     if (!transactions) return [];
 
-    let result = [...transactions];
-
-    if (dateFrom) {
-      result = result.filter(t => t.date >= dateFrom);
-    }
-    if (dateTo) {
-      result = result.filter(t => t.date <= dateTo);
-    }
-
-    if (debouncedSearch) {
-      const search = debouncedSearch.toLowerCase();
-      result = result.filter(
-        t =>
-          t.payee.toLowerCase().includes(search) ||
-          (t.memo && t.memo.toLowerCase().includes(search)),
-      );
-    }
+    const result = filterTransactions(transactions, {
+      dateFrom,
+      dateTo,
+      search: debouncedSearch,
+      amountMin,
+      amountMax,
+      categoryFilter,
+    });
 
     result.sort((a, b) => {
       let cmp: number;
@@ -134,7 +186,7 @@ export default function TransactionsPage() {
     });
 
     return result;
-  }, [transactions, dateFrom, dateTo, debouncedSearch, sortColumn, sortDirection]);
+  }, [transactions, dateFrom, dateTo, debouncedSearch, amountMin, amountMax, categoryFilter, sortColumn, sortDirection]);
 
   const splitTransaction = splitTransactionId ? transactions?.find(t => t.id === splitTransactionId) : null;
 
@@ -194,6 +246,46 @@ export default function TransactionsPage() {
             onChange={e => setDateTo(e.target.value)}
             className="px-2 py-2 border border-gray-300 rounded-md text-sm"
           />
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-sm text-gray-600">Min $</label>
+          <input
+            type="number"
+            step="0.01"
+            placeholder="0.00"
+            value={amountMin}
+            onChange={e => setAmountMin(e.target.value)}
+            className="w-24 px-2 py-2 border border-gray-300 rounded-md text-sm"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-sm text-gray-600">Max $</label>
+          <input
+            type="number"
+            step="0.01"
+            placeholder="0.00"
+            value={amountMax}
+            onChange={e => setAmountMax(e.target.value)}
+            className="w-24 px-2 py-2 border border-gray-300 rounded-md text-sm"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-sm text-gray-600">Category</label>
+          <select
+            value={categoryFilter}
+            onChange={e => setCategoryFilter(e.target.value)}
+            className="px-2 py-2 border border-gray-300 rounded-md text-sm"
+          >
+            <option value="">All Categories</option>
+            <option value="uncategorized">Uncategorized</option>
+            {categoryGroups?.map(group => (
+              <optgroup key={group.id} label={group.name}>
+                {group.categories.map(cat => (
+                  <option key={cat.id} value={cat.id}>{cat.name}</option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
         </div>
       </div>
 
