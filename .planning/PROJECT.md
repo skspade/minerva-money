@@ -33,7 +33,15 @@ Accurate, auto-synced financial data with envelope budgeting that lets you see w
 
 ### Active
 
-(None — planning next milestone)
+## Current Milestone: v2.1 Deployment Hardening
+
+**Goal:** Harden Minerva Money for production deployment on a home iMac with auto-restart on crash, boot startup, single-process serving, and one-command deployments.
+
+**Target features:**
+- Production build with Express serving both API and client static files
+- launchd service for crash recovery and boot startup
+- Deploy script for one-command updates
+- Deployment config co-located in `deploy/` directory
 
 ### Out of Scope
 
@@ -95,6 +103,9 @@ Accurate, auto-synced financial data with envelope budgeting that lets you see w
 | System prompt confirmation flow | Budget amount changes require JSON confirmation block parsed by UI | ✓ Good — inline buttons for confirm/cancel |
 | XML-wrapped bank strings | Prevent prompt injection from payee/memo fields | ✓ Good — delimiter-based sanitization |
 | Gap closure phase (17) for audit findings | Rate limiter bypass and missing verification caught by audit | ✓ Good — all 34 v2.0 requirements verified |
+| launchd over PM2/Docker for process management | Native macOS, zero dependencies, consistent with existing backup plist | — Pending |
+| Express serves client static files | Single process, simpler deployment than nginx + Express | — Pending |
+| Node 20 --env-file over dotenv | No extra dependency, native support | — Pending |
 
 ---
-*Last updated: 2026-03-23 after v2.0 milestone completion*
+*Last updated: 2026-03-23 after v2.1 milestone start*
