@@ -9,6 +9,6 @@ export const agentRouter = router({
       sessionId: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      return chat(ctx.db, input.message, input.sessionId);
+      return chat(ctx.db, ctx, input.message, input.sessionId);
     }),
 });

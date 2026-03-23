@@ -1,6 +1,7 @@
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import type Database from 'better-sqlite3';
+import type { Context } from '../sync/trpc.js';
 import { createMcpServer } from './mcp-server.js';
 import { getSystemPrompt } from './system-prompt.js';
 
@@ -11,10 +12,11 @@ export interface ChatResult {
 
 export async function chat(
   db: Database.Database,
+  ctx: Context,
   message: string,
   sessionId?: string,
 ): Promise<ChatResult> {
-  const mcpServer = createMcpServer(db);
+  const mcpServer = createMcpServer(db, ctx);
   const systemPrompt = getSystemPrompt();
 
   const options: Record<string, unknown> = {
