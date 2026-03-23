@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState, useRef, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTRPC } from '../trpc';
 import { formatCurrency } from '../lib/format';
 
@@ -73,14 +73,85 @@ function availableColor(amount: number): string {
   return 'text-gray-500';
 }
 
+function AllocationCell({
+  value,
+  onSave,
+}: {
+  value: number;
+  onSave: (cents: number) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editing) {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }
+  }, [editing]);
+
+  const startEditing = () => {
+    setText((value / 100).toFixed(2));
+    setEditing(true);
+  };
+
+  const save = () => {
+    const parsed = parseFloat(text);
+    if (isNaN(parsed)) {
+      setEditing(false);
+      return;
+    }
+    const cents = Math.round(parsed * 100);
+    onSave(cents);
+    setEditing(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      save();
+    } else if (e.key === 'Escape') {
+      setEditing(false);
+    }
+  };
+
+  if (editing) {
+    return (
+      <input
+        ref={inputRef}
+        type="text"
+        value={text}
+        onChange={e => setText(e.target.value)}
+        onKeyDown={handleKeyDown}
+        onBlur={save}
+        className="w-24 px-2 py-1 border border-blue-400 rounded text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-500"
+      />
+    );
+  }
+
+  return (
+    <span
+      className="cursor-pointer hover:text-blue-600 hover:underline"
+      onClick={startEditing}
+      title="Click to edit allocation"
+    >
+      {formatCurrency(value)}
+    </span>
+  );
+}
+
 function BudgetGroup({
   group,
   collapsed,
   onToggle,
+  period,
+  onSetAllocation,
 }: {
   group: GroupData;
   collapsed: boolean;
   onToggle: () => void;
+  period: string;
+  onSetAllocation: (categoryId: number, period: string, amount: number) => void;
 }) {
   return (
     <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
@@ -110,7 +181,12 @@ function BudgetGroup({
               className="grid grid-cols-4 gap-4 px-4 py-2 border-b border-gray-100 last:border-b-0"
             >
               <div className="text-sm pl-6">{cat.categoryName}</div>
-              <div className="text-right text-sm">{formatCurrency(cat.allocated)}</div>
+              <div className="text-right text-sm">
+                <AllocationCell
+                  value={cat.allocated}
+                  onSave={cents => onSetAllocation(cat.categoryId, period, cents)}
+                />
+              </div>
               <div className="text-right text-sm">{formatCurrency(cat.spent)}</div>
               <div className={`text-right text-sm rounded px-1 ${availableColor(cat.available)}`}>
                 {formatCurrency(cat.available)}
@@ -125,12 +201,31 @@ function BudgetGroup({
 
 export default function BudgetPage() {
   const trpc = useTRPC();
+  const queryClient = useQueryClient();
   const [period, setPeriod] = useState(getCurrentPeriod);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const { data, isLoading, error } = useQuery(
     trpc.budget.summary.queryOptions({ period }),
   );
+
+  const setAllocationMut = useMutation(
+    trpc.budget.allocations.set.mutationOptions({
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: trpc.budget.summary.queryKey() });
+      },
+      onError: (err) => {
+        setErrorMessage(err.message);
+        setTimeout(() => setErrorMessage(null), 3000);
+        queryClient.invalidateQueries({ queryKey: trpc.budget.summary.queryKey() });
+      },
+    }),
+  );
+
+  const handleSetAllocation = (categoryId: number, p: string, amount: number) => {
+    setAllocationMut.mutate({ categoryId, period: p, amount });
+  };
 
   const toggleGroup = (groupName: string) => {
     setCollapsedGroups(prev => {
@@ -156,6 +251,12 @@ export default function BudgetPage() {
 
   return (
     <div>
+      {errorMessage && (
+        <div className="mb-4 p-2 text-red-600 bg-red-50 rounded text-sm">
+          Error saving allocation: {errorMessage}
+        </div>
+      )}
+
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold">Budget</h2>
         <div className="flex items-center gap-4">
@@ -191,6 +292,8 @@ export default function BudgetPage() {
             group={group}
             collapsed={collapsedGroups.has(group.name)}
             onToggle={() => toggleGroup(group.name)}
+            period={period}
+            onSetAllocation={handleSetAllocation}
           />
         ))}
       </div>
