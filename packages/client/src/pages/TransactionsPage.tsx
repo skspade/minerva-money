@@ -4,6 +4,7 @@ import { useTRPC } from '../trpc';
 import { formatCurrency } from '../lib/format';
 import CategoryPicker from '../components/CategoryPicker';
 import SplitModal from '../components/SplitModal';
+import ManualTransactionForm from '../components/ManualTransactionForm';
 
 type SortColumn = 'date' | 'payee' | 'amount' | 'account';
 type SortDirection = 'asc' | 'desc';
@@ -21,6 +22,7 @@ export default function TransactionsPage() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [splitTransactionId, setSplitTransactionId] = useState<string | null>(null);
+  const [showAddForm, setShowAddForm] = useState(false);
 
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
@@ -149,7 +151,19 @@ export default function TransactionsPage() {
 
   return (
     <div>
-      <h2 className="text-2xl font-bold mb-4">Transactions</h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-2xl font-bold">Transactions</h2>
+        {!showAddForm && (
+          <button
+            onClick={() => setShowAddForm(true)}
+            className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+          >
+            Add Transaction
+          </button>
+        )}
+      </div>
+
+      {showAddForm && <ManualTransactionForm onClose={() => setShowAddForm(false)} />}
 
       <div className="flex flex-wrap items-end gap-4 mb-4">
         <div className="flex-1 min-w-48">
