@@ -48,7 +48,10 @@ Full details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
   3. Multi-turn conversations maintain context (user can ask follow-up questions without restating prior context)
   4. Agent refuses to perform destructive operations (no delete tools exist) and validates all inputs before executing queries
   5. API key is never exposed to the client; agent runs entirely server-side
-**Plans**: TBD
+**Plans**: 3 plans
+- [ ] 14-01-PLAN.md — Agent infrastructure: SDK setup, system prompt, MCP server, agent service, tRPC router
+- [ ] 14-02-PLAN.md — Core query tools: account balances, budget summary, spending, net worth
+- [ ] 14-03-PLAN.md — Remaining query tools: transactions, categories, rules, sync status, transfers
 
 ### Phase 15: Chat UI
 **Goal**: Users interact with the agent through a polished chat interface in the web app
@@ -92,6 +95,6 @@ Full details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
 | 11. Reporting Date Fix | v1.0 | 2/2 | Complete | 2026-03-23 |
 | 12. Budget Defaults UI | v1.0 | 1/1 | Complete | 2026-03-23 |
 | 13. Transaction Filters | v1.0 | 1/1 | Complete | 2026-03-23 |
-| 14. Agent Infrastructure and Query Tools | v2.0 | 0/? | Not started | - |
+| 14. Agent Infrastructure and Query Tools | v2.0 | 0/3 | Planned | - |
 | 15. Chat UI | v2.0 | 0/? | Not started | - |
 | 16. Action Tools and Confirmation Flow | v2.0 | 0/? | Not started | - |
