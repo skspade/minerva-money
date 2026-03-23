@@ -106,13 +106,13 @@ Plans:
   3. Confirming retroactive application recategorizes all matching historical transactions immediately
   4. All future synced transactions matching any rule are categorized automatically on import
   5. When two rules match the same transaction, the more specific rule wins; ties go to the newer rule — and the transaction detail shows which rule won
-**Plans**: TBD
+**Plans**: 4 plans (3 waves)
 
 Plans:
-- [ ] 05-01: Rules engine service — specificity scoring algorithm, conflict resolution (most-specific wins, ties to newer), rule evaluation on transaction import
-- [ ] 05-02: Retroactive rule application — preview diff query, confirm-and-apply mutation, bulk update with single transaction
-- [ ] 05-03: Rules management UI — rule list, create/edit form (merchant/amount/memo conditions), specificity explanation display
-- [ ] 05-04: Transaction detail — show winning rule name and why it matched, allow manual override
+- [ ] 05-01-PLAN.md — Rules engine service: migration 003, CRUD, specificity scoring, rule evaluation, auto-categorization on sync (Wave 1, TDD)
+- [ ] 05-02-PLAN.md — Retroactive preview/apply and tRPC router: preview query, apply mutation, rulesRouter, extended transactions.list (Wave 2, TDD)
+- [ ] 05-03-PLAN.md — Rules management UI: rules list page, create/edit form, retroactive preview modal (Wave 3)
+- [ ] 05-04-PLAN.md — Transaction detail rule attribution: rule name display, match explanation, manual override (Wave 3)
 
 ### Phase 6: Transfer Detection
 **Goal**: Internal transfers between accounts are identified, confirmed, and excluded from spending totals so reports reflect only real spending
