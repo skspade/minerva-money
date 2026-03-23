@@ -23,7 +23,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 9: Dashboard and Reporting** - Spending by category charts, spending trends over time, net worth trend using balance snapshots, and dashboard landing page
 - [x] **Phase 10: Foundation Bug Fix & Verification** - Fix missing run-backup.ts, create Phase 1 VERIFICATION.md (Gap Closure) (completed 2026-03-23)
 - [x] **Phase 11: Reporting Date Fix & Verification Sweep** - Fix off-by-one date bug, create VERIFICATION.md for Phases 5, 6, 9 (Gap Closure) (completed 2026-03-23)
-- [ ] **Phase 12: Budget Defaults UI** - Add budget defaults management UI, wire to existing tRPC procedures (Gap Closure)
+- [x] **Phase 12: Budget Defaults UI** - Add budget defaults management UI, wire to existing tRPC procedures (Gap Closure) (completed 2026-03-23)
 
 ## Phase Details
 
@@ -227,7 +227,7 @@ Plans:
   1. User can view and edit default monthly allocations for each budget category
   2. Saved defaults are persisted via `budget.defaults.set` tRPC procedure
   3. Auto-funding scheduler uses saved defaults to populate allocations
-**Plans:** 1 plan (1 wave)
+**Plans:** 1/1 plans complete
 
 Plans:
 - [ ] 12-01-PLAN.md — Add defaults column to budget grid with fetch, edit, and save (Wave 1)
@@ -250,4 +250,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 9. Dashboard and Reporting | 0/4 | Not started | - |
 | 10. Foundation Bug Fix & Verification | 2/2 | Complete    | 2026-03-23 |
 | 11. Reporting Date Fix & Verification Sweep | 0/0 | Complete    | 2026-03-23 |
-| 12. Budget Defaults UI | 0/1 | Not started | - |
+| 12. Budget Defaults UI | 1/1 | Complete   | 2026-03-23 |
