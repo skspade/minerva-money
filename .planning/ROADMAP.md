@@ -124,12 +124,12 @@ Plans:
   3. User can manually link any two transactions as a transfer pair without a system suggestion
   4. Confirmed transfers are excluded from all spending totals and category spending reports
   5. User can unlink a confirmed transfer, restoring both transactions to normal spending
-**Plans**: TBD
+**Plans**: 3 plans (2 waves)
 
 Plans:
-- [ ] 06-01: Transfer detection service — offsetting amount matching across accounts, configurable date window, candidate pair generation on post-sync hook
-- [ ] 06-02: Transfer management UI — suggested transfers list, confirm/dismiss actions, manual link modal, unlink action on confirmed transfers
-- [ ] 06-03: Spending report exclusion — update all spending queries to filter out confirmed transfer transactions
+- [ ] 06-01-PLAN.md — Transfer detection service: offsetting amount matching, date window, confirm/dismiss/unlink, manual link, tRPC router, post-sync hook (Wave 1, TDD)
+- [ ] 06-02-PLAN.md — Transfer management UI: suggested transfers list, confirm/dismiss actions, confirmed transfers with unlink, manual link modal (Wave 2)
+- [ ] 06-03-PLAN.md — Spending report exclusion: extend transactions.list with transfer status, Transfer badge in transaction rows (Wave 2)
 
 ### Phase 7: Budget Engine
 **Goal**: The envelope budgeting system correctly allocates money to categories each month, handles rollovers and overspending, and auto-funds on the pay schedule — all server-side with unit-tested math
