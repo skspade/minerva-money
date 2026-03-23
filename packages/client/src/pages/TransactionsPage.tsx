@@ -1,14 +1,18 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTRPC } from '../trpc';
 import { formatCurrency } from '../lib/format';
+import CategoryPicker from '../components/CategoryPicker';
+import SplitModal from '../components/SplitModal';
 
 type SortColumn = 'date' | 'payee' | 'amount' | 'account';
 type SortDirection = 'asc' | 'desc';
 
 export default function TransactionsPage() {
   const trpc = useTRPC();
-  const { data: transactions, isLoading, error } = useQuery(trpc.transactions.list.queryOptions(undefined));
+  const queryClient = useQueryClient();
+  const { data: transactions, isLoading, error } = useQuery(trpc.transactions.list.queryOptions());
+  const { data: categoryGroups } = useQuery(trpc.categories.groups.list.queryOptions());
 
   const [inputValue, setInputValue] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -16,6 +20,7 @@ export default function TransactionsPage() {
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [splitTransactionId, setSplitTransactionId] = useState<string | null>(null);
 
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
@@ -39,6 +44,50 @@ export default function TransactionsPage() {
       return column;
     });
   }, []);
+
+  const lookupCategory = useCallback((categoryId: number): { name: string; groupName: string } | null => {
+    if (!categoryGroups) return null;
+    for (const group of categoryGroups) {
+      for (const cat of group.categories) {
+        if (cat.id === categoryId) {
+          return { name: cat.name, groupName: group.name };
+        }
+      }
+    }
+    return null;
+  }, [categoryGroups]);
+
+  const updateCategoryMut = useMutation(trpc.transactions.updateCategory.mutationOptions({
+    onMutate: async (vars) => {
+      await queryClient.cancelQueries({ queryKey: trpc.transactions.list.queryKey() });
+      const previous = queryClient.getQueryData(trpc.transactions.list.queryKey());
+
+      queryClient.setQueryData(trpc.transactions.list.queryKey(), (old: typeof transactions) => {
+        if (!old) return old;
+        return old.map(t => {
+          if (t.id !== vars.transactionId) return t;
+          const catInfo = vars.categoryId ? lookupCategory(vars.categoryId) : null;
+          return {
+            ...t,
+            categoryId: vars.categoryId,
+            categoryName: catInfo?.name ?? null,
+            groupName: catInfo?.groupName ?? null,
+            splitCount: 0,
+          };
+        });
+      });
+
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(trpc.transactions.list.queryKey(), context.previous);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: trpc.transactions.list.queryKey() });
+    },
+  }));
 
   const filtered = useMemo(() => {
     if (!transactions) return [];
@@ -82,6 +131,8 @@ export default function TransactionsPage() {
 
     return result;
   }, [transactions, dateFrom, dateTo, debouncedSearch, sortColumn, sortDirection]);
+
+  const splitTransaction = splitTransactionId ? transactions?.find(t => t.id === splitTransactionId) : null;
 
   if (isLoading) {
     return <p className="text-gray-500">Loading transactions...</p>;
@@ -179,12 +230,45 @@ export default function TransactionsPage() {
                     {formatCurrency(txn.amount)}
                   </td>
                   <td className="px-4 py-2 text-sm">{txn.accountName}</td>
-                  <td className="px-4 py-2 text-sm text-gray-400">Uncategorized</td>
+                  <td className="px-4 py-2 text-sm">
+                    <div className="flex items-center gap-1">
+                      {txn.splitCount > 0 ? (
+                        <button
+                          onClick={() => setSplitTransactionId(txn.id)}
+                          className="text-blue-600 hover:text-blue-800 text-sm"
+                        >
+                          Split ({txn.splitCount})
+                        </button>
+                      ) : (
+                        <CategoryPicker
+                          value={txn.categoryId}
+                          onChange={categoryId => updateCategoryMut.mutate({ transactionId: txn.id, categoryId })}
+                        />
+                      )}
+                      {txn.splitCount === 0 && (
+                        <button
+                          onClick={() => setSplitTransactionId(txn.id)}
+                          className="text-xs text-gray-400 hover:text-blue-600"
+                          title="Split transaction"
+                        >
+                          Split
+                        </button>
+                      )}
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+      )}
+
+      {splitTransaction && (
+        <SplitModal
+          transaction={{ id: splitTransaction.id, amount: splitTransaction.amount, payee: splitTransaction.payee }}
+          hasSplits={splitTransaction.splitCount > 0}
+          onClose={() => setSplitTransactionId(null)}
+        />
       )}
     </div>
   );
