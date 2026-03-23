@@ -30,14 +30,14 @@ Requirements for the Claude Agent integration. Each maps to roadmap phases.
 
 ### Action Tools
 
-- [ ] **ACTION-01**: User can categorize a transaction via chat ("Categorize this Starbucks transaction as Dining")
-- [ ] **ACTION-02**: User can create categorization rules via chat ("Create a rule: Starbucks goes to Dining")
-- [ ] **ACTION-03**: User can update or delete existing rules via chat
-- [ ] **ACTION-04**: User can apply a rule retroactively to all matching transactions via chat
-- [ ] **ACTION-05**: User can adjust budget allocation for a category/period via chat (requires confirmation)
-- [ ] **ACTION-06**: User can set default budget allocation for a category via chat (requires confirmation)
-- [ ] **ACTION-07**: User can confirm or dismiss transfer suggestions via chat
-- [ ] **ACTION-08**: User can trigger a manual SimpleFIN sync via chat
+- [x] **ACTION-01**: User can categorize a transaction via chat ("Categorize this Starbucks transaction as Dining")
+- [x] **ACTION-02**: User can create categorization rules via chat ("Create a rule: Starbucks goes to Dining")
+- [x] **ACTION-03**: User can update or delete existing rules via chat
+- [x] **ACTION-04**: User can apply a rule retroactively to all matching transactions via chat
+- [x] **ACTION-05**: User can adjust budget allocation for a category/period via chat (requires confirmation)
+- [x] **ACTION-06**: User can set default budget allocation for a category via chat (requires confirmation)
+- [x] **ACTION-07**: User can confirm or dismiss transfer suggestions via chat
+- [x] **ACTION-08**: User can trigger a manual SimpleFIN sync via chat
 
 ### Chat UI
 
@@ -50,10 +50,10 @@ Requirements for the Claude Agent integration. Each maps to roadmap phases.
 
 ### Safety & Permissions
 
-- [ ] **SAFE-01**: Agent auto-executes all read queries and most write actions without confirmation
-- [ ] **SAFE-02**: Agent requires explicit user confirmation before changing budget amounts (allocations and defaults)
+- [x] **SAFE-01**: Agent auto-executes all read queries and most write actions without confirmation
+- [x] **SAFE-02**: Agent requires explicit user confirmation before changing budget amounts (allocations and defaults)
 - [x] **SAFE-03**: Agent cannot delete accounts or transactions (no tools provided for these operations)
-- [ ] **SAFE-04**: Tool implementations validate inputs before executing (category ID exists, rule conditions valid)
+- [x] **SAFE-04**: Tool implementations validate inputs before executing (category ID exists, rule conditions valid)
 - [x] **SAFE-05**: Anthropic API key stored in .env (gitignored), never exposed to client
 
 ## Future Requirements
@@ -106,9 +106,9 @@ Deferred to v2.x or later. Tracked but not in current roadmap.
 | QUERY-08 | Phase 14 | Complete |
 | QUERY-09 | Phase 14 | Complete |
 | QUERY-10 | Phase 14 | Complete |
-| SAFE-01 | Phase 17 | Pending |
+| SAFE-01 | Phase 17 | Complete |
 | SAFE-03 | Phase 14 | Complete |
-| SAFE-04 | Phase 17 | Pending |
+| SAFE-04 | Phase 17 | Complete |
 | SAFE-05 | Phase 14 | Complete |
 | UI-01 | Phase 15 | Complete |
 | UI-02 | Phase 15 | Complete |
@@ -116,15 +116,15 @@ Deferred to v2.x or later. Tracked but not in current roadmap.
 | UI-04 | Phase 15 | Complete |
 | UI-05 | Phase 15 | Complete |
 | UI-06 | Phase 15 | Complete |
-| ACTION-01 | Phase 16 | Pending |
-| ACTION-02 | Phase 16 | Pending |
-| ACTION-03 | Phase 16 | Pending |
-| ACTION-04 | Phase 16 | Pending |
-| ACTION-05 | Phase 16 | Pending |
-| ACTION-06 | Phase 16 | Pending |
-| ACTION-07 | Phase 16 | Pending |
-| ACTION-08 | Phase 16 | Pending |
-| SAFE-02 | Phase 16 | Pending |
+| ACTION-01 | Phase 16 | Complete |
+| ACTION-02 | Phase 16 | Complete |
+| ACTION-03 | Phase 16 | Complete |
+| ACTION-04 | Phase 16 | Complete |
+| ACTION-05 | Phase 16 | Complete |
+| ACTION-06 | Phase 16 | Complete |
+| ACTION-07 | Phase 16 | Complete |
+| ACTION-08 | Phase 16 | Complete |
+| SAFE-02 | Phase 16 | Complete |
 
 **Coverage:**
 - v2.0 requirements: 34 total
@@ -133,4 +133,4 @@ Deferred to v2.x or later. Tracked but not in current roadmap.
 
 ---
 *Requirements defined: 2026-03-23*
-*Last updated: 2026-03-23 after v2.0 milestone audit gap closure planning*
+*Last updated: 2026-03-23 after Phase 17 audit gap closure completion*
