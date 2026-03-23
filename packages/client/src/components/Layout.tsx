@@ -42,6 +42,14 @@ export default function Layout() {
               >
                 Rules
               </NavLink>
+              <NavLink
+                to="/transfers"
+                className={({ isActive }) =>
+                  `px-3 py-1 rounded ${isActive ? 'bg-gray-700' : 'hover:bg-gray-800'}`
+                }
+              >
+                Transfers
+              </NavLink>
             </div>
           </div>
           <div className="flex items-center gap-3">

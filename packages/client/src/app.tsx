@@ -4,6 +4,7 @@ import AccountsPage from './pages/AccountsPage';
 import TransactionsPage from './pages/TransactionsPage';
 import CategoriesPage from './pages/CategoriesPage';
 import RulesPage from './pages/RulesPage';
+import TransfersPage from './pages/TransfersPage';
 
 export default function App() {
   return (
@@ -15,6 +16,7 @@ export default function App() {
           <Route path="transactions" element={<TransactionsPage />} />
           <Route path="categories" element={<CategoriesPage />} />
           <Route path="rules" element={<RulesPage />} />
+          <Route path="transfers" element={<TransfersPage />} />
         </Route>
       </Routes>
     </BrowserRouter>
