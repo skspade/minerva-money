@@ -197,6 +197,11 @@ Plans:
   1. `run-backup.ts` exists and is correctly referenced by `com.minerva.backup.plist`
   2. Running the backup script produces a valid SQLite backup file
   3. Phase 1 VERIFICATION.md confirms all 4 INFR requirements are satisfied
+**Plans**: 2 plans (1 wave)
+
+Plans:
+- [ ] 10-01-PLAN.md — Create run-backup.ts entry-point script for launchd backup (Wave 1)
+- [ ] 10-02-PLAN.md — Write Phase 1 VERIFICATION.md for all 4 INFR requirements (Wave 1)
 
 ### Phase 11: Reporting Date Fix & Verification Sweep
 **Goal:** Fix the off-by-one date bug in spending queries and formally verify all requirements for Phases 5, 6, and 9
@@ -235,6 +240,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 7. Budget Engine | 0/4 | Not started | - |
 | 8. Budget UI | 0/3 | Not started | - |
 | 9. Dashboard and Reporting | 0/4 | Not started | - |
-| 10. Foundation Bug Fix & Verification | 0/0 | Not started | - |
+| 10. Foundation Bug Fix & Verification | 0/2 | Not started | - |
 | 11. Reporting Date Fix & Verification Sweep | 0/0 | Not started | - |
 | 12. Budget Defaults UI | 0/0 | Not started | - |
