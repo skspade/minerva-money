@@ -26,6 +26,14 @@ export default function Layout() {
               >
                 Transactions
               </NavLink>
+              <NavLink
+                to="/categories"
+                className={({ isActive }) =>
+                  `px-3 py-1 rounded ${isActive ? 'bg-gray-700' : 'hover:bg-gray-800'}`
+                }
+              >
+                Categories
+              </NavLink>
             </div>
           </div>
           <div className="flex items-center gap-3">
