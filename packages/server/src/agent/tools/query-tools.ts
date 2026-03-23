@@ -6,20 +6,7 @@ import { getSpendingByCategory, getSpendingOverTime, getNetWorth } from '../../r
 import { listGroupsWithCategories } from '../../categories/category-service.js';
 import { listRules } from '../../rules/rules-service.js';
 import { listTransferCandidates } from '../../transfers/transfer-service.js';
-
-function xmlWrap(tag: string, value: string | null): string | null {
-  if (value === null || value === undefined) return null;
-  return `<${tag}>${value}</${tag}>`;
-}
-
-function jsonResult(data: unknown) {
-  return { content: [{ type: 'text' as const, text: JSON.stringify(data) }] };
-}
-
-function errorResult(error: unknown) {
-  const msg = error instanceof Error ? error.message : 'Unknown error';
-  return { isError: true as const, content: [{ type: 'text' as const, text: `Error: ${msg}` }] };
-}
+import { xmlWrap, jsonResult, errorResult } from './tool-helpers.js';
 
 export function createQueryTools(db: Database.Database) {
   return [
