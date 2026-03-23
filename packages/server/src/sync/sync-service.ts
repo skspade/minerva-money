@@ -3,6 +3,7 @@ import type { SimpleFINClient, SimpleFINAccountSet } from './simplefin-types.js'
 import type { RateLimiter } from './rate-limiter.js';
 import { normalizeAccount, normalizeTransaction } from './simplefin-client.js';
 import { createBackup } from '../backup/backup.js';
+import { categorizeNewTransactions } from '../rules/rules-service.js';
 
 export interface SyncResult {
   accountsSynced: number;
@@ -109,6 +110,7 @@ function syncAccount(db: Database.Database, rawAccount: import('./simplefin-type
 
     // Insert transactions with dedup
     let added = 0;
+    const newTransactionIds: string[] = [];
     const txnStmt = db.prepare(`
       INSERT OR IGNORE INTO transactions (id, account_id, date, amount, pending, payee, memo, dedup_hash)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -120,7 +122,15 @@ function syncAccount(db: Database.Database, rawAccount: import('./simplefin-type
         txn.id, txn.accountId, txn.date, txn.amount,
         txn.pending ? 1 : 0, txn.payee, txn.memo, txn.dedupHash,
       );
-      if (info.changes > 0) added++;
+      if (info.changes > 0) {
+        added++;
+        newTransactionIds.push(txn.id);
+      }
+    }
+
+    // Auto-categorize new transactions using rules engine
+    if (newTransactionIds.length > 0) {
+      categorizeNewTransactions(db, newTransactionIds);
     }
 
     // Record balance snapshot (INSERT OR REPLACE for same-day re-syncs)
