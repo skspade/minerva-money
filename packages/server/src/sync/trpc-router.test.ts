@@ -134,4 +134,38 @@ describe('trpc-router', () => {
 
     expect(accounts).toEqual([]);
   });
+
+  it('transactions.list returns transactions with account name', async () => {
+    const caller = createCaller();
+    await caller.sync.trigger();
+
+    const transactions = await caller.transactions.list();
+
+    expect(transactions.length).toBeGreaterThan(0);
+    for (const txn of transactions) {
+      expect(txn.id).toBeTruthy();
+      expect(txn.date).toBeTruthy();
+      expect(typeof txn.amount).toBe('number');
+      expect(txn.accountId).toBeTruthy();
+      expect(txn.accountName).toBeTruthy();
+    }
+  });
+
+  it('transactions.list returns transactions ordered by date desc', async () => {
+    const caller = createCaller();
+    await caller.sync.trigger();
+
+    const transactions = await caller.transactions.list();
+
+    for (let i = 1; i < transactions.length; i++) {
+      expect(transactions[i - 1].date >= transactions[i].date).toBe(true);
+    }
+  });
+
+  it('transactions.list returns empty array when no transactions exist', async () => {
+    const caller = createCaller();
+    const transactions = await caller.transactions.list();
+
+    expect(transactions).toEqual([]);
+  });
 });

@@ -82,9 +82,35 @@ const accountsRouter = router({
   }),
 });
 
+const transactionsRouter = router({
+  list: publicProcedure.query(({ ctx }) => {
+    const rows = ctx.db.prepare(`
+      SELECT t.id, t.date, t.payee, t.memo, t.amount, t.account_id, a.name as account_name, t.category_id
+      FROM transactions t
+      JOIN accounts a ON t.account_id = a.id
+      ORDER BY t.date DESC, t.created_at DESC
+    `).all() as {
+      id: string; date: string; payee: string; memo: string | null;
+      amount: number; account_id: string; account_name: string; category_id: string | null;
+    }[];
+
+    return rows.map(r => ({
+      id: r.id,
+      date: r.date,
+      payee: r.payee,
+      memo: r.memo,
+      amount: r.amount,
+      accountId: r.account_id,
+      accountName: r.account_name,
+      categoryId: r.category_id,
+    }));
+  }),
+});
+
 export const appRouter = router({
   sync: syncRouter,
   accounts: accountsRouter,
+  transactions: transactionsRouter,
 });
 
 export type AppRouter = typeof appRouter;
