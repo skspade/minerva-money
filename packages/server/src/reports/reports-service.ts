@@ -29,7 +29,7 @@ export function getSpendingByCategory(
     FROM transactions t
     LEFT JOIN categories c ON t.category_id = c.id
     LEFT JOIN category_groups cg ON c.group_id = cg.id
-    WHERE t.date >= ? AND t.date < ?
+    WHERE t.date >= ? AND t.date <= ?
       AND t.amount < 0
       AND t.category_id IS NOT NULL
       AND NOT EXISTS (SELECT 1 FROM transaction_splits ts WHERE ts.transaction_id = t.id)
@@ -48,7 +48,7 @@ export function getSpendingByCategory(
     JOIN transactions t ON ts.transaction_id = t.id
     LEFT JOIN categories c ON ts.category_id = c.id
     LEFT JOIN category_groups cg ON c.group_id = cg.id
-    WHERE t.date >= ? AND t.date < ?
+    WHERE t.date >= ? AND t.date <= ?
       AND ts.amount < 0
       AND NOT EXISTS (
         SELECT 1 FROM transfer_links tl
@@ -95,7 +95,7 @@ export function getSpendingOverTime(
   const unsplit = db.prepare(`
     SELECT strftime('%Y-%m', t.date) AS period, COALESCE(SUM(ABS(t.amount)), 0) AS total
     FROM transactions t
-    WHERE t.date >= ? AND t.date < ?
+    WHERE t.date >= ? AND t.date <= ?
       AND t.amount < 0
       AND NOT EXISTS (SELECT 1 FROM transaction_splits ts WHERE ts.transaction_id = t.id)
       AND NOT EXISTS (
@@ -111,7 +111,7 @@ export function getSpendingOverTime(
     SELECT strftime('%Y-%m', t.date) AS period, COALESCE(SUM(ABS(ts.amount)), 0) AS total
     FROM transaction_splits ts
     JOIN transactions t ON ts.transaction_id = t.id
-    WHERE t.date >= ? AND t.date < ?
+    WHERE t.date >= ? AND t.date <= ?
       AND ts.amount < 0
       AND NOT EXISTS (
         SELECT 1 FROM transfer_links tl
