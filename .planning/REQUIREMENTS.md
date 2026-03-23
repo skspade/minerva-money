@@ -9,24 +9,24 @@ Requirements for the Claude Agent integration. Each maps to roadmap phases.
 
 ### Agent Infrastructure
 
-- [ ] **AGENT-01**: Server-side agent endpoint accepts chat messages and returns agent responses via tRPC
-- [ ] **AGENT-02**: Agent uses only custom MCP tools wrapping existing service functions (no built-in filesystem/shell tools)
-- [ ] **AGENT-03**: System prompt provides agent with Minerva Money domain knowledge (envelope budgeting, categories, accounts, pay schedule)
-- [ ] **AGENT-04**: Agent sessions persist across multiple turns within a conversation (multi-turn context)
-- [ ] **AGENT-05**: Agent enforces maxTurns limit to prevent runaway API costs
+- [x] **AGENT-01**: Server-side agent endpoint accepts chat messages and returns agent responses via tRPC
+- [x] **AGENT-02**: Agent uses only custom MCP tools wrapping existing service functions (no built-in filesystem/shell tools)
+- [x] **AGENT-03**: System prompt provides agent with Minerva Money domain knowledge (envelope budgeting, categories, accounts, pay schedule)
+- [x] **AGENT-04**: Agent sessions persist across multiple turns within a conversation (multi-turn context)
+- [x] **AGENT-05**: Agent enforces maxTurns limit to prevent runaway API costs
 
 ### Query Tools
 
-- [ ] **QUERY-01**: User can ask for account balances in natural language ("How much is in my checking?")
-- [ ] **QUERY-02**: User can ask for spending by category and date range ("How much did I spend on groceries this month?")
-- [ ] **QUERY-03**: User can ask for budget summary showing allocated vs spent vs remaining per category
-- [ ] **QUERY-04**: User can ask for net worth with trend direction
-- [ ] **QUERY-05**: User can search and filter transactions by merchant, category, date range, and amount
-- [ ] **QUERY-06**: User can ask for sync status (last sync time, errors)
-- [ ] **QUERY-07**: User can ask for uncategorized transactions
-- [ ] **QUERY-08**: User can ask for pending transfer suggestions
-- [ ] **QUERY-09**: User can ask for current categorization rules
-- [ ] **QUERY-10**: User can ask for available-to-budget amount for current period
+- [x] **QUERY-01**: User can ask for account balances in natural language ("How much is in my checking?")
+- [x] **QUERY-02**: User can ask for spending by category and date range ("How much did I spend on groceries this month?")
+- [x] **QUERY-03**: User can ask for budget summary showing allocated vs spent vs remaining per category
+- [x] **QUERY-04**: User can ask for net worth with trend direction
+- [x] **QUERY-05**: User can search and filter transactions by merchant, category, date range, and amount
+- [x] **QUERY-06**: User can ask for sync status (last sync time, errors)
+- [x] **QUERY-07**: User can ask for uncategorized transactions
+- [x] **QUERY-08**: User can ask for pending transfer suggestions
+- [x] **QUERY-09**: User can ask for current categorization rules
+- [x] **QUERY-10**: User can ask for available-to-budget amount for current period
 
 ### Action Tools
 
@@ -50,11 +50,11 @@ Requirements for the Claude Agent integration. Each maps to roadmap phases.
 
 ### Safety & Permissions
 
-- [ ] **SAFE-01**: Agent auto-executes all read queries and most write actions without confirmation
+- [x] **SAFE-01**: Agent auto-executes all read queries and most write actions without confirmation
 - [ ] **SAFE-02**: Agent requires explicit user confirmation before changing budget amounts (allocations and defaults)
-- [ ] **SAFE-03**: Agent cannot delete accounts or transactions (no tools provided for these operations)
-- [ ] **SAFE-04**: Tool implementations validate inputs before executing (category ID exists, rule conditions valid)
-- [ ] **SAFE-05**: Anthropic API key stored in .env (gitignored), never exposed to client
+- [x] **SAFE-03**: Agent cannot delete accounts or transactions (no tools provided for these operations)
+- [x] **SAFE-04**: Tool implementations validate inputs before executing (category ID exists, rule conditions valid)
+- [x] **SAFE-05**: Anthropic API key stored in .env (gitignored), never exposed to client
 
 ## Future Requirements
 
@@ -91,25 +91,25 @@ Deferred to v2.x or later. Tracked but not in current roadmap.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| AGENT-01 | Phase 14 | Pending |
-| AGENT-02 | Phase 14 | Pending |
-| AGENT-03 | Phase 14 | Pending |
-| AGENT-04 | Phase 14 | Pending |
-| AGENT-05 | Phase 14 | Pending |
-| QUERY-01 | Phase 14 | Pending |
-| QUERY-02 | Phase 14 | Pending |
-| QUERY-03 | Phase 14 | Pending |
-| QUERY-04 | Phase 14 | Pending |
-| QUERY-05 | Phase 14 | Pending |
-| QUERY-06 | Phase 14 | Pending |
-| QUERY-07 | Phase 14 | Pending |
-| QUERY-08 | Phase 14 | Pending |
-| QUERY-09 | Phase 14 | Pending |
-| QUERY-10 | Phase 14 | Pending |
-| SAFE-01 | Phase 14 | Pending |
-| SAFE-03 | Phase 14 | Pending |
-| SAFE-04 | Phase 14 | Pending |
-| SAFE-05 | Phase 14 | Pending |
+| AGENT-01 | Phase 14 | Complete |
+| AGENT-02 | Phase 14 | Complete |
+| AGENT-03 | Phase 14 | Complete |
+| AGENT-04 | Phase 14 | Complete |
+| AGENT-05 | Phase 14 | Complete |
+| QUERY-01 | Phase 14 | Complete |
+| QUERY-02 | Phase 14 | Complete |
+| QUERY-03 | Phase 14 | Complete |
+| QUERY-04 | Phase 14 | Complete |
+| QUERY-05 | Phase 14 | Complete |
+| QUERY-06 | Phase 14 | Complete |
+| QUERY-07 | Phase 14 | Complete |
+| QUERY-08 | Phase 14 | Complete |
+| QUERY-09 | Phase 14 | Complete |
+| QUERY-10 | Phase 14 | Complete |
+| SAFE-01 | Phase 14 | Complete |
+| SAFE-03 | Phase 14 | Complete |
+| SAFE-04 | Phase 14 | Complete |
+| SAFE-05 | Phase 14 | Complete |
 | UI-01 | Phase 15 | Pending |
 | UI-02 | Phase 15 | Pending |
 | UI-03 | Phase 15 | Pending |
@@ -133,4 +133,4 @@ Deferred to v2.x or later. Tracked but not in current roadmap.
 
 ---
 *Requirements defined: 2026-03-23*
-*Last updated: 2026-03-23 after roadmap creation*
+*Last updated: 2026-03-23 after Phase 14 completion*

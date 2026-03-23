@@ -32,7 +32,7 @@ Full details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
 
 **Milestone Goal:** Add a Claude-powered conversational agent that can query and act on all financial data through a chat interface.
 
-- [ ] **Phase 14: Agent Infrastructure and Query Tools** — Server-side agent with read-only tools covering all financial data queries
+- [x] **Phase 14: Agent Infrastructure and Query Tools** — Server-side agent with read-only tools covering all financial data queries (completed 2026-03-23)
 - [ ] **Phase 15: Chat UI** — Full-height chat page with markdown rendering, loading states, and navigation
 - [ ] **Phase 16: Action Tools and Confirmation Flow** — Write operations for categorization, rules, budgets, transfers, and sync with confirmation for amount changes
 
@@ -95,6 +95,6 @@ Full details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
 | 11. Reporting Date Fix | v1.0 | 2/2 | Complete | 2026-03-23 |
 | 12. Budget Defaults UI | v1.0 | 1/1 | Complete | 2026-03-23 |
 | 13. Transaction Filters | v1.0 | 1/1 | Complete | 2026-03-23 |
-| 14. Agent Infrastructure and Query Tools | v2.0 | 0/3 | Planned | - |
+| 14. Agent Infrastructure and Query Tools | v2.0 | Complete    | 2026-03-23 | - |
 | 15. Chat UI | v2.0 | 0/? | Not started | - |
 | 16. Action Tools and Confirmation Flow | v2.0 | 0/? | Not started | - |
