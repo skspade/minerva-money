@@ -16,6 +16,7 @@ import {
   arrayMove,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import InlineConfirm from '../components/InlineConfirm';
 
 interface Category {
   id: number;
@@ -121,17 +122,9 @@ function SortableCategory({
           </span>
         )}
       </div>
-      <button
-        onClick={() => {
-          if (window.confirm(`Delete category "${category.name}"? Affected transactions will become uncategorized.`)) {
-            onDelete(category.id);
-          }
-        }}
-        className="text-gray-400 hover:text-red-500 text-sm ml-2"
-        title="Delete category"
-      >
-        ✕
-      </button>
+      <InlineConfirm message={`Delete "${category.name}"? Transactions become uncategorized.`} onConfirm={() => onDelete(category.id)}>
+        <button className="text-gray-400 hover:text-red-500 text-sm ml-2" title="Delete category">✕</button>
+      </InlineConfirm>
     </div>
   );
 }
@@ -215,21 +208,12 @@ function SortableGroup({
           )}
           <span className="text-xs text-gray-400">({group.categories.length})</span>
         </div>
-        <button
-          onClick={() => {
-            const catCount = group.categories.length;
-            const msg = catCount > 0
-              ? `Delete group "${group.name}" and its ${catCount} categories? Affected transactions will become uncategorized.`
-              : `Delete group "${group.name}"?`;
-            if (window.confirm(msg)) {
-              onDeleteGroup(group.id);
-            }
-          }}
-          className="text-gray-400 hover:text-red-500 text-sm ml-2"
-          title="Delete group"
+        <InlineConfirm
+          message={group.categories.length > 0 ? `Delete "${group.name}" and ${group.categories.length} categories? Transactions become uncategorized.` : `Delete "${group.name}"?`}
+          onConfirm={() => onDeleteGroup(group.id)}
         >
-          ✕
-        </button>
+          <button className="text-gray-400 hover:text-red-500 text-sm ml-2" title="Delete group">✕</button>
+        </InlineConfirm>
       </div>
 
       {!collapsed && (

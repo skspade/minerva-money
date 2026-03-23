@@ -4,6 +4,7 @@ import { useTRPC } from '../trpc';
 import { formatCurrency } from '../lib/format';
 import RuleForm from '../components/RuleForm';
 import RetroactivePreview from '../components/RetroactivePreview';
+import InlineConfirm from '../components/InlineConfirm';
 
 function formatConditions(rule: { merchantPattern: string | null; matchType: string; amountMin: number | null; amountMax: number | null; memoPattern: string | null }): string {
   const parts: string[] = [];
@@ -114,16 +115,9 @@ export default function RulesPage() {
                       >
                         Edit
                       </button>
-                      <button
-                        onClick={() => {
-                          if (window.confirm(`Delete rule "${rule.name}"?`)) {
-                            deleteMut.mutate({ id: rule.id });
-                          }
-                        }}
-                        className="text-red-600 hover:text-red-800"
-                      >
-                        Delete
-                      </button>
+                      <InlineConfirm message={`Delete rule "${rule.name}"?`} onConfirm={() => deleteMut.mutate({ id: rule.id })}>
+                        <button className="text-red-600 hover:text-red-800">Delete</button>
+                      </InlineConfirm>
                     </div>
                   </td>
                 </tr>
