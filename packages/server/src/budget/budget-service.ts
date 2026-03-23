@@ -179,3 +179,31 @@ export function getAvailableToBudget(db: Database.Database, period: string): num
 
   return income.total - allocated.total - overspendingDeduction;
 }
+
+export function autoFundPeriod(db: Database.Database, period: string, step: 1 | 2): number {
+  const defaults = getDefaults(db);
+  let funded = 0;
+
+  const run = db.transaction(() => {
+    for (const def of defaults) {
+      if (step === 1) {
+        const halfAmount = Math.floor(def.amount / 2);
+        const result = db.prepare(`
+          INSERT OR IGNORE INTO budget_allocations (category_id, period, amount, is_default, funding_step)
+          VALUES (?, ?, ?, 0, 1)
+        `).run(def.categoryId, period, halfAmount);
+        if (result.changes > 0) funded++;
+      } else {
+        const result = db.prepare(`
+          UPDATE budget_allocations
+          SET amount = ?, funding_step = 2, updated_at = datetime('now')
+          WHERE category_id = ? AND period = ? AND funding_step = 1
+        `).run(def.amount, def.categoryId, period);
+        if (result.changes > 0) funded++;
+      }
+    }
+  });
+
+  run();
+  return funded;
+}

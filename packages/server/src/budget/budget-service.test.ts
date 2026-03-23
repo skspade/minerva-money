@@ -10,6 +10,7 @@ import {
   getRollover,
   getBudgetSummary,
   getAvailableToBudget,
+  autoFundPeriod,
 } from './budget-service.js';
 import type Database from 'better-sqlite3';
 import { tmpdir } from 'node:os';
@@ -309,6 +310,102 @@ describe('budget-service', () => {
       setAllocation(db, catGroceries, '2026-01', 30000);
 
       expect(getAvailableToBudget(db, '2026-01')).toBe(470000); // 500000 - 30000, no prior month
+    });
+  });
+
+  describe('auto-funding', () => {
+    it('step 1 allocates floor(default/2) for categories with defaults', () => {
+      setDefaultAllocation(db, catGroceries, 30000);
+      setDefaultAllocation(db, catRent, 120000);
+
+      autoFundPeriod(db, '2026-03', 1);
+
+      expect(getAllocation(db, catGroceries, '2026-03')).toBe(15000); // 30000/2
+      expect(getAllocation(db, catRent, '2026-03')).toBe(60000); // 120000/2
+    });
+
+    it('step 1 handles odd-cent defaults correctly', () => {
+      setDefaultAllocation(db, catGroceries, 1501); // Odd cents
+
+      autoFundPeriod(db, '2026-03', 1);
+
+      expect(getAllocation(db, catGroceries, '2026-03')).toBe(750); // floor(1501/2)
+    });
+
+    it('step 2 sets allocation to full default amount', () => {
+      setDefaultAllocation(db, catGroceries, 30000);
+
+      autoFundPeriod(db, '2026-03', 1);
+      autoFundPeriod(db, '2026-03', 2);
+
+      expect(getAllocation(db, catGroceries, '2026-03')).toBe(30000);
+    });
+
+    it('step 2 handles odd-cent defaults (rounding cent goes to second half)', () => {
+      setDefaultAllocation(db, catGroceries, 1501);
+
+      autoFundPeriod(db, '2026-03', 1);
+      expect(getAllocation(db, catGroceries, '2026-03')).toBe(750);
+
+      autoFundPeriod(db, '2026-03', 2);
+      expect(getAllocation(db, catGroceries, '2026-03')).toBe(1501); // 750 + 751
+    });
+
+    it('step 1 does not overwrite manually set allocations', () => {
+      setDefaultAllocation(db, catGroceries, 30000);
+      setAllocation(db, catGroceries, '2026-03', 50000); // Manual override
+
+      autoFundPeriod(db, '2026-03', 1);
+
+      expect(getAllocation(db, catGroceries, '2026-03')).toBe(50000); // Preserved
+    });
+
+    it('step 2 does not overwrite manually set allocations', () => {
+      setDefaultAllocation(db, catGroceries, 30000);
+      setAllocation(db, catGroceries, '2026-03', 50000); // Manual override
+
+      autoFundPeriod(db, '2026-03', 2);
+
+      expect(getAllocation(db, catGroceries, '2026-03')).toBe(50000); // Preserved
+    });
+
+    it('step 1 is idempotent', () => {
+      setDefaultAllocation(db, catGroceries, 30000);
+
+      const first = autoFundPeriod(db, '2026-03', 1);
+      const second = autoFundPeriod(db, '2026-03', 1);
+
+      expect(first).toBe(1);
+      expect(second).toBe(0); // No new rows inserted
+      expect(getAllocation(db, catGroceries, '2026-03')).toBe(15000);
+    });
+
+    it('step 2 is idempotent', () => {
+      setDefaultAllocation(db, catGroceries, 30000);
+
+      autoFundPeriod(db, '2026-03', 1);
+      autoFundPeriod(db, '2026-03', 2);
+      const result = autoFundPeriod(db, '2026-03', 2);
+
+      expect(result).toBe(0); // No rows with funding_step=1 remain
+      expect(getAllocation(db, catGroceries, '2026-03')).toBe(30000);
+    });
+
+    it('does not create allocations for categories without defaults', () => {
+      setDefaultAllocation(db, catGroceries, 30000);
+      // catRent has no default
+
+      autoFundPeriod(db, '2026-03', 1);
+
+      expect(getAllocation(db, catRent, '2026-03')).toBe(0);
+    });
+
+    it('returns count of categories funded', () => {
+      setDefaultAllocation(db, catGroceries, 30000);
+      setDefaultAllocation(db, catRent, 120000);
+
+      const count = autoFundPeriod(db, '2026-03', 1);
+      expect(count).toBe(2);
     });
   });
 });
