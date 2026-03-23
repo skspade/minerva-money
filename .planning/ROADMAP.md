@@ -4,6 +4,7 @@
 
 - ✅ **v1.0 MVP** — Phases 1-13 (shipped 2026-03-22)
 - ✅ **v2.0 Claude Agent** — Phases 14-17 (shipped 2026-03-23)
+- 🚧 **v2.1 Deployment Hardening** — Phases 18-20 (in progress)
 
 ## Phases
 
@@ -40,6 +41,50 @@ Full details: [milestones/v2.0-ROADMAP.md](milestones/v2.0-ROADMAP.md)
 
 </details>
 
+### 🚧 v2.1 Deployment Hardening (In Progress)
+
+**Milestone Goal:** Harden Minerva Money for production deployment on a home iMac with compiled builds, auto-restart on crash, boot startup, and one-command deployments.
+
+- [ ] **Phase 18: Production Build and Directory Layout** - Compiled server/client output, Express static serving, env loading, deploy directory organization
+- [ ] **Phase 19: Service Configuration** - launchd plists with correct paths, crash recovery, boot startup, restart throttling
+- [ ] **Phase 20: Deploy Scripts** - First-install setup, one-command updates, pre-flight validation
+
+## Phase Details
+
+### Phase 18: Production Build and Directory Layout
+**Goal**: Server and client produce correct compiled output, Express serves the SPA in production, and all deployment artifacts live in one place
+**Depends on**: Nothing (first phase in v2.1)
+**Requirements**: BUILD-01, BUILD-02, BUILD-03, BUILD-04, DIR-01, DIR-02
+**Success Criteria** (what must be TRUE):
+  1. Running `npm run build` produces compiled JavaScript in `packages/server/dist/` and bundled client in `packages/client/dist/`
+  2. Starting the compiled server serves the React SPA at the root URL and all client-side routes return index.html
+  3. The server loads environment variables via `--env-file` without any dotenv dependency
+  4. All deployment config files (plists, scripts) are co-located in the `deploy/` directory with no deployment artifacts elsewhere in the repo
+**Plans**: TBD
+
+### Phase 19: Service Configuration
+**Goal**: launchd service definitions correctly manage the server and backup processes with crash recovery and boot startup
+**Depends on**: Phase 18 (plists must reference correct build output paths)
+**Requirements**: PROC-01, PROC-02, PROC-03, PROC-04, PROC-05
+**Success Criteria** (what must be TRUE):
+  1. The server plist uses the correct absolute node binary path for the target machine and points at compiled server output
+  2. launchd restarts the server automatically after a crash (non-zero exit) but does not restart after a clean shutdown
+  3. The server starts automatically on user login without manual intervention
+  4. A crash loop is throttled to at most one restart every 10 seconds
+  5. The backup plist runs the compiled `dist/backup/run-backup.js` instead of TypeScript source via tsx
+**Plans**: TBD
+
+### Phase 20: Deploy Scripts
+**Goal**: One-command first-install and one-command updates with pre-flight validation
+**Depends on**: Phase 19 (scripts install and manage the plists from Phase 19)
+**Requirements**: DEPLOY-01, DEPLOY-02, DEPLOY-03, DEPLOY-04, DEPLOY-05
+**Success Criteria** (what must be TRUE):
+  1. Running `setup.sh` on a fresh machine builds the project, copies plists to LaunchAgents, loads services via `launchctl bootstrap`, and confirms the server is healthy
+  2. Running `deploy.sh` pulls latest code, reinstalls dependencies, rebuilds, restarts the service, and confirms health -- all in one command
+  3. Both scripts validate the node binary path exists before installing or updating plists
+  4. `setup.sh` exits with an error if `.env` is missing, before attempting to start the server
+**Plans**: TBD
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -61,3 +106,6 @@ Full details: [milestones/v2.0-ROADMAP.md](milestones/v2.0-ROADMAP.md)
 | 15. Chat UI | v2.0 | 2/2 | Complete | 2026-03-23 |
 | 16. Action Tools | v2.0 | 2/2 | Complete | 2026-03-23 |
 | 17. Audit Gap Closure | v2.0 | 1/1 | Complete | 2026-03-23 |
+| 18. Production Build and Directory Layout | v2.1 | 0/0 | Not started | - |
+| 19. Service Configuration | v2.1 | 0/0 | Not started | - |
+| 20. Deploy Scripts | v2.1 | 0/0 | Not started | - |

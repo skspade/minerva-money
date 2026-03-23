@@ -59,28 +59,28 @@ Requirements for deployment hardening milestone. Each maps to roadmap phases.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| BUILD-01 | — | Pending |
-| BUILD-02 | — | Pending |
-| BUILD-03 | — | Pending |
-| BUILD-04 | — | Pending |
-| PROC-01 | — | Pending |
-| PROC-02 | — | Pending |
-| PROC-03 | — | Pending |
-| PROC-04 | — | Pending |
-| PROC-05 | — | Pending |
-| DEPLOY-01 | — | Pending |
-| DEPLOY-02 | — | Pending |
-| DEPLOY-03 | — | Pending |
-| DEPLOY-04 | — | Pending |
-| DEPLOY-05 | — | Pending |
-| DIR-01 | — | Pending |
-| DIR-02 | — | Pending |
+| BUILD-01 | Phase 18 | Pending |
+| BUILD-02 | Phase 18 | Pending |
+| BUILD-03 | Phase 18 | Pending |
+| BUILD-04 | Phase 18 | Pending |
+| PROC-01 | Phase 19 | Pending |
+| PROC-02 | Phase 19 | Pending |
+| PROC-03 | Phase 19 | Pending |
+| PROC-04 | Phase 19 | Pending |
+| PROC-05 | Phase 19 | Pending |
+| DEPLOY-01 | Phase 20 | Pending |
+| DEPLOY-02 | Phase 20 | Pending |
+| DEPLOY-03 | Phase 20 | Pending |
+| DEPLOY-04 | Phase 20 | Pending |
+| DEPLOY-05 | Phase 20 | Pending |
+| DIR-01 | Phase 18 | Pending |
+| DIR-02 | Phase 18 | Pending |
 
 **Coverage:**
 - v2.1 requirements: 16 total
-- Mapped to phases: 0
-- Unmapped: 16 ⚠️
+- Mapped to phases: 16
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-23*
-*Last updated: 2026-03-23 after initial definition*
+*Last updated: 2026-03-23 after roadmap creation*
