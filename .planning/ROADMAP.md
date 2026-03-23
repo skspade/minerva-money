@@ -213,6 +213,10 @@ Plans:
   2. Phase 5 VERIFICATION.md confirms CATG-02 through CATG-05 are satisfied
   3. Phase 6 VERIFICATION.md confirms CATG-07 through CATG-09 are satisfied
   4. Phase 9 VERIFICATION.md confirms REPT-01 through REPT-03 are satisfied
+**Plans:** 2 plans (2 waves)
+Plans:
+- [ ] 11-01-PLAN.md — Fix off-by-one date boundary bug in spending queries (TDD)
+- [ ] 11-02-PLAN.md — Create VERIFICATION.md for Phases 5, 6, and 9
 
 ### Phase 12: Budget Defaults UI
 **Goal:** Add the missing UI for budget default allocations so users can set defaults and the auto-funding scheduler becomes functional
