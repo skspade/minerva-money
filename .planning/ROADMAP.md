@@ -21,6 +21,9 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 7: Budget Engine** - Monthly envelope allocations, default allocations, twice-monthly auto-funding, rollover math (positive forward, negative deducts from available-to-budget)
 - [ ] **Phase 8: Budget UI** - Budget grid showing allocated/spent/available per category, manual allocation overrides, and budget period navigation
 - [ ] **Phase 9: Dashboard and Reporting** - Spending by category charts, spending trends over time, net worth trend using balance snapshots, and dashboard landing page
+- [ ] **Phase 10: Foundation Bug Fix & Verification** - Fix missing run-backup.ts, create Phase 1 VERIFICATION.md (Gap Closure)
+- [ ] **Phase 11: Reporting Date Fix & Verification Sweep** - Fix off-by-one date bug, create VERIFICATION.md for Phases 5, 6, 9 (Gap Closure)
+- [ ] **Phase 12: Budget Defaults UI** - Add budget defaults management UI, wire to existing tRPC procedures (Gap Closure)
 
 ## Phase Details
 
@@ -185,10 +188,41 @@ Plans:
 - [ ] 09-03-PLAN.md — Reports page: spending by category pie/bar toggle, spending over time line chart, net worth line chart, date range filter (Wave 2)
 - [ ] 09-04-PLAN.md — Dashboard landing page: account balances, budget progress, top spending, sync status widgets, routing and navigation updates (Wave 2)
 
+### Phase 10: Foundation Bug Fix & Verification
+**Goal:** Fix the broken launchd backup script and formally verify all Phase 1 requirements that were implemented but never verified
+**Depends on**: Phase 1
+**Requirements**: INFR-01, INFR-02, INFR-03, INFR-04
+**Gap Closure:** Closes gaps from audit — 4 requirements, 1 broken flow
+**Success Criteria** (what must be TRUE):
+  1. `run-backup.ts` exists and is correctly referenced by `com.minerva.backup.plist`
+  2. Running the backup script produces a valid SQLite backup file
+  3. Phase 1 VERIFICATION.md confirms all 4 INFR requirements are satisfied
+
+### Phase 11: Reporting Date Fix & Verification Sweep
+**Goal:** Fix the off-by-one date bug in spending queries and formally verify all requirements for Phases 5, 6, and 9
+**Depends on**: Phases 5, 6, 9
+**Requirements**: REPT-01, REPT-02, REPT-03, CATG-02, CATG-03, CATG-04, CATG-05, CATG-07, CATG-08, CATG-09
+**Gap Closure:** Closes gaps from audit — 10 requirements
+**Success Criteria** (what must be TRUE):
+  1. `getSpendingByCategory` and `getSpendingOverTime` include today's transactions (use `<=` instead of `<`)
+  2. Phase 5 VERIFICATION.md confirms CATG-02 through CATG-05 are satisfied
+  3. Phase 6 VERIFICATION.md confirms CATG-07 through CATG-09 are satisfied
+  4. Phase 9 VERIFICATION.md confirms REPT-01 through REPT-03 are satisfied
+
+### Phase 12: Budget Defaults UI
+**Goal:** Add the missing UI for budget default allocations so users can set defaults and the auto-funding scheduler becomes functional
+**Depends on**: Phase 8
+**Requirements**: BUDG-05, BUDG-06
+**Gap Closure:** Closes gaps from audit — 2 requirements, 2 integration gaps, 1 broken flow
+**Success Criteria** (what must be TRUE):
+  1. User can view and edit default monthly allocations for each budget category
+  2. Saved defaults are persisted via `budget.defaults.set` tRPC procedure
+  3. Auto-funding scheduler uses saved defaults to populate allocations
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -201,3 +235,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 7. Budget Engine | 0/4 | Not started | - |
 | 8. Budget UI | 0/3 | Not started | - |
 | 9. Dashboard and Reporting | 0/4 | Not started | - |
+| 10. Foundation Bug Fix & Verification | 0/0 | Not started | - |
+| 11. Reporting Date Fix & Verification Sweep | 0/0 | Not started | - |
+| 12. Budget Defaults UI | 0/0 | Not started | - |

@@ -57,10 +57,10 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Infrastructure
 
-- [x] **INFR-01**: App performs atomic SQLite backups to iCloud Drive every 6 hours via launchd
-- [x] **INFR-02**: App triggers SQLite backup after every SimpleFIN sync completion
-- [x] **INFR-03**: App retains 30 days of timestamped backup snapshots plus a latest copy
-- [x] **INFR-04**: All money values are stored as integers (cents) to avoid floating-point errors
+- [ ] **INFR-01**: App performs atomic SQLite backups to iCloud Drive every 6 hours via launchd
+- [ ] **INFR-02**: App triggers SQLite backup after every SimpleFIN sync completion
+- [ ] **INFR-03**: App retains 30 days of timestamped backup snapshots plus a latest copy
+- [ ] **INFR-04**: All money values are stored as integers (cents) to avoid floating-point errors
 
 ## v2 Requirements
 
@@ -120,26 +120,26 @@ Deferred to future release. Tracked but not in current roadmap.
 | BUDG-02 | Phase 7 | Pending |
 | BUDG-03 | Phase 7 | Pending |
 | BUDG-04 | Phase 7 | Pending |
-| BUDG-05 | Phase 7 | Pending |
-| BUDG-06 | Phase 7 | Pending |
+| BUDG-05 | Phase 12 | Pending |
+| BUDG-06 | Phase 12 | Pending |
 | BUDG-07 | Phase 8 | Pending |
 | CATG-01 | Phase 4 | Pending |
-| CATG-02 | Phase 5 | Pending |
-| CATG-03 | Phase 5 | Pending |
-| CATG-04 | Phase 5 | Pending |
-| CATG-05 | Phase 5 | Pending |
+| CATG-02 | Phase 11 | Pending |
+| CATG-03 | Phase 11 | Pending |
+| CATG-04 | Phase 11 | Pending |
+| CATG-05 | Phase 11 | Pending |
 | CATG-06 | Phase 4 | Pending |
-| CATG-07 | Phase 6 | Pending |
-| CATG-08 | Phase 6 | Pending |
-| CATG-09 | Phase 6 | Pending |
-| REPT-01 | Phase 9 | Pending |
-| REPT-02 | Phase 9 | Pending |
-| REPT-03 | Phase 9 | Pending |
+| CATG-07 | Phase 11 | Pending |
+| CATG-08 | Phase 11 | Pending |
+| CATG-09 | Phase 11 | Pending |
+| REPT-01 | Phase 11 | Pending |
+| REPT-02 | Phase 11 | Pending |
+| REPT-03 | Phase 11 | Pending |
 | TXNR-01 | Phase 4 | Pending |
-| INFR-01 | Phase 1 | Done |
-| INFR-02 | Phase 1 | Done |
-| INFR-03 | Phase 1 | Done |
-| INFR-04 | Phase 1 | Done |
+| INFR-01 | Phase 10 | Pending |
+| INFR-02 | Phase 10 | Pending |
+| INFR-03 | Phase 10 | Pending |
+| INFR-04 | Phase 10 | Pending |
 
 **Coverage:**
 - v1 requirements: 34 total
@@ -148,4 +148,4 @@ Deferred to future release. Tracked but not in current roadmap.
 
 ---
 *Requirements defined: 2026-03-22*
-*Last updated: 2026-03-22 after roadmap creation — all 34 requirements mapped*
+*Last updated: 2026-03-22 after gap closure phase creation — 16 requirements reassigned to gap closure phases 10-12*
