@@ -41,12 +41,12 @@ Requirements for the Claude Agent integration. Each maps to roadmap phases.
 
 ### Chat UI
 
-- [ ] **UI-01**: Chat page at /chat with full-height layout, message list, and input bar
-- [ ] **UI-02**: Agent responses render markdown (tables, bold, lists) for formatted financial data
-- [ ] **UI-03**: Loading indicator while agent is processing a response
-- [ ] **UI-04**: Inline confirmation buttons for actions that require approval (budget amount changes)
-- [ ] **UI-05**: Chat navigation link in the app sidebar
-- [ ] **UI-06**: Error messages displayed in chat when agent encounters errors
+- [x] **UI-01**: Chat page at /chat with full-height layout, message list, and input bar
+- [x] **UI-02**: Agent responses render markdown (tables, bold, lists) for formatted financial data
+- [x] **UI-03**: Loading indicator while agent is processing a response
+- [x] **UI-04**: Inline confirmation buttons for actions that require approval (budget amount changes)
+- [x] **UI-05**: Chat navigation link in the app sidebar
+- [x] **UI-06**: Error messages displayed in chat when agent encounters errors
 
 ### Safety & Permissions
 
@@ -110,12 +110,12 @@ Deferred to v2.x or later. Tracked but not in current roadmap.
 | SAFE-03 | Phase 14 | Complete |
 | SAFE-04 | Phase 14 | Complete |
 | SAFE-05 | Phase 14 | Complete |
-| UI-01 | Phase 15 | Pending |
-| UI-02 | Phase 15 | Pending |
-| UI-03 | Phase 15 | Pending |
-| UI-04 | Phase 15 | Pending |
-| UI-05 | Phase 15 | Pending |
-| UI-06 | Phase 15 | Pending |
+| UI-01 | Phase 15 | Complete |
+| UI-02 | Phase 15 | Complete |
+| UI-03 | Phase 15 | Complete |
+| UI-04 | Phase 15 | Complete |
+| UI-05 | Phase 15 | Complete |
+| UI-06 | Phase 15 | Complete |
 | ACTION-01 | Phase 16 | Pending |
 | ACTION-02 | Phase 16 | Pending |
 | ACTION-03 | Phase 16 | Pending |

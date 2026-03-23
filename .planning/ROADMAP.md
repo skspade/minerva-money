@@ -98,5 +98,5 @@ Full details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
 | 12. Budget Defaults UI | v1.0 | 1/1 | Complete | 2026-03-23 |
 | 13. Transaction Filters | v1.0 | 1/1 | Complete | 2026-03-23 |
 | 14. Agent Infrastructure and Query Tools | v2.0 | Complete    | 2026-03-23 | - |
-| 15. Chat UI | 2/2 | Complete   | 2026-03-23 | - |
+| 15. Chat UI | 2/2 | Complete    | 2026-03-23 | - |
 | 16. Action Tools and Confirmation Flow | v2.0 | 0/? | Not started | - |
