@@ -278,6 +278,21 @@ export default function BudgetPage() {
         </div>
       </div>
 
+      {data && (
+        <div className="mb-6 p-4 bg-white rounded-lg border border-gray-200">
+          <div className="text-sm text-gray-500 uppercase tracking-wide font-medium mb-1">
+            Available to Budget
+          </div>
+          <div className={`text-3xl font-bold ${
+            data.availableToBudget > 0 ? 'text-green-600' :
+            data.availableToBudget < 0 ? 'text-red-600' :
+            'text-gray-500'
+          }`}>
+            {formatCurrency(data.availableToBudget)}
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-4 gap-4 px-4 py-2 text-xs text-gray-500 uppercase tracking-wide font-medium">
         <div>Category</div>
         <div className="text-right">Allocated</div>
