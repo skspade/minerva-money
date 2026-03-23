@@ -60,7 +60,9 @@ Full details: [milestones/v2.0-ROADMAP.md](milestones/v2.0-ROADMAP.md)
   2. Starting the compiled server serves the React SPA at the root URL and all client-side routes return index.html
   3. The server loads environment variables via `--env-file` without any dotenv dependency
   4. All deployment config files (plists, scripts) are co-located in the `deploy/` directory with no deployment artifacts elsewhere in the repo
-**Plans**: TBD
+**Plans**: 2 plans
+  - [ ] 18-01-PLAN.md — Fix production build pipeline (prebuild clean, verify SPA serving)
+  - [ ] 18-02-PLAN.md — Fix plists and verify deployment directory layout
 
 ### Phase 19: Service Configuration
 **Goal**: launchd service definitions correctly manage the server and backup processes with crash recovery and boot startup
@@ -106,6 +108,6 @@ Full details: [milestones/v2.0-ROADMAP.md](milestones/v2.0-ROADMAP.md)
 | 15. Chat UI | v2.0 | 2/2 | Complete | 2026-03-23 |
 | 16. Action Tools | v2.0 | 2/2 | Complete | 2026-03-23 |
 | 17. Audit Gap Closure | v2.0 | 1/1 | Complete | 2026-03-23 |
-| 18. Production Build and Directory Layout | v2.1 | 0/0 | Not started | - |
+| 18. Production Build and Directory Layout | v2.1 | 0/2 | Planned | - |
 | 19. Service Configuration | v2.1 | 0/0 | Not started | - |
 | 20. Deploy Scripts | v2.1 | 0/0 | Not started | - |
