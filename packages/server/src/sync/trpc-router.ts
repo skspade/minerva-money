@@ -45,7 +45,12 @@ import {
   getSpendingByCategory,
   getSpendingOverTime,
   getNetWorth,
+  type SpendingByCategory,
+  type SpendingOverTime,
+  type NetWorthPoint,
 } from '../reports/reports-service.js';
+
+export type { SpendingByCategory, SpendingOverTime, NetWorthPoint };
 
 const syncRouter = router({
   trigger: publicProcedure.mutation(async ({ ctx }) => {

@@ -45,8 +45,9 @@ export default function ReportsPage() {
   );
 
   const currencyFormatter = (value: number) => formatCurrency(value);
+  // Recharts formatter types are overly strict; cast needed
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const tooltipFormatter = (value: any) => [formatCurrency(Number(value)), ''];
+  const tooltipFormatter = ((value: unknown) => [formatCurrency(Number(value)), '']) as any;
 
   return (
     <div>
@@ -97,8 +98,8 @@ export default function ReportsPage() {
                   cx="50%"
                   cy="50%"
                   outerRadius={120}
-                  label={({ name, percent }: { name?: string; percent?: number }) =>
-                    `${name ?? ''} ${((percent ?? 0) * 100).toFixed(0)}%`
+                  label={({ name, percent }) =>
+                    `${name ?? ''} ${((Number(percent) || 0) * 100).toFixed(0)}%`
                   }
                 >
                   {categoryData.map((entry, index) => (
@@ -146,7 +147,7 @@ export default function ReportsPage() {
                 <YAxis tickFormatter={currencyFormatter} />
                 <Tooltip
                   formatter={tooltipFormatter}
-                  labelFormatter={formatMonthLabel}
+                  labelFormatter={(label) => formatMonthLabel(String(label))}
                 />
                 <Line type="monotone" dataKey="total" stroke="#6366f1" strokeWidth={2} dot />
               </LineChart>
