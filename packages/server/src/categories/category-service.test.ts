@@ -181,6 +181,24 @@ describe('category-service', () => {
       const splits = db.prepare('SELECT * FROM transaction_splits WHERE transaction_id = ?').all('tx1');
       expect(splits).toHaveLength(0);
     });
+
+    it('clears rule_id when manually overriding category', () => {
+      const group = createGroup(db, 'Food');
+      const cat = createCategory(db, group.id, 'Groceries');
+
+      // Simulate a rule-categorized transaction by setting rule_id directly
+      db.prepare('INSERT INTO categorization_rules (name, merchant_pattern, category_id, specificity_score) VALUES (?, ?, ?, ?)').run('TestRule', 'Store', cat.id, 2);
+      const ruleId = (db.prepare('SELECT id FROM categorization_rules WHERE name = ?').get('TestRule') as { id: number }).id;
+      db.prepare('UPDATE transactions SET category_id = ?, rule_id = ? WHERE id = ?').run(cat.id, ruleId, 'tx1');
+
+      // Manual override should clear rule_id
+      const cat2 = createCategory(db, group.id, 'Shopping');
+      updateTransactionCategory(db, 'tx1', cat2.id);
+
+      const txn = db.prepare('SELECT category_id, rule_id FROM transactions WHERE id = ?').get('tx1') as { category_id: number; rule_id: number | null };
+      expect(txn.category_id).toBe(cat2.id);
+      expect(txn.rule_id).toBeNull();
+    });
   });
 
   describe('transaction splits', () => {

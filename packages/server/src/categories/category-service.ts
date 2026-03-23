@@ -88,7 +88,7 @@ export function deleteCategory(db: Database.Database, id: number): void {
 export function updateTransactionCategory(db: Database.Database, transactionId: string, categoryId: number | null): void {
   db.transaction(() => {
     db.prepare('DELETE FROM transaction_splits WHERE transaction_id = ?').run(transactionId);
-    db.prepare('UPDATE transactions SET category_id = ? WHERE id = ?').run(categoryId, transactionId);
+    db.prepare('UPDATE transactions SET category_id = ?, rule_id = NULL WHERE id = ?').run(categoryId, transactionId);
   })();
 }
 

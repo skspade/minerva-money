@@ -74,6 +74,8 @@ export default function TransactionsPage() {
             categoryId: vars.categoryId,
             categoryName: catInfo?.name ?? null,
             groupName: catInfo?.groupName ?? null,
+            ruleId: null,
+            ruleName: null,
             splitCount: 0,
           };
         });
@@ -254,10 +256,17 @@ export default function TransactionsPage() {
                           Split ({txn.splitCount})
                         </button>
                       ) : (
-                        <CategoryPicker
-                          value={txn.categoryId}
-                          onChange={categoryId => updateCategoryMut.mutate({ transactionId: txn.id, categoryId })}
-                        />
+                        <div>
+                          <CategoryPicker
+                            value={txn.categoryId}
+                            onChange={categoryId => updateCategoryMut.mutate({ transactionId: txn.id, categoryId })}
+                          />
+                          {txn.ruleName && (
+                            <div className="text-xs text-gray-400 mt-0.5" title={`Categorized by rule: ${txn.ruleName}`}>
+                              Rule: {txn.ruleName}
+                            </div>
+                          )}
+                        </div>
                       )}
                       {txn.splitCount === 0 && (
                         <button
