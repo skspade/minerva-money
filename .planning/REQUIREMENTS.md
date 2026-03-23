@@ -20,7 +20,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **ACCT-01**: User can view all linked accounts with current balances on the dashboard
 - [x] **ACCT-02**: App records daily balance snapshots per account for historical tracking
 - [x] **ACCT-03**: App displays investment accounts as balance-only for net worth calculation
-- [ ] **ACCT-04**: User can view transaction list with filtering by date, payee, amount, and category
+- [x] **ACCT-04**: User can view transaction list with filtering by date, payee, amount, and category
 - [x] **ACCT-05**: User can search transactions by payee or memo text
 
 ### Budgeting
@@ -114,7 +114,7 @@ Deferred to future release. Tracked but not in current roadmap.
 | ACCT-01 | Phase 9 | Pending |
 | ACCT-02 | Phase 2 | Pending |
 | ACCT-03 | Phase 3 | Pending |
-| ACCT-04 | Phase 13 | Pending |
+| ACCT-04 | Phase 13 | Complete |
 | ACCT-05 | Phase 3 | Pending |
 | BUDG-01 | Phase 4 | Pending |
 | BUDG-02 | Phase 7 | Pending |
@@ -143,8 +143,8 @@ Deferred to future release. Tracked but not in current roadmap.
 
 **Coverage:**
 - v1 requirements: 34 total
-- Satisfied: 33 (checked)
-- Pending: 1 (ACCT-04 → Phase 13)
+- Satisfied: 34 (checked)
+- Pending: 0
 - Mapped to phases: 34
 - Unmapped: 0 ✓
 
