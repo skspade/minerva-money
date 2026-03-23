@@ -50,10 +50,10 @@ Requirements for the Claude Agent integration. Each maps to roadmap phases.
 
 ### Safety & Permissions
 
-- [x] **SAFE-01**: Agent auto-executes all read queries and most write actions without confirmation
+- [ ] **SAFE-01**: Agent auto-executes all read queries and most write actions without confirmation
 - [ ] **SAFE-02**: Agent requires explicit user confirmation before changing budget amounts (allocations and defaults)
 - [x] **SAFE-03**: Agent cannot delete accounts or transactions (no tools provided for these operations)
-- [x] **SAFE-04**: Tool implementations validate inputs before executing (category ID exists, rule conditions valid)
+- [ ] **SAFE-04**: Tool implementations validate inputs before executing (category ID exists, rule conditions valid)
 - [x] **SAFE-05**: Anthropic API key stored in .env (gitignored), never exposed to client
 
 ## Future Requirements
@@ -106,9 +106,9 @@ Deferred to v2.x or later. Tracked but not in current roadmap.
 | QUERY-08 | Phase 14 | Complete |
 | QUERY-09 | Phase 14 | Complete |
 | QUERY-10 | Phase 14 | Complete |
-| SAFE-01 | Phase 14 | Complete |
+| SAFE-01 | Phase 17 | Pending |
 | SAFE-03 | Phase 14 | Complete |
-| SAFE-04 | Phase 14 | Complete |
+| SAFE-04 | Phase 17 | Pending |
 | SAFE-05 | Phase 14 | Complete |
 | UI-01 | Phase 15 | Complete |
 | UI-02 | Phase 15 | Complete |
@@ -133,4 +133,4 @@ Deferred to v2.x or later. Tracked but not in current roadmap.
 
 ---
 *Requirements defined: 2026-03-23*
-*Last updated: 2026-03-23 after Phase 14 completion*
+*Last updated: 2026-03-23 after v2.0 milestone audit gap closure planning*

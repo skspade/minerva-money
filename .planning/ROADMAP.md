@@ -3,7 +3,7 @@
 ## Milestones
 
 - ✅ **v1.0 MVP** — Phases 1-13 (shipped 2026-03-22)
-- 🚧 **v2.0 Claude Agent** — Phases 14-16 (in progress)
+- 🚧 **v2.0 Claude Agent** — Phases 14-17 (in progress)
 
 ## Phases
 
@@ -35,6 +35,7 @@ Full details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
 - [x] **Phase 14: Agent Infrastructure and Query Tools** — Server-side agent with read-only tools covering all financial data queries (completed 2026-03-23)
 - [x] **Phase 15: Chat UI** — Full-height chat page with markdown rendering, loading states, and navigation (completed 2026-03-23)
 - [x] **Phase 16: Action Tools and Confirmation Flow** — Write operations for categorization, rules, budgets, transfers, and sync with confirmation for amount changes (completed 2026-03-23)
+- [ ] **Phase 17: Audit Gap Closure — Safety Fixes, Verification, and Traceability** — Fix trigger_sync rate limiter bypass, add explicit SAFE-01 prompt rule, create Phase 14 VERIFICATION.md, update Phase 16 traceability [Gap Closure]
 
 ## Phase Details
 
@@ -80,6 +81,19 @@ Full details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
 - [ ] 16-01-PLAN.md — Action tools: create action-tools.ts with 10 MCP tools wrapping service functions, extract shared helpers, tests
 - [ ] 16-02-PLAN.md — Wire action tools into MCP server, pass tRPC context, update system prompt with confirmation rules
 
+### Phase 17: Audit Gap Closure — Safety Fixes, Verification, and Traceability
+**Goal**: Close all gaps from v2.0 milestone audit — fix safety issues, create missing verification, update traceability
+**Depends on**: Phase 16
+**Requirements**: SAFE-04, SAFE-01, AGENT-01–05, QUERY-01–10, SAFE-03, SAFE-05, ACTION-01–08, SAFE-02
+**Gap Closure:** Closes gaps from audit
+**Success Criteria** (what must be TRUE):
+  1. trigger_sync tool enforces rateLimiter.canManualSync() pre-check before calling runSync
+  2. System prompt contains explicit rule that read-only tools auto-execute without user confirmation
+  3. Phase 14 VERIFICATION.md exists and formally verifies all 18 Phase 14 requirements
+  4. REQUIREMENTS.md traceability table shows Complete for ACTION-01–08 and SAFE-02, checkboxes are checked
+**Plans**: 1 plan
+- [ ] 17-01-PLAN.md — Safety fixes (trigger_sync rate limiter, SAFE-01 prompt rule), Phase 14 verification, traceability updates
+
 ## Progress
 
 **Execution Order:** Phases execute in numeric order: 14 -> 15 -> 16
@@ -102,3 +116,4 @@ Full details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
 | 14. Agent Infrastructure and Query Tools | v2.0 | Complete    | 2026-03-23 | - |
 | 15. Chat UI | 2/2 | Complete    | 2026-03-23 | - |
 | 16. Action Tools and Confirmation Flow | 2/2 | Complete    | 2026-03-23 | - |
+| 17. Audit Gap Closure | 0/1 | Planned | - | - |
