@@ -76,7 +76,9 @@ Full details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
   2. User can adjust budget allocations and defaults via chat, with the agent requiring explicit confirmation before any amount change takes effect
   3. User can confirm or dismiss pending transfer suggestions and trigger a manual SimpleFIN sync through chat
   4. All write operations validate inputs (category/rule IDs exist, amounts are valid) and the agent reports clear success or failure messages
-**Plans**: TBD
+**Plans**: 2 plans
+- [ ] 16-01-PLAN.md — Action tools: create action-tools.ts with 10 MCP tools wrapping service functions, extract shared helpers, tests
+- [ ] 16-02-PLAN.md — Wire action tools into MCP server, pass tRPC context, update system prompt with confirmation rules
 
 ## Progress
 
@@ -99,4 +101,4 @@ Full details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
 | 13. Transaction Filters | v1.0 | 1/1 | Complete | 2026-03-23 |
 | 14. Agent Infrastructure and Query Tools | v2.0 | Complete    | 2026-03-23 | - |
 | 15. Chat UI | 2/2 | Complete    | 2026-03-23 | - |
-| 16. Action Tools and Confirmation Flow | v2.0 | 0/? | Not started | - |
+| 16. Action Tools and Confirmation Flow | v2.0 | 0/2 | Not started | - |
