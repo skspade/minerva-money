@@ -17,6 +17,14 @@ import {
   deleteSplits,
   createManualTransaction,
 } from '../categories/category-service.js';
+import {
+  listRules,
+  createRule,
+  updateRule,
+  deleteRule,
+  previewRule,
+  applyRule,
+} from '../rules/rules-service.js';
 
 const syncRouter = router({
   trigger: publicProcedure.mutation(async ({ ctx }) => {
@@ -160,19 +168,22 @@ const transactionsRouter = router({
   list: publicProcedure.query(({ ctx }) => {
     const rows = ctx.db.prepare(`
       SELECT t.id, t.date, t.payee, t.memo, t.amount, t.account_id,
-        a.name AS account_name, t.category_id,
+        a.name AS account_name, t.category_id, t.rule_id,
         c.name AS category_name, cg.name AS group_name,
+        cr.name AS rule_name,
         (SELECT COUNT(*) FROM transaction_splits ts WHERE ts.transaction_id = t.id) AS split_count
       FROM transactions t
       JOIN accounts a ON t.account_id = a.id
       LEFT JOIN categories c ON t.category_id = c.id
       LEFT JOIN category_groups cg ON c.group_id = cg.id
+      LEFT JOIN categorization_rules cr ON t.rule_id = cr.id
       ORDER BY t.date DESC, t.created_at DESC
     `).all() as {
       id: string; date: string; payee: string; memo: string | null;
       amount: number; account_id: string; account_name: string;
       category_id: number | null; category_name: string | null;
-      group_name: string | null; split_count: number;
+      group_name: string | null; rule_id: number | null;
+      rule_name: string | null; split_count: number;
     }[];
 
     return rows.map(r => ({
@@ -186,6 +197,8 @@ const transactionsRouter = router({
       categoryId: r.category_id,
       categoryName: r.category_name,
       groupName: r.group_name,
+      ruleId: r.rule_id,
+      ruleName: r.rule_name,
       splitCount: r.split_count,
     }));
   }),
@@ -225,11 +238,66 @@ const transactionsRouter = router({
     }),
 });
 
+const rulesRouter = router({
+  list: publicProcedure.query(({ ctx }) => {
+    return listRules(ctx.db);
+  }),
+
+  create: publicProcedure
+    .input(z.object({
+      name: z.string().min(1),
+      merchantPattern: z.string().nullable(),
+      matchType: z.enum(['exact', 'contains']).default('contains'),
+      amountMin: z.number().nullable(),
+      amountMax: z.number().nullable(),
+      memoPattern: z.string().nullable(),
+      categoryId: z.number(),
+    }))
+    .mutation(({ ctx, input }) => {
+      return createRule(ctx.db, input);
+    }),
+
+  update: publicProcedure
+    .input(z.object({
+      id: z.number(),
+      name: z.string().min(1),
+      merchantPattern: z.string().nullable(),
+      matchType: z.enum(['exact', 'contains']).default('contains'),
+      amountMin: z.number().nullable(),
+      amountMax: z.number().nullable(),
+      memoPattern: z.string().nullable(),
+      categoryId: z.number(),
+    }))
+    .mutation(({ ctx, input }) => {
+      const { id, ...data } = input;
+      updateRule(ctx.db, id, data);
+    }),
+
+  delete: publicProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(({ ctx, input }) => {
+      deleteRule(ctx.db, input.id);
+    }),
+
+  preview: publicProcedure
+    .input(z.object({ id: z.number() }))
+    .query(({ ctx, input }) => {
+      return previewRule(ctx.db, input.id);
+    }),
+
+  applyRetroactive: publicProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(({ ctx, input }) => {
+      return { updatedCount: applyRule(ctx.db, input.id) };
+    }),
+});
+
 export const appRouter = router({
   sync: syncRouter,
   accounts: accountsRouter,
   transactions: transactionsRouter,
   categories: categoriesRouter,
+  rules: rulesRouter,
 });
 
 export type AppRouter = typeof appRouter;

@@ -13,6 +13,8 @@ import {
   listRules,
   evaluateRules,
   categorizeNewTransactions,
+  previewRule,
+  applyRule,
 } from './rules-service.js';
 
 function seedTestData(db: Database.Database) {
@@ -291,6 +293,102 @@ describe('evaluateRules', () => {
 
     const winner = evaluateRules(db, { payee: 'Walmart', amount: -1000, memo: null });
     expect(winner).toBeNull();
+  });
+});
+
+describe('previewRule', () => {
+  let db: Database.Database;
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'minerva-rules-test-'));
+    db = createDatabase(join(tmpDir, 'test.db'));
+    seedTestData(db);
+  });
+
+  afterEach(() => {
+    db.close();
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('returns matching uncategorized transactions with current and proposed category', () => {
+    const rule = createRule(db, { name: 'Amazon', merchantPattern: 'Amazon', matchType: 'contains', amountMin: null, amountMax: null, memoPattern: null, categoryId: 1 });
+
+    db.prepare(`INSERT INTO transactions (id, account_id, date, amount, payee) VALUES ('t1', 'acc1', '2026-01-01', -5000, 'Amazon Prime')`).run();
+    db.prepare(`INSERT INTO transactions (id, account_id, date, amount, payee) VALUES ('t2', 'acc1', '2026-01-02', -3000, 'Walmart')`).run();
+
+    const preview = previewRule(db, rule.id);
+    expect(preview).toHaveLength(1);
+    expect(preview[0].transactionId).toBe('t1');
+    expect(preview[0].currentCategoryName).toBeNull();
+    expect(preview[0].proposedCategoryName).toBe('Groceries');
+  });
+
+  it('excludes manually categorized transactions', () => {
+    const rule = createRule(db, { name: 'Amazon', merchantPattern: 'Amazon', matchType: 'contains', amountMin: null, amountMax: null, memoPattern: null, categoryId: 1 });
+
+    db.prepare(`INSERT INTO transactions (id, account_id, date, amount, payee, category_id) VALUES ('t1', 'acc1', '2026-01-01', -5000, 'Amazon Prime', 2)`).run();
+
+    const preview = previewRule(db, rule.id);
+    expect(preview).toHaveLength(0);
+  });
+
+  it('includes transactions categorized by a different rule', () => {
+    const rule1 = createRule(db, { name: 'Old', merchantPattern: 'Amazon', matchType: 'contains', amountMin: null, amountMax: null, memoPattern: null, categoryId: 2 });
+    const rule2 = createRule(db, { name: 'New', merchantPattern: 'Amazon', matchType: 'exact', amountMin: null, amountMax: null, memoPattern: null, categoryId: 1 });
+
+    db.prepare(`INSERT INTO transactions (id, account_id, date, amount, payee, category_id, rule_id) VALUES ('t1', 'acc1', '2026-01-01', -5000, 'Amazon', 2, ?)`).run(rule1.id);
+
+    const preview = previewRule(db, rule2.id);
+    expect(preview).toHaveLength(1);
+    expect(preview[0].currentCategoryName).toBe('Shopping');
+    expect(preview[0].proposedCategoryName).toBe('Groceries');
+  });
+});
+
+describe('applyRule', () => {
+  let db: Database.Database;
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'minerva-rules-test-'));
+    db = createDatabase(join(tmpDir, 'test.db'));
+    seedTestData(db);
+  });
+
+  afterEach(() => {
+    db.close();
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('applies rule to matching uncategorized transactions', () => {
+    const rule = createRule(db, { name: 'Amazon', merchantPattern: 'Amazon', matchType: 'contains', amountMin: null, amountMax: null, memoPattern: null, categoryId: 1 });
+
+    db.prepare(`INSERT INTO transactions (id, account_id, date, amount, payee) VALUES ('t1', 'acc1', '2026-01-01', -5000, 'Amazon Prime')`).run();
+    db.prepare(`INSERT INTO transactions (id, account_id, date, amount, payee) VALUES ('t2', 'acc1', '2026-01-02', -3000, 'Amazon Fresh')`).run();
+    db.prepare(`INSERT INTO transactions (id, account_id, date, amount, payee) VALUES ('t3', 'acc1', '2026-01-03', -2000, 'Walmart')`).run();
+
+    const count = applyRule(db, rule.id);
+    expect(count).toBe(2);
+
+    const t1 = db.prepare('SELECT category_id, rule_id FROM transactions WHERE id = ?').get('t1') as { category_id: number; rule_id: number };
+    expect(t1.category_id).toBe(1);
+    expect(t1.rule_id).toBe(rule.id);
+
+    const t3 = db.prepare('SELECT category_id, rule_id FROM transactions WHERE id = ?').get('t3') as { category_id: number | null; rule_id: number | null };
+    expect(t3.category_id).toBeNull();
+  });
+
+  it('does not override manually categorized transactions', () => {
+    const rule = createRule(db, { name: 'Amazon', merchantPattern: 'Amazon', matchType: 'contains', amountMin: null, amountMax: null, memoPattern: null, categoryId: 1 });
+
+    db.prepare(`INSERT INTO transactions (id, account_id, date, amount, payee, category_id) VALUES ('t1', 'acc1', '2026-01-01', -5000, 'Amazon Prime', 2)`).run();
+
+    const count = applyRule(db, rule.id);
+    expect(count).toBe(0);
+
+    const t1 = db.prepare('SELECT category_id FROM transactions WHERE id = ?').get('t1') as { category_id: number };
+    expect(t1.category_id).toBe(2);
   });
 });
 

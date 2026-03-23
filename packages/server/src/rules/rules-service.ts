@@ -194,6 +194,93 @@ export function evaluateRules(db: Database.Database, transaction: TransactionInp
   return null;
 }
 
+export interface PreviewItem {
+  transactionId: string;
+  date: string;
+  payee: string | null;
+  amount: number;
+  currentCategoryName: string | null;
+  proposedCategoryName: string;
+}
+
+export function previewRule(db: Database.Database, ruleId: number): PreviewItem[] {
+  const rule = db.prepare('SELECT * FROM categorization_rules WHERE id = ?').get(ruleId) as RuleRow | undefined;
+  if (!rule) return [];
+
+  const proposedCategory = db.prepare('SELECT name FROM categories WHERE id = ?').get(rule.category_id) as { name: string } | undefined;
+  if (!proposedCategory) return [];
+
+  // Get all transactions that could be affected:
+  // - uncategorized (category_id IS NULL, no splits)
+  // - categorized by a different rule (rule_id IS NOT NULL AND rule_id != this rule)
+  const transactions = db.prepare(`
+    SELECT t.id, t.date, t.payee, t.amount, t.category_id, t.rule_id,
+      c.name AS current_category_name,
+      (SELECT COUNT(*) FROM transaction_splits ts WHERE ts.transaction_id = t.id) AS split_count
+    FROM transactions t
+    LEFT JOIN categories c ON t.category_id = c.id
+    WHERE (t.category_id IS NULL OR (t.rule_id IS NOT NULL AND t.rule_id != ?))
+  `).all(ruleId) as {
+    id: string;
+    date: string;
+    payee: string | null;
+    amount: number;
+    category_id: number | null;
+    rule_id: number | null;
+    current_category_name: string | null;
+    split_count: number;
+  }[];
+
+  const results: PreviewItem[] = [];
+  for (const txn of transactions) {
+    if (txn.split_count > 0) continue;
+    if (matchesRule(rule, txn)) {
+      results.push({
+        transactionId: txn.id,
+        date: txn.date,
+        payee: txn.payee,
+        amount: txn.amount,
+        currentCategoryName: txn.current_category_name,
+        proposedCategoryName: proposedCategory.name,
+      });
+    }
+  }
+  return results;
+}
+
+export function applyRule(db: Database.Database, ruleId: number): number {
+  const rule = db.prepare('SELECT * FROM categorization_rules WHERE id = ?').get(ruleId) as RuleRow | undefined;
+  if (!rule) return 0;
+
+  const transactions = db.prepare(`
+    SELECT t.id, t.payee, t.amount, t.memo,
+      (SELECT COUNT(*) FROM transaction_splits ts WHERE ts.transaction_id = t.id) AS split_count
+    FROM transactions t
+    WHERE (t.category_id IS NULL OR (t.rule_id IS NOT NULL AND t.rule_id != ?))
+  `).all(ruleId) as {
+    id: string;
+    payee: string | null;
+    amount: number;
+    memo: string | null;
+    split_count: number;
+  }[];
+
+  const updateStmt = db.prepare('UPDATE transactions SET category_id = ?, rule_id = ? WHERE id = ?');
+  let count = 0;
+
+  db.transaction(() => {
+    for (const txn of transactions) {
+      if (txn.split_count > 0) continue;
+      if (matchesRule(rule, txn)) {
+        updateStmt.run(rule.category_id, rule.id, txn.id);
+        count++;
+      }
+    }
+  })();
+
+  return count;
+}
+
 export function categorizeNewTransactions(db: Database.Database, transactionIds: string[]): void {
   if (transactionIds.length === 0) return;
 
