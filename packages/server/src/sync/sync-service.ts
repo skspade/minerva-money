@@ -35,15 +35,10 @@ export async function runSync(
     const data: SimpleFINAccountSet = await client.fetchAccounts();
 
     // Log any per-account errors from SimpleFIN
-    for (const err of data.errlist) {
+    const errList = data.errors ?? data.errlist ?? [];
+    for (const err of errList) {
       const msg = `SimpleFIN error [${err.code}]: ${err.msg}${err.account_id ? ` (account: ${err.account_id})` : ''}`;
       result.errors.push(msg);
-    }
-
-    // Build connection name lookup
-    const connectionNames = new Map<string, string>();
-    for (const conn of data.connections) {
-      connectionNames.set(conn.conn_id, conn.name);
     }
 
     // Process each account sequentially
@@ -54,7 +49,7 @@ export async function runSync(
       }
 
       try {
-        const institution = connectionNames.get(rawAccount.conn_id) ?? rawAccount.conn_id;
+        const institution = rawAccount.org?.name ?? rawAccount.conn_id;
         const txnsAdded = syncAccount(db, rawAccount, institution);
         result.accountsSynced++;
         result.transactionsAdded += txnsAdded;

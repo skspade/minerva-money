@@ -36,13 +36,17 @@ export interface SimpleFINAccount {
   'available-balance'?: string;
   'balance-date': number;
   transactions: SimpleFINTransaction[];
+  org?: { name: string; domain?: string; id?: string };
   extra?: Record<string, unknown>;
 }
 
 export interface SimpleFINAccountSet {
-  errlist: SimpleFINError[];
-  connections: SimpleFINConnection[];
+  errors: SimpleFINError[];
   accounts: SimpleFINAccount[];
+  /** @deprecated Use errors instead — errlist is only in mock/fixture data */
+  errlist?: SimpleFINError[];
+  /** @deprecated Connection info is embedded in each account's org field */
+  connections?: SimpleFINConnection[];
 }
 
 // App domain types (normalized)

@@ -214,7 +214,7 @@ export function previewRule(db: Database.Database, ruleId: number): PreviewItem[
   // - uncategorized (category_id IS NULL, no splits)
   // - categorized by a different rule (rule_id IS NOT NULL AND rule_id != this rule)
   const transactions = db.prepare(`
-    SELECT t.id, t.date, t.payee, t.amount, t.category_id, t.rule_id,
+    SELECT t.id, t.date, t.payee, t.amount, t.memo, t.category_id, t.rule_id,
       c.name AS current_category_name,
       (SELECT COUNT(*) FROM transaction_splits ts WHERE ts.transaction_id = t.id) AS split_count
     FROM transactions t
@@ -225,6 +225,7 @@ export function previewRule(db: Database.Database, ruleId: number): PreviewItem[
     date: string;
     payee: string | null;
     amount: number;
+    memo: string | null;
     category_id: number | null;
     rule_id: number | null;
     current_category_name: string | null;

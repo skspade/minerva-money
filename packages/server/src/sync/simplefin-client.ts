@@ -103,16 +103,26 @@ export function createMockSimpleFINClient(): SimpleFINClient {
 
 export function createSimpleFINClient(accessUrl: string): SimpleFINClient {
   async function fetchFromApi(params?: Record<string, string>): Promise<SimpleFINAccountSet> {
-    const url = new URL('/accounts', accessUrl);
+    const parsed = new URL(accessUrl);
+    const username = parsed.username;
+    const password = parsed.password;
+    parsed.username = '';
+    parsed.password = '';
+
+    const base = parsed.toString().replace(/\/$/, '');
+    const url = new URL(`${base}/accounts`);
     if (params) {
       for (const [key, value] of Object.entries(params)) {
         url.searchParams.set(key, value);
       }
     }
 
-    const response = await fetch(url.toString(), {
-      headers: { 'Accept': 'application/json' },
-    });
+    const headers: Record<string, string> = { 'Accept': 'application/json' };
+    if (username || password) {
+      headers['Authorization'] = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
+    }
+
+    const response = await fetch(url.toString(), { headers });
 
     if (response.status === 403) {
       throw new Error('SimpleFIN access revoked or credentials invalid');
