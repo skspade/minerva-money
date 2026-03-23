@@ -44,9 +44,13 @@ interface GroupData {
   totalAllocated: number;
   totalSpent: number;
   totalAvailable: number;
+  totalDefault: number;
 }
 
-function groupCategories(categories: CategorySummary[]): GroupData[] {
+export function groupCategories(
+  categories: CategorySummary[],
+  defaultsMap?: Map<number, number>,
+): GroupData[] {
   const groupMap = new Map<string, CategorySummary[]>();
   for (const cat of categories) {
     const existing = groupMap.get(cat.groupName) || [];
@@ -62,6 +66,10 @@ function groupCategories(categories: CategorySummary[]): GroupData[] {
       totalAllocated: cats.reduce((sum, c) => sum + c.allocated, 0),
       totalSpent: cats.reduce((sum, c) => sum + c.spent, 0),
       totalAvailable: cats.reduce((sum, c) => sum + c.available, 0),
+      totalDefault: cats.reduce(
+        (sum, c) => sum + (defaultsMap?.get(c.categoryId) ?? 0),
+        0,
+      ),
     });
   }
   return groups;
@@ -146,17 +154,21 @@ function BudgetGroup({
   onToggle,
   period,
   onSetAllocation,
+  defaultsMap,
+  onSetDefault,
 }: {
   group: GroupData;
   collapsed: boolean;
   onToggle: () => void;
   period: string;
   onSetAllocation: (categoryId: number, period: string, amount: number) => void;
+  defaultsMap: Map<number, number>;
+  onSetDefault: (categoryId: number, cents: number) => void;
 }) {
   return (
     <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
       <div
-        className="grid grid-cols-4 gap-4 px-4 py-3 bg-gray-50 border-b border-gray-200 cursor-pointer"
+        className="grid grid-cols-5 gap-4 px-4 py-3 bg-gray-50 border-b border-gray-200 cursor-pointer"
         onClick={onToggle}
       >
         <div className="flex items-center gap-2">
@@ -165,6 +177,9 @@ function BudgetGroup({
           </span>
           <span className="font-semibold text-sm">{group.name}</span>
           <span className="text-xs text-gray-400">({group.categories.length})</span>
+        </div>
+        <div className={`text-right text-sm font-medium ${group.totalDefault === 0 ? 'text-gray-400' : ''}`}>
+          {formatCurrency(group.totalDefault)}
         </div>
         <div className="text-right text-sm font-medium">{formatCurrency(group.totalAllocated)}</div>
         <div className="text-right text-sm font-medium">{formatCurrency(group.totalSpent)}</div>
@@ -175,24 +190,34 @@ function BudgetGroup({
 
       {!collapsed && (
         <div>
-          {group.categories.map(cat => (
-            <div
-              key={cat.categoryId}
-              className="grid grid-cols-4 gap-4 px-4 py-2 border-b border-gray-100 last:border-b-0"
-            >
-              <div className="text-sm pl-6">{cat.categoryName}</div>
-              <div className="text-right text-sm">
-                <AllocationCell
-                  value={cat.allocated}
-                  onSave={cents => onSetAllocation(cat.categoryId, period, cents)}
-                />
+          {group.categories.map(cat => {
+            const hasDefault = defaultsMap.has(cat.categoryId);
+            const defaultValue = defaultsMap.get(cat.categoryId) ?? 0;
+            return (
+              <div
+                key={cat.categoryId}
+                className="grid grid-cols-5 gap-4 px-4 py-2 border-b border-gray-100 last:border-b-0"
+              >
+                <div className="text-sm pl-6">{cat.categoryName}</div>
+                <div className={`text-right text-sm ${!hasDefault ? 'text-gray-400' : ''}`}>
+                  <AllocationCell
+                    value={defaultValue}
+                    onSave={cents => onSetDefault(cat.categoryId, cents)}
+                  />
+                </div>
+                <div className="text-right text-sm">
+                  <AllocationCell
+                    value={cat.allocated}
+                    onSave={cents => onSetAllocation(cat.categoryId, period, cents)}
+                  />
+                </div>
+                <div className="text-right text-sm">{formatCurrency(cat.spent)}</div>
+                <div className={`text-right text-sm rounded px-1 ${availableColor(cat.available)}`}>
+                  {formatCurrency(cat.available)}
+                </div>
               </div>
-              <div className="text-right text-sm">{formatCurrency(cat.spent)}</div>
-              <div className={`text-right text-sm rounded px-1 ${availableColor(cat.available)}`}>
-                {formatCurrency(cat.available)}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
@@ -210,6 +235,14 @@ export default function BudgetPage() {
     trpc.budget.summary.queryOptions({ period }),
   );
 
+  const { data: defaults } = useQuery(
+    trpc.budget.defaults.list.queryOptions(),
+  );
+
+  const defaultsMap = new Map(
+    (defaults ?? []).map(d => [d.categoryId, d.amount]),
+  );
+
   const setAllocationMut = useMutation(
     trpc.budget.allocations.set.mutationOptions({
       onSuccess: () => {
@@ -223,8 +256,40 @@ export default function BudgetPage() {
     }),
   );
 
+  const setDefaultMut = useMutation(
+    trpc.budget.defaults.set.mutationOptions({
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: trpc.budget.defaults.list.queryKey() });
+      },
+      onError: (err) => {
+        setErrorMessage(err.message);
+        setTimeout(() => setErrorMessage(null), 3000);
+      },
+    }),
+  );
+
+  const deleteDefaultMut = useMutation(
+    trpc.budget.defaults.delete.mutationOptions({
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: trpc.budget.defaults.list.queryKey() });
+      },
+      onError: (err) => {
+        setErrorMessage(err.message);
+        setTimeout(() => setErrorMessage(null), 3000);
+      },
+    }),
+  );
+
   const handleSetAllocation = (categoryId: number, p: string, amount: number) => {
     setAllocationMut.mutate({ categoryId, period: p, amount });
+  };
+
+  const handleSetDefault = (categoryId: number, cents: number) => {
+    if (cents === 0) {
+      deleteDefaultMut.mutate({ categoryId });
+    } else {
+      setDefaultMut.mutate({ categoryId, amount: cents });
+    }
   };
 
   const toggleGroup = (groupName: string) => {
@@ -247,13 +312,13 @@ export default function BudgetPage() {
     return <p className="text-red-600">Error loading budget: {error.message}</p>;
   }
 
-  const groups = data ? groupCategories(data.categories) : [];
+  const groups = data ? groupCategories(data.categories, defaultsMap) : [];
 
   return (
     <div>
       {errorMessage && (
         <div className="mb-4 p-2 text-red-600 bg-red-50 rounded text-sm">
-          Error saving allocation: {errorMessage}
+          Error saving: {errorMessage}
         </div>
       )}
 
@@ -293,8 +358,9 @@ export default function BudgetPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-4 gap-4 px-4 py-2 text-xs text-gray-500 uppercase tracking-wide font-medium">
+      <div className="grid grid-cols-5 gap-4 px-4 py-2 text-xs text-gray-500 uppercase tracking-wide font-medium">
         <div>Category</div>
+        <div className="text-right">Default</div>
         <div className="text-right">Allocated</div>
         <div className="text-right">Spent</div>
         <div className="text-right">Available</div>
@@ -309,6 +375,8 @@ export default function BudgetPage() {
             onToggle={() => toggleGroup(group.name)}
             period={period}
             onSetAllocation={handleSetAllocation}
+            defaultsMap={defaultsMap}
+            onSetDefault={handleSetDefault}
           />
         ))}
       </div>
