@@ -25,7 +25,7 @@ See: .planning/PROJECT.md (updated 2026-03-23)
 Milestone: v2.0 Claude Agent — SHIPPED
 Phase: 17 of 17 (complete)
 Status: Milestone complete
-Last activity: 2026-03-23 — v2.0 milestone archived
+Last activity: 2026-03-23 - Completed quick task 1: Replace window.confirm() calls with inline confirmation UI
 
 Progress: [██████████] 100%
 
@@ -58,6 +58,12 @@ None.
 ### Blockers/Concerns
 
 None — milestone complete.
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 1 | Replace window.confirm() calls with inline confirmation UI | 2026-03-23 | e9c6989 | [1-replace-window-confirm-calls-with-inline](./quick/1-replace-window-confirm-calls-with-inline/) |
 
 ## Session Continuity
 
