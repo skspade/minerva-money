@@ -33,6 +33,14 @@ import {
   unlinkTransfer,
   manuallyLinkTransfer,
 } from '../transfers/transfer-service.js';
+import {
+  setDefaultAllocation,
+  getDefaults,
+  deleteDefault,
+  setAllocation,
+  getBudgetSummary,
+  getAvailableToBudget,
+} from '../budget/budget-service.js';
 
 const syncRouter = router({
   trigger: publicProcedure.mutation(async ({ ctx }) => {
@@ -348,6 +356,59 @@ const transfersRouter = router({
     }),
 });
 
+const budgetDefaultsRouter = router({
+  list: publicProcedure.query(({ ctx }) => {
+    return getDefaults(ctx.db);
+  }),
+
+  set: publicProcedure
+    .input(z.object({ categoryId: z.number(), amount: z.number() }))
+    .mutation(({ ctx, input }) => {
+      setDefaultAllocation(ctx.db, input.categoryId, input.amount);
+    }),
+
+  delete: publicProcedure
+    .input(z.object({ categoryId: z.number() }))
+    .mutation(({ ctx, input }) => {
+      deleteDefault(ctx.db, input.categoryId);
+    }),
+});
+
+const budgetAllocationsRouter = router({
+  byMonth: publicProcedure
+    .input(z.object({ period: z.string().regex(/^\d{4}-\d{2}$/) }))
+    .query(({ ctx, input }) => {
+      const rows = ctx.db.prepare(`
+        SELECT category_id, amount FROM budget_allocations
+        WHERE period = ? AND is_default = 0
+      `).all(input.period) as { category_id: number; amount: number }[];
+      return rows.map(r => ({ categoryId: r.category_id, amount: r.amount }));
+    }),
+
+  set: publicProcedure
+    .input(z.object({
+      categoryId: z.number(),
+      period: z.string().regex(/^\d{4}-\d{2}$/),
+      amount: z.number(),
+    }))
+    .mutation(({ ctx, input }) => {
+      setAllocation(ctx.db, input.categoryId, input.period, input.amount);
+    }),
+});
+
+const budgetRouter = router({
+  defaults: budgetDefaultsRouter,
+  allocations: budgetAllocationsRouter,
+  summary: publicProcedure
+    .input(z.object({ period: z.string().regex(/^\d{4}-\d{2}$/) }))
+    .query(({ ctx, input }) => {
+      return {
+        categories: getBudgetSummary(ctx.db, input.period),
+        availableToBudget: getAvailableToBudget(ctx.db, input.period),
+      };
+    }),
+});
+
 export const appRouter = router({
   sync: syncRouter,
   accounts: accountsRouter,
@@ -355,6 +416,7 @@ export const appRouter = router({
   categories: categoriesRouter,
   rules: rulesRouter,
   transfers: transfersRouter,
+  budget: budgetRouter,
 });
 
 export type AppRouter = typeof appRouter;

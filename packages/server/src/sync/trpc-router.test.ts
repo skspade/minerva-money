@@ -168,4 +168,63 @@ describe('trpc-router', () => {
 
     expect(transactions).toEqual([]);
   });
+
+  describe('budget procedures', () => {
+    function createTestCategory(): number {
+      const group = db.prepare('INSERT INTO category_groups (name) VALUES (?)').run('Test');
+      return Number(db.prepare('INSERT INTO categories (group_id, name) VALUES (?, ?)').run(group.lastInsertRowid, 'Food').lastInsertRowid);
+    }
+
+    it('budget.defaults.set and budget.defaults.list round-trip', async () => {
+      const caller = createCaller();
+      const catId = createTestCategory();
+
+      await caller.budget.defaults.set({ categoryId: catId, amount: 30000 });
+      const defaults = await caller.budget.defaults.list();
+
+      expect(defaults).toEqual([{ categoryId: catId, amount: 30000 }]);
+    });
+
+    it('budget.defaults.delete removes a default', async () => {
+      const caller = createCaller();
+      const catId = createTestCategory();
+
+      await caller.budget.defaults.set({ categoryId: catId, amount: 30000 });
+      await caller.budget.defaults.delete({ categoryId: catId });
+      const defaults = await caller.budget.defaults.list();
+
+      expect(defaults).toEqual([]);
+    });
+
+    it('budget.allocations.set and budget.summary round-trip', async () => {
+      const caller = createCaller();
+      const catId = createTestCategory();
+
+      await caller.budget.allocations.set({ categoryId: catId, period: '2026-03', amount: 25000 });
+      const summary = await caller.budget.summary({ period: '2026-03' });
+
+      expect(summary.availableToBudget).toEqual(expect.any(Number));
+      const food = summary.categories.find(c => c.categoryId === catId);
+      expect(food).toBeDefined();
+      expect(food!.allocated).toBe(25000);
+    });
+
+    it('budget.allocations.byMonth returns allocations for a period', async () => {
+      const caller = createCaller();
+      const catId = createTestCategory();
+
+      await caller.budget.allocations.set({ categoryId: catId, period: '2026-03', amount: 25000 });
+      const allocations = await caller.budget.allocations.byMonth({ period: '2026-03' });
+
+      expect(allocations).toEqual([{ categoryId: catId, amount: 25000 }]);
+    });
+
+    it('budget.summary returns availableToBudget as a number', async () => {
+      const caller = createCaller();
+      const summary = await caller.budget.summary({ period: '2026-03' });
+
+      expect(typeof summary.availableToBudget).toBe('number');
+      expect(Array.isArray(summary.categories)).toBe(true);
+    });
+  });
 });

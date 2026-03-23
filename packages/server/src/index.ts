@@ -5,6 +5,7 @@ import { appRouter } from './sync/trpc-router.js';
 import { getSimpleFINClient } from './sync/simplefin-client.js';
 import { createRateLimiter } from './sync/rate-limiter.js';
 import { startSyncScheduler, stopSyncScheduler } from './sync/sync-scheduler.js';
+import { startBudgetScheduler, stopBudgetScheduler } from './budget/budget-scheduler.js';
 import type { Context } from './sync/trpc.js';
 
 const app = express();
@@ -30,6 +31,7 @@ if (process.env.NODE_ENV !== 'test') {
   );
 
   startSyncScheduler(db);
+  startBudgetScheduler(db);
 
   const server = app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
@@ -37,6 +39,7 @@ if (process.env.NODE_ENV !== 'test') {
 
   process.on('SIGTERM', () => {
     stopSyncScheduler();
+    stopBudgetScheduler();
     server.close();
   });
 }
