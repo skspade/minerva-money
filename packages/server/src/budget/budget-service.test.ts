@@ -7,6 +7,9 @@ import {
   setAllocation,
   getAllocation,
   getSpentForCategory,
+  getRollover,
+  getBudgetSummary,
+  getAvailableToBudget,
 } from './budget-service.js';
 import type Database from 'better-sqlite3';
 import { tmpdir } from 'node:os';
@@ -172,6 +175,140 @@ describe('budget-service', () => {
 
       expect(getSpentForCategory(db, catGroceries, '2026-03')).toBe(11000); // 5000 + 6000
       expect(getSpentForCategory(db, catUtilities, '2026-03')).toBe(4000);
+    });
+  });
+
+  describe('rollover computation', () => {
+    it('returns 0 when no prior months exist', () => {
+      expect(getRollover(db, catGroceries, '2026-03')).toBe(0);
+    });
+
+    it('computes positive rollover from prior month surplus', () => {
+      // Jan: allocated 10000, spent 8000 -> surplus 2000
+      setAllocation(db, catGroceries, '2026-01', 10000);
+      db.prepare('INSERT INTO transactions (id, account_id, date, amount, category_id) VALUES (?, ?, ?, ?, ?)').run('t1', 'acct-1', '2026-01-15', -8000, catGroceries);
+
+      expect(getRollover(db, catGroceries, '2026-02')).toBe(2000);
+    });
+
+    it('computes negative rollover from prior month overspending', () => {
+      // Jan: allocated 10000, spent 12000 -> deficit -2000
+      setAllocation(db, catGroceries, '2026-01', 10000);
+      db.prepare('INSERT INTO transactions (id, account_id, date, amount, category_id) VALUES (?, ?, ?, ?, ?)').run('t1', 'acct-1', '2026-01-15', -12000, catGroceries);
+
+      expect(getRollover(db, catGroceries, '2026-02')).toBe(-2000);
+    });
+
+    it('accumulates rollover across multiple months', () => {
+      // Jan: allocated 10000, spent 8000 -> +2000
+      setAllocation(db, catGroceries, '2026-01', 10000);
+      db.prepare('INSERT INTO transactions (id, account_id, date, amount, category_id) VALUES (?, ?, ?, ?, ?)').run('t1', 'acct-1', '2026-01-15', -8000, catGroceries);
+      // Feb: allocated 10000, spent 9000 -> +1000
+      setAllocation(db, catGroceries, '2026-02', 10000);
+      db.prepare('INSERT INTO transactions (id, account_id, date, amount, category_id) VALUES (?, ?, ?, ?, ?)').run('t2', 'acct-1', '2026-02-15', -9000, catGroceries);
+
+      // Mar rollover = Jan surplus (2000) + Feb surplus (1000) = 3000
+      expect(getRollover(db, catGroceries, '2026-03')).toBe(3000);
+    });
+
+    it('only considers non-default allocation rows', () => {
+      setDefaultAllocation(db, catGroceries, 10000);
+      // No monthly allocation for Jan -> rollover should be 0 (spent 0, allocated 0)
+      expect(getRollover(db, catGroceries, '2026-02')).toBe(0);
+    });
+  });
+
+  describe('budget summary', () => {
+    it('returns all categories with budget data', () => {
+      setAllocation(db, catGroceries, '2026-03', 30000);
+      db.prepare('INSERT INTO transactions (id, account_id, date, amount, category_id) VALUES (?, ?, ?, ?, ?)').run('t1', 'acct-1', '2026-03-05', -15000, catGroceries);
+
+      const summary = getBudgetSummary(db, '2026-03');
+      expect(summary.length).toBeGreaterThanOrEqual(3); // At least our 3 test categories
+
+      const groceries = summary.find(s => s.categoryId === catGroceries);
+      expect(groceries).toBeDefined();
+      expect(groceries!.allocated).toBe(30000);
+      expect(groceries!.spent).toBe(15000);
+      expect(groceries!.available).toBe(15000); // 30000 - 15000 + 0 rollover
+      expect(groceries!.rollover).toBe(0);
+    });
+
+    it('includes rollover in available calculation', () => {
+      // Jan: allocated 10000, spent 5000 -> surplus 5000
+      setAllocation(db, catGroceries, '2026-01', 10000);
+      db.prepare('INSERT INTO transactions (id, account_id, date, amount, category_id) VALUES (?, ?, ?, ?, ?)').run('t1', 'acct-1', '2026-01-15', -5000, catGroceries);
+      // Feb: allocated 10000, spent 8000
+      setAllocation(db, catGroceries, '2026-02', 10000);
+      db.prepare('INSERT INTO transactions (id, account_id, date, amount, category_id) VALUES (?, ?, ?, ?, ?)').run('t2', 'acct-1', '2026-02-15', -8000, catGroceries);
+
+      const summary = getBudgetSummary(db, '2026-02');
+      const groceries = summary.find(s => s.categoryId === catGroceries)!;
+      expect(groceries.rollover).toBe(5000);
+      expect(groceries.available).toBe(7000); // 10000 + 5000 - 8000
+    });
+
+    it('shows zero for categories with no allocation', () => {
+      const summary = getBudgetSummary(db, '2026-03');
+      const rent = summary.find(s => s.categoryId === catRent)!;
+      expect(rent.allocated).toBe(0);
+      expect(rent.spent).toBe(0);
+      expect(rent.available).toBe(0);
+    });
+
+    it('includes category and group names', () => {
+      const summary = getBudgetSummary(db, '2026-03');
+      const groceries = summary.find(s => s.categoryId === catGroceries)!;
+      expect(groceries.categoryName).toBe('Groceries');
+      expect(groceries.groupName).toBe('Essentials');
+    });
+  });
+
+  describe('available-to-budget', () => {
+    it('returns income minus total allocated', () => {
+      // Income: 500000 cents
+      db.prepare('INSERT INTO transactions (id, account_id, date, amount, category_id) VALUES (?, ?, ?, ?, ?)').run('income-1', 'acct-1', '2026-03-01', 500000, null);
+      // Allocations: 30000 + 12000 = 42000
+      setAllocation(db, catGroceries, '2026-03', 30000);
+      setAllocation(db, catRent, '2026-03', 12000);
+
+      expect(getAvailableToBudget(db, '2026-03')).toBe(458000); // 500000 - 42000
+    });
+
+    it('excludes confirmed transfers from income', () => {
+      db.prepare('INSERT INTO accounts (id, name, institution, type, balance) VALUES (?, ?, ?, ?, ?)').run('acct-2', 'Savings', 'Bank', 'savings', 100000);
+      // Real income
+      db.prepare('INSERT INTO transactions (id, account_id, date, amount, category_id) VALUES (?, ?, ?, ?, ?)').run('income-1', 'acct-1', '2026-03-01', 500000, null);
+      // Transfer received (should not count as income)
+      db.prepare('INSERT INTO transactions (id, account_id, date, amount, category_id) VALUES (?, ?, ?, ?, ?)').run('xfer-in', 'acct-2', '2026-03-05', 10000, null);
+      db.prepare('INSERT INTO transactions (id, account_id, date, amount, category_id) VALUES (?, ?, ?, ?, ?)').run('xfer-out', 'acct-1', '2026-03-05', -10000, null);
+      db.prepare('INSERT INTO transfer_links (transaction_a_id, transaction_b_id, confirmed) VALUES (?, ?, ?)').run('xfer-out', 'xfer-in', 1);
+
+      expect(getAvailableToBudget(db, '2026-03')).toBe(500000);
+    });
+
+    it('deducts prior month overspending', () => {
+      // Jan: Groceries allocated 10000, spent 15000 -> overspent by 5000
+      setAllocation(db, catGroceries, '2026-01', 10000);
+      db.prepare('INSERT INTO transactions (id, account_id, date, amount, category_id) VALUES (?, ?, ?, ?, ?)').run('t1', 'acct-1', '2026-01-15', -15000, catGroceries);
+
+      // Feb: income 500000, allocated 30000
+      db.prepare('INSERT INTO transactions (id, account_id, date, amount, category_id) VALUES (?, ?, ?, ?, ?)').run('income-1', 'acct-1', '2026-02-01', 500000, null);
+      setAllocation(db, catGroceries, '2026-02', 30000);
+
+      // Available = 500000 - 30000 - 5000 (overspending deduction) = 465000
+      expect(getAvailableToBudget(db, '2026-02')).toBe(465000);
+    });
+
+    it('returns 0 when no income and no allocations', () => {
+      expect(getAvailableToBudget(db, '2026-03')).toBe(0);
+    });
+
+    it('handles first month with no prior overspending', () => {
+      db.prepare('INSERT INTO transactions (id, account_id, date, amount, category_id) VALUES (?, ?, ?, ?, ?)').run('income-1', 'acct-1', '2026-01-01', 500000, null);
+      setAllocation(db, catGroceries, '2026-01', 30000);
+
+      expect(getAvailableToBudget(db, '2026-01')).toBe(470000); // 500000 - 30000, no prior month
     });
   });
 });

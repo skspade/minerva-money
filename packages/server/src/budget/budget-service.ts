@@ -1,4 +1,5 @@
 import type Database from 'better-sqlite3';
+import { listGroupsWithCategories } from '../categories/category-service.js';
 
 export function setDefaultAllocation(db: Database.Database, categoryId: number, amount: number): void {
   db.prepare(`
@@ -81,4 +82,100 @@ export function getSpentForCategory(db: Database.Database, categoryId: number, p
   `).get(categoryId, startDate, endDate) as { total: number };
 
   return Math.abs(unsplit.total + split.total);
+}
+
+function getPriorPeriod(period: string): string {
+  const [year, month] = period.split('-').map(Number);
+  const prevMonth = month === 1 ? 12 : month - 1;
+  const prevYear = month === 1 ? year - 1 : year;
+  return `${prevYear}-${String(prevMonth).padStart(2, '0')}`;
+}
+
+export function getRollover(db: Database.Database, categoryId: number, period: string): number {
+  // Get all allocation periods prior to the given period for this category
+  const priorAllocations = db.prepare(`
+    SELECT period, amount FROM budget_allocations
+    WHERE category_id = ? AND period < ? AND is_default = 0
+    ORDER BY period ASC
+  `).all(categoryId, period) as { period: string; amount: number }[];
+
+  let rollover = 0;
+  for (const alloc of priorAllocations) {
+    const spent = getSpentForCategory(db, categoryId, alloc.period);
+    rollover += alloc.amount - spent;
+  }
+  return rollover;
+}
+
+export interface BudgetCategorySummary {
+  categoryId: number;
+  categoryName: string;
+  groupName: string;
+  allocated: number;
+  spent: number;
+  available: number;
+  rollover: number;
+}
+
+export function getBudgetSummary(db: Database.Database, period: string): BudgetCategorySummary[] {
+  const groups = listGroupsWithCategories(db);
+  const results: BudgetCategorySummary[] = [];
+
+  for (const group of groups) {
+    for (const cat of group.categories) {
+      const allocated = getAllocation(db, cat.id, period);
+      const spent = getSpentForCategory(db, cat.id, period);
+      const rollover = getRollover(db, cat.id, period);
+      const available = allocated + rollover - spent;
+
+      results.push({
+        categoryId: cat.id,
+        categoryName: cat.name,
+        groupName: group.name,
+        allocated,
+        spent,
+        available,
+        rollover,
+      });
+    }
+  }
+
+  return results;
+}
+
+export function getAvailableToBudget(db: Database.Database, period: string): number {
+  const startDate = `${period}-01`;
+  const endDate = getNextMonthStart(period);
+
+  // Total income: positive transactions excluding confirmed transfers
+  const income = db.prepare(`
+    SELECT COALESCE(SUM(t.amount), 0) AS total
+    FROM transactions t
+    WHERE t.date >= ? AND t.date < ?
+      AND t.amount > 0
+      AND NOT EXISTS (
+        SELECT 1 FROM transfer_links tl
+        WHERE (tl.transaction_a_id = t.id OR tl.transaction_b_id = t.id)
+        AND tl.confirmed = 1
+      )
+  `).get(startDate, endDate) as { total: number };
+
+  // Total allocated for this period
+  const allocated = db.prepare(`
+    SELECT COALESCE(SUM(amount), 0) AS total
+    FROM budget_allocations
+    WHERE period = ? AND is_default = 0
+  `).get(period) as { total: number };
+
+  // Prior month overspending deduction
+  const priorPeriod = getPriorPeriod(period);
+  const priorSummary = getBudgetSummary(db, priorPeriod);
+  let overspendingDeduction = 0;
+  for (const cat of priorSummary) {
+    if (cat.available < 0) {
+      overspendingDeduction += Math.abs(cat.available);
+    }
+  }
+
+  return income.total - allocated.total - overspendingDeduction;
 }
