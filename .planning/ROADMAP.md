@@ -35,7 +35,7 @@ Full details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
 - [x] **Phase 14: Agent Infrastructure and Query Tools** — Server-side agent with read-only tools covering all financial data queries (completed 2026-03-23)
 - [x] **Phase 15: Chat UI** — Full-height chat page with markdown rendering, loading states, and navigation (completed 2026-03-23)
 - [x] **Phase 16: Action Tools and Confirmation Flow** — Write operations for categorization, rules, budgets, transfers, and sync with confirmation for amount changes (completed 2026-03-23)
-- [ ] **Phase 17: Audit Gap Closure — Safety Fixes, Verification, and Traceability** — Fix trigger_sync rate limiter bypass, add explicit SAFE-01 prompt rule, create Phase 14 VERIFICATION.md, update Phase 16 traceability [Gap Closure]
+- [x] **Phase 17: Audit Gap Closure — Safety Fixes, Verification, and Traceability** — Fix trigger_sync rate limiter bypass, add explicit SAFE-01 prompt rule, create Phase 14 VERIFICATION.md, update Phase 16 traceability [Gap Closure] (completed 2026-03-23)
 
 ## Phase Details
 
@@ -116,4 +116,4 @@ Full details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
 | 14. Agent Infrastructure and Query Tools | v2.0 | Complete    | 2026-03-23 | - |
 | 15. Chat UI | 2/2 | Complete    | 2026-03-23 | - |
 | 16. Action Tools and Confirmation Flow | 2/2 | Complete    | 2026-03-23 | - |
-| 17. Audit Gap Closure | 0/1 | Planned | - | - |
+| 17. Audit Gap Closure | 1/1 | Complete    | 2026-03-23 | - |
