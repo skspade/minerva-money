@@ -45,7 +45,7 @@ Full details: [milestones/v2.0-ROADMAP.md](milestones/v2.0-ROADMAP.md)
 
 **Milestone Goal:** Harden Minerva Money for production deployment on a home iMac with compiled builds, auto-restart on crash, boot startup, and one-command deployments.
 
-- [ ] **Phase 18: Production Build and Directory Layout** - Compiled server/client output, Express static serving, env loading, deploy directory organization
+- [x] **Phase 18: Production Build and Directory Layout** - Compiled server/client output, Express static serving, env loading, deploy directory organization (completed 2026-03-23)
 - [ ] **Phase 19: Service Configuration** - launchd plists with correct paths, crash recovery, boot startup, restart throttling
 - [ ] **Phase 20: Deploy Scripts** - First-install setup, one-command updates, pre-flight validation
 
@@ -108,6 +108,6 @@ Full details: [milestones/v2.0-ROADMAP.md](milestones/v2.0-ROADMAP.md)
 | 15. Chat UI | v2.0 | 2/2 | Complete | 2026-03-23 |
 | 16. Action Tools | v2.0 | 2/2 | Complete | 2026-03-23 |
 | 17. Audit Gap Closure | v2.0 | 1/1 | Complete | 2026-03-23 |
-| 18. Production Build and Directory Layout | v2.1 | 0/2 | Planned | - |
+| 18. Production Build and Directory Layout | 2/2 | Complete    | 2026-03-23 | - |
 | 19. Service Configuration | v2.1 | 0/0 | Not started | - |
 | 20. Deploy Scripts | v2.1 | 0/0 | Not started | - |
