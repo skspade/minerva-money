@@ -11,6 +11,15 @@ export default function Layout() {
             <h1 className="text-lg font-bold">Minerva Money</h1>
             <div className="flex gap-4">
               <NavLink
+                to="/"
+                end
+                className={({ isActive }) =>
+                  `px-3 py-1 rounded ${isActive ? 'bg-gray-700' : 'hover:bg-gray-800'}`
+                }
+              >
+                Dashboard
+              </NavLink>
+              <NavLink
                 to="/accounts"
                 className={({ isActive }) =>
                   `px-3 py-1 rounded ${isActive ? 'bg-gray-700' : 'hover:bg-gray-800'}`
@@ -57,6 +66,14 @@ export default function Layout() {
                 }
               >
                 Budget
+              </NavLink>
+              <NavLink
+                to="/reports"
+                className={({ isActive }) =>
+                  `px-3 py-1 rounded ${isActive ? 'bg-gray-700' : 'hover:bg-gray-800'}`
+                }
+              >
+                Reports
               </NavLink>
             </div>
           </div>
