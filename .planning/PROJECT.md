@@ -28,7 +28,22 @@ Accurate, auto-synced financial data with envelope budgeting that lets you see w
 
 ### Active
 
-- [ ] Claude integration via MCP server or CLI (v2 — design API surface with this in mind)
+- [ ] Claude Agent SDK integration — conversational agent with custom tools wrapping service functions (v2.0)
+- [ ] Chat UI in web app — full-height chat page with markdown rendering (v2.0)
+- [ ] Agent query tools — account balances, budget summary, spending, net worth, transactions, categories, rules, sync status (v2.0)
+- [ ] Agent action tools — categorize transactions, manage rules, adjust budgets, handle transfers, trigger sync (v2.0)
+- [ ] Confirmation flow — agent auto-executes most actions, requires confirmation for amount changes (v2.0)
+
+## Current Milestone: v2.0 Claude Agent
+
+**Goal:** Add a Claude-powered conversational agent accessible through a chat UI, capable of querying and acting on financial data.
+
+**Target features:**
+- Agent SDK integration with custom tools wrapping existing service functions
+- Chat UI page in the React app with markdown rendering
+- Query tools for all financial data (balances, budgets, spending, net worth)
+- Action tools for categorization, rules, budgets, transfers, and sync
+- Permission model: auto-execute most actions, confirm amount changes
 
 ### Out of Scope
 
@@ -57,7 +72,7 @@ Accurate, auto-synced financial data with envelope budgeting that lets you see w
 - **Tech stack**: React + Tailwind (custom components) / Express + tRPC / SQLite via better-sqlite3 / TanStack Query — all TypeScript
 - **Infrastructure**: Single iMac home server, SQLite single-file database
 - **Data provider**: SimpleFIN only — 24 req/day/account, daily refresh cycle
-- **Security**: SimpleFIN credentials in .env file (gitignored), no auth layer needed
+- **Security**: SimpleFIN + Anthropic API credentials in .env file (gitignored), no auth layer needed
 - **Backup**: SQLite .backup to iCloud Drive, not live sync (corruption risk)
 
 ## Key Decisions
@@ -75,6 +90,10 @@ Accurate, auto-synced financial data with envelope budgeting that lets you see w
 | Twice-monthly auto-funding with half-split math | Matches pay schedule; floor for first half, remainder for second | ✓ Good — idempotent funding preserves manual overrides |
 | Integer cents for all money | Avoid floating-point errors in budget math | ✓ Good — enforced at schema level |
 | Gap closure phases (10-13) | Audit revealed missing verification and UI gaps | ✓ Good — all 34 requirements satisfied |
+| Claude Agent SDK over MCP server | Agent SDK provides built-in tool execution, sessions, and hooks — more powerful than raw MCP for a chat-based agent | — Pending |
+| Direct service binding for agent tools | Custom tools wrapping service functions vs raw DB access — safer, type-safe, explicit permissions | — Pending |
+| Server-side agent execution | API key stays secure on server, agent runs in Express process | — Pending |
+| Collect-and-return over streaming | Simpler architecture; upgrade to WebSocket streaming later if response times are slow | — Pending |
 
 ---
-*Last updated: 2026-03-22 after v1.0 milestone*
+*Last updated: 2026-03-23 after v2.0 milestone start*
