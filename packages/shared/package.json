@@ -2,9 +2,10 @@
   "name": "@minerva/shared",
   "version": "0.0.1",
   "type": "module",
-  "main": "./src/types.ts",
-  "types": "./src/types.ts",
+  "main": "./dist/types.js",
+  "types": "./dist/types.d.ts",
   "scripts": {
+    "prebuild": "rm -rf dist tsconfig.tsbuildinfo",
     "build": "tsc"
   }
 }

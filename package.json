@@ -6,7 +6,8 @@
   ],
   "scripts": {
     "dev": "concurrently \"npm run dev --workspace=packages/server\" \"npm run dev --workspace=packages/client\"",
-    "build": "npm run build --workspaces",
+    "build": "npm run build --workspace=packages/shared && npm run build --workspace=packages/server && npm run build --workspace=packages/client",
+    "start:prod": "node --env-file=.env packages/server/dist/index.js",
     "test": "vitest run",
     "lint": "eslint packages/*/src"
   },
