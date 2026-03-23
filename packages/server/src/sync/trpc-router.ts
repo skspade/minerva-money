@@ -25,6 +25,14 @@ import {
   previewRule,
   applyRule,
 } from '../rules/rules-service.js';
+import {
+  listTransferCandidates,
+  listConfirmedTransfers,
+  confirmTransfer,
+  dismissTransfer,
+  unlinkTransfer,
+  manuallyLinkTransfer,
+} from '../transfers/transfer-service.js';
 
 const syncRouter = router({
   trigger: publicProcedure.mutation(async ({ ctx }) => {
@@ -292,12 +300,54 @@ const rulesRouter = router({
     }),
 });
 
+const transferCandidatesRouter = router({
+  list: publicProcedure.query(({ ctx }) => {
+    return listTransferCandidates(ctx.db);
+  }),
+});
+
+const transferConfirmedRouter = router({
+  list: publicProcedure.query(({ ctx }) => {
+    return listConfirmedTransfers(ctx.db);
+  }),
+});
+
+const transfersRouter = router({
+  candidates: transferCandidatesRouter,
+  confirmed: transferConfirmedRouter,
+
+  confirm: publicProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(({ ctx, input }) => {
+      confirmTransfer(ctx.db, input.id);
+    }),
+
+  dismiss: publicProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(({ ctx, input }) => {
+      dismissTransfer(ctx.db, input.id);
+    }),
+
+  unlink: publicProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(({ ctx, input }) => {
+      unlinkTransfer(ctx.db, input.id);
+    }),
+
+  manualLink: publicProcedure
+    .input(z.object({ transactionAId: z.string(), transactionBId: z.string() }))
+    .mutation(({ ctx, input }) => {
+      return manuallyLinkTransfer(ctx.db, input.transactionAId, input.transactionBId);
+    }),
+});
+
 export const appRouter = router({
   sync: syncRouter,
   accounts: accountsRouter,
   transactions: transactionsRouter,
   categories: categoriesRouter,
   rules: rulesRouter,
+  transfers: transfersRouter,
 });
 
 export type AppRouter = typeof appRouter;

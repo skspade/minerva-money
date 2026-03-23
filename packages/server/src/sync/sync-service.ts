@@ -4,6 +4,7 @@ import type { RateLimiter } from './rate-limiter.js';
 import { normalizeAccount, normalizeTransaction } from './simplefin-client.js';
 import { createBackup } from '../backup/backup.js';
 import { categorizeNewTransactions } from '../rules/rules-service.js';
+import { detectTransferCandidates } from '../transfers/transfer-service.js';
 
 export interface SyncResult {
   accountsSynced: number;
@@ -131,6 +132,7 @@ function syncAccount(db: Database.Database, rawAccount: import('./simplefin-type
     // Auto-categorize new transactions using rules engine
     if (newTransactionIds.length > 0) {
       categorizeNewTransactions(db, newTransactionIds);
+      detectTransferCandidates(db, newTransactionIds);
     }
 
     // Record balance snapshot (INSERT OR REPLACE for same-day re-syncs)
