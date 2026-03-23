@@ -31,6 +31,7 @@ describe('action-tools', () => {
       } as unknown as SimpleFINClient,
       rateLimiter: {
         canRequest: () => true,
+        canManualSync: () => true,
         recordRequest: () => {},
       } as unknown as RateLimiter,
     };
@@ -347,6 +348,17 @@ describe('action-tools', () => {
       const data = parseResult(result);
       expect(data).toHaveProperty('accountsSynced');
       expect(data).toHaveProperty('transactionsAdded');
+    });
+
+    it('returns error when rate limited', async () => {
+      db.prepare("INSERT INTO accounts (id, name, institution, type, balance) VALUES ('acct-1', 'Checking', 'Bank', 'checking', 100000)").run();
+      ctx.rateLimiter = { ...ctx.rateLimiter, canManualSync: () => false } as unknown as RateLimiter;
+      const tools = createActionTools(db, ctx);
+      const triggerSync = tools.find(t => t.name === 'trigger_sync')!;
+      const result = await (triggerSync as unknown as { handler: (args: Record<string, unknown>) => Promise<{ content: { type: string; text: string }[]; isError?: boolean }> }).handler({});
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Rate limit');
+      expect(result.content[0].text).toContain('Checking');
     });
   });
 });

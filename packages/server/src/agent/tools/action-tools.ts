@@ -214,6 +214,13 @@ export function createActionTools(db: Database.Database, ctx: Context) {
       {},
       async () => {
         try {
+          const accounts = db.prepare('SELECT id, name FROM accounts').all() as { id: string; name: string }[];
+          if (accounts.length > 0) {
+            const blocked = accounts.filter(a => !ctx.rateLimiter.canManualSync(a.id));
+            if (blocked.length > 0) {
+              return errorResult(new Error(`Rate limit: insufficient quota for accounts: ${blocked.map(a => a.name).join(', ')}`));
+            }
+          }
           const result = await runSync(db, ctx.client, ctx.rateLimiter);
           return jsonResult(result);
         } catch (error) {
