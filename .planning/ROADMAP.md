@@ -142,13 +142,13 @@ Plans:
   4. Overspent categories reduce next month's available-to-budget total, not the category allocation
   5. User can manually override any auto-populated allocation amount at any time
   6. All budget math (allocated, spent, available, rollover) is computed server-side and returned as integer cents
-**Plans**: 4 plans (3 waves)
+**Plans**: 4 plans (4 waves)
 
 Plans:
 - [ ] 07-01-PLAN.md — Budget service foundation: migration 005, default CRUD, allocation CRUD, spending computation (Wave 1, TDD)
 - [ ] 07-02-PLAN.md — Rollover and budget summary: rollover computation, available-to-budget, overspending deduction (Wave 2, TDD)
-- [ ] 07-03-PLAN.md — Auto-funding scheduler: croner jobs for 15th and last day, half-split math, idempotent funding (Wave 2, TDD)
-- [ ] 07-04-PLAN.md — Budget tRPC procedures: budgetRouter, server wiring, end-to-end tests (Wave 3)
+- [ ] 07-03-PLAN.md — Auto-funding scheduler: croner jobs for 15th and last day, half-split math, idempotent funding (Wave 3, TDD)
+- [ ] 07-04-PLAN.md — Budget tRPC procedures: budgetRouter, server wiring, end-to-end tests (Wave 4)
 
 ### Phase 8: Budget UI
 **Goal**: Users can see and manage the full envelope budget grid — what they allocated, what they spent, and what remains — for any month
