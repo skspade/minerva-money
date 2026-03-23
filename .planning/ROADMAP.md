@@ -24,6 +24,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 10: Foundation Bug Fix & Verification** - Fix missing run-backup.ts, create Phase 1 VERIFICATION.md (Gap Closure) (completed 2026-03-23)
 - [x] **Phase 11: Reporting Date Fix & Verification Sweep** - Fix off-by-one date bug, create VERIFICATION.md for Phases 5, 6, 9 (Gap Closure) (completed 2026-03-23)
 - [x] **Phase 12: Budget Defaults UI** - Add budget defaults management UI, wire to existing tRPC procedures (Gap Closure) (completed 2026-03-23)
+- [ ] **Phase 13: Transaction Filter Completion** - Add amount range and category dropdown filters to TransactionsPage (Gap Closure)
 
 ## Phase Details
 
@@ -232,10 +233,20 @@ Plans:
 Plans:
 - [ ] 12-01-PLAN.md — Add defaults column to budget grid with fetch, edit, and save (Wave 1)
 
+### Phase 13: Transaction Filter Completion
+**Goal:** Complete ACCT-04 by adding amount range and category dropdown filters to TransactionsPage so users can filter transactions by all four criteria (date, payee, amount, category)
+**Depends on**: Phase 3
+**Requirements**: ACCT-04
+**Gap Closure:** Closes gaps from audit — 1 requirement, 1 broken flow
+**Success Criteria** (what must be TRUE):
+  1. TransactionsPage has amount range filter inputs (min/max) that filter the transaction list
+  2. TransactionsPage has a category dropdown filter that filters transactions by assigned category
+  3. All four filter types (date range, payee/memo, amount range, category) work together
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12 → 13
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -251,3 +262,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 10. Foundation Bug Fix & Verification | 2/2 | Complete    | 2026-03-23 |
 | 11. Reporting Date Fix & Verification Sweep | 0/0 | Complete    | 2026-03-23 |
 | 12. Budget Defaults UI | 1/1 | Complete    | 2026-03-23 |
+| 13. Transaction Filter Completion | 0/0 | Not started | - |
