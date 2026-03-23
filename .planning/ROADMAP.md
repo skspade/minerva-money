@@ -160,12 +160,12 @@ Plans:
   3. User can click any allocated amount and type a new value to override it; the change saves without leaving the row
   4. User can navigate between months using previous/next controls and see historically accurate data
   5. A top-level "Available to Budget" figure shows unallocated income for the selected month
-**Plans**: TBD
+**Plans**: 3 plans (2 waves)
 
 Plans:
-- [ ] 08-01: Budget grid component — category group accordion, allocated/spent/available columns, overspent highlight, month navigation
-- [ ] 08-02: Inline allocation editor — click-to-edit cell, optimistic update, server save with error rollback
-- [ ] 08-03: Available-to-budget header — income minus total allocated, real-time update as allocations change
+- [ ] 08-01-PLAN.md — Budget grid with category group accordion, allocated/spent/available columns, overspent highlighting, month navigation, routing and nav (Wave 1)
+- [ ] 08-02-PLAN.md — Inline allocation editor with click-to-edit, optimistic update, server save with error rollback (Wave 2)
+- [ ] 08-03-PLAN.md — Available-to-budget header with color-coded display, auto-update on allocation changes (Wave 2)
 
 ### Phase 9: Dashboard and Reporting
 **Goal**: Users have a single landing page showing their financial picture at a glance, and can drill into spending by category and trends over time
