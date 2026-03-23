@@ -1,282 +1,152 @@
-# Technology Stack
+# Stack Research
 
-**Project:** Minerva Money v2.0 -- Claude Agent Integration
+**Domain:** Deployment hardening — macOS launchd process management, production static file serving, deploy scripts
 **Researched:** 2026-03-23
-**Scope:** NEW dependencies only. Existing v1.0 stack is validated and unchanged.
+**Confidence:** HIGH
 
-## Existing Stack (Reference Only -- DO NOT CHANGE)
+## Context: Subsequent Milestone
 
-| Technology | Version | Purpose |
-|------------|---------|---------|
-| React | ^19.2.4 | UI framework |
-| Tailwind CSS | ^4.2.2 | Styling |
-| Vite | ^6.0.0 | Build tool |
-| Express | ^4.21.0 | HTTP server |
-| tRPC | ^11.14.1 | Type-safe API |
-| better-sqlite3 | ^11.7.0 | SQLite database |
-| TanStack Query | ^5.95.0 | Server state |
-| Zod | ^4.3.6 | Schema validation |
-| croner | ^10.0.1 | Cron scheduling |
+This is a subsequent milestone. The core stack (React + Tailwind, Express + tRPC, SQLite, TanStack Query, Claude Agent SDK) is validated and unchanged. The deployment infrastructure is also substantially pre-built in the `deploy/` directory. This document focuses only on what v2.1 adds or changes.
 
-## New Dependencies for v2.0
+**Already exists in `deploy/`:**
+- `com.minerva.server.plist` — launchd service with KeepAlive + ThrottleInterval: 10 + RunAtLoad
+- `com.minerva.backup.plist` — launchd scheduled backup service (reference model for server plist)
+- `deploy.sh` — one-command deploy via `git pull && npm install && npm run build && launchctl kickstart -k`
+- `setup.sh` — first-run install via `launchctl load` (deprecated command — see critical note below)
 
-### Server: `@anthropic-ai/claude-agent-sdk`
+**Already exists in `packages/server/src/index.ts`:**
+- `express.static` serving `packages/client/dist/`
+- SPA fallback: `app.get('*', res.sendFile(index.html))`
+- `NODE_ENV !== 'test'` guard for DB initialization
 
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| `@anthropic-ai/claude-agent-sdk` | ^0.2.81 | Agent runtime with built-in tool loop, session management, and custom tool support via in-process MCP servers | Handles the entire agent loop (prompt -> tool calls -> tool results -> repeat -> final response), session persistence, and context management. Custom tools defined with `tool()` + `createSdkMcpServer()` using Zod schemas -- same Zod 4 already in the project. |
+## Recommended Stack
 
-**Confidence:** HIGH -- verified via official Anthropic documentation at platform.claude.com and npm registry.
+### New Dependencies
 
-**Why Agent SDK over `@anthropic-ai/sdk` (Client SDK):**
+None. All capabilities for v2.1 are provided by existing tools and macOS primitives.
 
-The Client SDK gives you raw API access where you implement the tool loop yourself:
+| Technology | Version | Purpose | Why Recommended |
+|------------|---------|---------|-----------------|
+| launchd | macOS built-in | Crash recovery, boot startup, process management | Native macOS daemon manager. Zero dependencies. KeepAlive: true restarts within ~10 seconds of crash. ThrottleInterval: 10 prevents rapid restart loops. Already used for iCloud backup service. |
+| Node.js `--env-file` | Node 20.6+ (built-in, already in use) | Load .env without dotenv | Native flag, no extra dependency. Already used in `start:prod` and server plist. One known limitation: does not support multiline values (not relevant for this project). |
+| `express.static` | Express 4 (existing) | Serve Vite build output | Already implemented in server/src/index.ts. Single-process eliminates nginx coordination overhead. |
+| `tsc` | TypeScript 5.7 (existing) | Compile server to `dist/` | Already configured with `"module": "Node16"` matching Node's ESM resolution algorithm. |
+| Vite build | Vite 6 (existing) | Bundle React client to `packages/client/dist/` | Default output path is already what server expects at `../../client/dist`. |
 
-```typescript
-// Client SDK: YOU manage the loop
-let response = await client.messages.create({ ...params });
-while (response.stop_reason === "tool_use") {
-  const result = yourToolExecutor(response.tool_use);
-  response = await client.messages.create({ tool_result: result, ...params });
-}
-```
+### Supporting Libraries
 
-The Agent SDK handles all of this internally:
-
-```typescript
-// Agent SDK: SDK manages the loop
-for await (const message of query({ prompt: "...", options: { ... } })) {
-  if (message.type === "result") console.log(message.result);
-}
-```
-
-Additional Agent SDK advantages for this project:
-- **Session management built-in:** Resume conversations with `resume: sessionId`. Sessions persist to disk automatically. Critical for multi-turn chat.
-- **Custom tools via in-process MCP:** `tool()` helper uses Zod schemas for type-safe input validation. `createSdkMcpServer()` bundles tools into an in-process server (no separate process). Tools are called as `mcp__minerva__get_account_balances`.
-- **Tool access control:** `tools: []` removes ALL built-in tools (Read, Bash, Edit, etc.). `allowedTools: ["mcp__minerva__*"]` pre-approves only your custom tools. The financial agent never gets file system or shell access.
-- **Error handling:** Tool handlers returning `{ isError: true }` let the agent retry or explain the failure without crashing the loop.
-
-**Zod compatibility:** The `tool()` function explicitly supports both Zod 3 and Zod 4 (documented in TypeScript API reference). The project's Zod ^4.3.6 works without any adapter or compatibility layer.
-
-### Client: Markdown Rendering
-
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| `react-markdown` | ^10.1.0 | Render agent markdown responses as React components | Converts markdown to React virtual DOM (not `dangerouslySetInnerHTML`). Safe by default -- blocks raw HTML. Custom component overrides via `components` prop for applying Tailwind classes to headings, tables, lists, code blocks. The standard React markdown library. |
-| `remark-gfm` | ^4.0.1 | GitHub Flavored Markdown plugin | Agent responses will include tables (financial data summaries), task lists (confirmation flows), and strikethrough text. GFM is not built into react-markdown -- this plugin adds tables, strikethrough, autolinks, and task lists. |
-
-**Confidence:** HIGH -- react-markdown is the dominant React markdown library (12M+ weekly downloads), maintained by the unified/remark ecosystem. remark-gfm is the standard GFM plugin.
-
-**Why react-markdown over alternatives:**
-- **Over `marked`:** marked outputs HTML strings requiring `dangerouslySetInnerHTML`. react-markdown outputs React components -- safer, more customizable, better Tailwind integration.
-- **Over `markdown-it`:** Same dangerouslySetInnerHTML problem as marked.
-- **Over `markdown-to-jsx`:** Less ecosystem support, fewer plugins, smaller community.
-
-## Dependencies NOT Needed
-
-| Library | Why Skip |
-|---------|----------|
-| `@anthropic-ai/sdk` | Agent SDK handles the tool loop. Client SDK would mean reimplementing orchestration that Agent SDK already provides. |
-| `socket.io` / `ws` | PROJECT.md specifies collect-and-return for v2.0. A tRPC mutation awaiting the full response is simpler. Upgrade to streaming later if response times are slow. |
-| `react-syntax-highlighter` | Financial assistant will not produce code blocks. Defer until needed. Avoids ~200KB bundle addition. |
-| `@ai-sdk/anthropic` (Vercel AI SDK) | Unnecessary abstraction layer. Agent SDK provides everything needed directly. |
-| `marked` / `markdown-it` | Outputs HTML strings, requires dangerouslySetInnerHTML. react-markdown is safer. |
-| Any auth library | Single user on private home server (unchanged from v1.0). |
-| `@anthropic-ai/bedrock-sdk` | Not using AWS. Direct API key auth via ANTHROPIC_API_KEY in .env. |
-
-## Integration Architecture
-
-### Server-Side Agent Execution
-
-The Agent SDK runs server-side inside the Express process. The Anthropic API key stays on the server, never exposed to the client.
-
-```
-Express + tRPC (existing)
-  |
-  +-- New tRPC router: agent.chat (mutation)
-  |     |
-  |     +-- Calls query() with user prompt + session options
-  |     +-- Collects all result messages (collect-and-return)
-  |     +-- Returns { response: string, sessionId: string }
-  |
-  +-- Custom MCP Server (in-process via createSdkMcpServer)
-        |
-        +-- Query tools (readOnlyHint: true):
-        |     get_account_balances   --> accountsService
-        |     get_budget_summary     --> budgetService
-        |     get_spending_by_category --> transactionsService
-        |     get_net_worth          --> snapshotService
-        |     get_transactions       --> transactionsService
-        |     get_categories         --> categoriesService
-        |     get_rules              --> rulesService
-        |     get_sync_status        --> syncService
-        |
-        +-- Action tools (destructiveHint: true):
-              categorize_transaction --> rulesService
-              create_rule            --> rulesService
-              update_rule            --> rulesService
-              adjust_budget          --> budgetService
-              confirm_transfer       --> transferService
-              trigger_sync           --> syncService
-```
-
-### Custom Tool Definition Pattern
-
-```typescript
-import { tool, createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
-import { z } from "zod";
-import { accountsService } from "../accounts/accounts-service";
-
-const getAccountBalances = tool(
-  "get_account_balances",
-  "Get current balances for all accounts or a specific account by name",
-  {
-    accountName: z.string().optional()
-      .describe("Account name to filter by, or omit for all accounts")
-  },
-  async (args) => {
-    const accounts = args.accountName
-      ? accountsService.getByName(args.accountName)
-      : accountsService.getAll();
-    return {
-      content: [{ type: "text", text: JSON.stringify(accounts) }]
-    };
-  },
-  { annotations: { readOnlyHint: true } }
-);
-
-const minervaServer = createSdkMcpServer({
-  name: "minerva",
-  version: "1.0.0",
-  tools: [getAccountBalances, /* ... */]
-});
-```
-
-### tRPC Integration Pattern
-
-```typescript
-export const agentRouter = router({
-  chat: publicProcedure
-    .input(z.object({
-      message: z.string(),
-      sessionId: z.string().optional()
-    }))
-    .mutation(async ({ input }) => {
-      const messages: string[] = [];
-      let sessionId: string | undefined;
-
-      for await (const msg of query({
-        prompt: input.message,
-        options: {
-          ...(input.sessionId ? { resume: input.sessionId } : {}),
-          mcpServers: { minerva: minervaServer },
-          allowedTools: ["mcp__minerva__*"],
-          tools: [],                              // CRITICAL: removes ALL built-in tools
-          systemPrompt: "You are Minerva, a personal finance assistant...",
-          maxTurns: 10,
-          permissionMode: "bypassPermissions",
-          allowDangerouslySkipPermissions: true,
-          persistSession: true
-        }
-      })) {
-        if (msg.type === "assistant") {
-          for (const block of msg.message.content) {
-            if ("text" in block) messages.push(block.text);
-          }
-        }
-        if (msg.type === "result") {
-          sessionId = msg.session_id;
-        }
-      }
-
-      return { response: messages.join("\n"), sessionId };
-    })
-});
-```
-
-**Critical configuration notes:**
-- `tools: []` -- Removes ALL built-in tools (Read, Edit, Bash, Glob, Grep, WebSearch, WebFetch). The financial agent should ONLY access data through custom tools that wrap service functions. Never give it file system or shell access.
-- `allowedTools: ["mcp__minerva__*"]` -- Wildcard pre-approves all tools on the minerva MCP server. No permission prompts.
-- `permissionMode: "bypassPermissions"` + `allowDangerouslySkipPermissions: true` -- Required for headless server execution where no human is present to approve tool calls.
-- `maxTurns: 10` -- Prevents runaway loops. A budget query might need 2-3 tool calls; a complex multi-step action might need 5-6. 10 is a safe ceiling.
-
-### Session Management
-
-The Agent SDK persists sessions to `~/.claude/projects/<encoded-cwd>/` automatically.
-
-- **First message:** `query()` creates a new session. Capture `session_id` from the result message.
-- **Follow-up messages:** Pass `resume: sessionId` to continue the conversation with full context.
-- **Storage:** Store `sessionId` in server memory (single user, single process). No need for database storage. If the server restarts, the user starts a new conversation -- acceptable for v2.0.
-- **Cleanup:** Sessions accumulate on disk. Consider a periodic cleanup of sessions older than 7 days.
-
-### Client-Side Chat UI Pattern
-
-```tsx
-import Markdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-
-function ChatMessage({ content }: { content: string }) {
-  return (
-    <Markdown
-      remarkPlugins={[remarkGfm]}
-      components={{
-        table: ({ children }) => (
-          <table className="w-full border-collapse text-sm">{children}</table>
-        ),
-        th: ({ children }) => (
-          <th className="border-b px-3 py-2 text-left font-medium">{children}</th>
-        ),
-        td: ({ children }) => (
-          <td className="border-b px-3 py-2">{children}</td>
-        ),
-        // ... other component overrides for Tailwind styling
-      }}
-    >
-      {content}
-    </Markdown>
-  );
-}
-```
-
-## Environment Variables
-
-Add to `.env` (already gitignored):
-
-```
-ANTHROPIC_API_KEY=sk-ant-...
-```
-
-The Agent SDK reads `ANTHROPIC_API_KEY` from the environment automatically. The server already loads `.env` via `tsx watch --env-file=../../.env`, so the key will be available to the Agent SDK running in the same process.
+None required. The entire deployment stack is covered by Node.js built-ins, macOS launchd, and bash scripting.
 
 ## Installation
 
-```bash
-# Server (from packages/server)
-npm install @anthropic-ai/claude-agent-sdk
+No new packages to install. The production workflow:
 
-# Client (from packages/client)
-npm install react-markdown remark-gfm
+```bash
+# First-time setup on the iMac
+bash deploy/setup.sh
+
+# Every subsequent deploy
+bash deploy/deploy.sh
 ```
 
-Total new dependencies: 3 packages (plus their transitive deps).
+Build commands (called by deploy scripts):
+```bash
+# Server: produces packages/server/dist/index.js
+npm run build --workspace=packages/server
 
-## Version Pinning Strategy
+# Client: produces packages/client/dist/ (served by Express)
+npm run build --workspace=packages/client
 
-| Package | Range | Rationale |
-|---------|-------|-----------|
-| `@anthropic-ai/claude-agent-sdk` | `^0.2.81` | Pre-1.0, actively developed. Caret is acceptable for a single-user app where you control deploys. Pin to exact version if stability is critical. |
-| `react-markdown` | `^10.1.0` | Stable, mature. Caret is safe. |
-| `remark-gfm` | `^4.0.1` | Stable plugin. Caret is safe. |
+# Both at once
+npm run build
+```
+
+## Alternatives Considered
+
+| Recommended | Alternative | When to Use Alternative |
+|-------------|-------------|-------------------------|
+| launchd | PM2 | Linux/multi-server deployments. Adds npm dependency that duplicates macOS-native capabilities. |
+| launchd | Docker | Cloud/containerized deployments needing isolation. Overkill for a single-user home server. |
+| launchd | nohup / screen | Quick experiments only. No crash recovery, no boot startup. |
+| Express static + SPA fallback | nginx reverse proxy | High-traffic multi-app servers needing compression and SSL termination at scale. Unnecessary second process for single-user home server. |
+| `tsc` | tsup / esbuild | Bundled output useful for libraries or when tree-shaking matters. Server-side Node.js does not benefit meaningfully. tsc is already configured and sufficient. |
+
+## What NOT to Add
+
+| Avoid | Why | Use Instead |
+|-------|-----|-------------|
+| PM2 | Duplicates launchd on macOS; adds npm dependency and a separate daemon to manage | launchd KeepAlive: true |
+| nginx | Second process requiring separate config. Express handles static files adequately for single-user traffic. | `express.static` already in server/src/index.ts |
+| `dotenv` package | Creates two competing env-loading mechanisms alongside `--env-file`. | `--env-file=.env` (already in plist and start:prod) |
+| Docker | Container overhead, volume mounts, network complexity — none of which solve a real problem here | launchd service files directly |
+| `forever` / `nodemon` (production) | Legacy process managers superseded by launchd on macOS | launchd KeepAlive |
+
+## Critical Implementation Notes
+
+### launchctl Command Deprecation (HIGH confidence)
+
+`launchctl load` and `launchctl unload` are deprecated in macOS Ventura and unreliable in Sequoia. The current `setup.sh` uses `launchctl load` — this needs updating.
+
+**Correct modern commands:**
+```bash
+# First-time load (replaces: launchctl load ~/Library/LaunchAgents/com.minerva.server.plist)
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.minerva.server.plist
+
+# Removal (replaces: launchctl unload ...)
+launchctl bootout gui/$(id -u)/com.minerva.server
+
+# Restart running service — already correct in deploy.sh
+launchctl kickstart -k gui/$(id -u)/com.minerva.server
+```
+
+The `deploy.sh` already uses `launchctl kickstart -k` which is the current correct API and does not need changing.
+
+### Static File Path Resolution (HIGH confidence)
+
+After `tsc` compiles `packages/server/src/index.ts` to `packages/server/dist/index.js`, the `__dirname` value is `.../packages/server/dist/`. The existing path resolution:
+
+```typescript
+const clientDist = path.resolve(__dirname, '../../client/dist');
+```
+
+Resolves to `.../packages/client/dist/` — which is exactly where Vite writes its build output. This is correct and requires no changes.
+
+### NODE_ENV in Plist (HIGH confidence)
+
+The server plist sets `NODE_ENV=production` via the `EnvironmentVariables` dict. This is required because `server/src/index.ts` gates all initialization on `process.env.NODE_ENV !== 'test'`. The plist approach (not a shell script export) ensures the variable is always set when launchd starts the process.
+
+### Node Path in Plists (MEDIUM confidence)
+
+The backup plist references `/usr/local/bin/node` (Homebrew Intel path). On Apple Silicon Macs, Homebrew installs to `/opt/homebrew/bin/node`. Verify with `which node` on the target iMac and update both plists if necessary. The server plist also uses `/usr/local/bin/node`.
+
+### Vite Dev Proxy Not Active in Production (HIGH confidence)
+
+The Vite dev server proxy (`/trpc` → `localhost:3001`) runs only during development. In production, Express serves both the Vite static output and the tRPC API from the same process on port 3001. Client tRPC calls go to the same origin — this works because the client's tRPC link is configured with a relative or same-host URL.
+
+### Node 20 EOL (MEDIUM confidence)
+
+Node 20 enters Maintenance LTS and reaches EOL in April 2026. Node 22 is Active LTS since October 2024. The `--env-file` flag behavior is identical between versions. No code changes are required to upgrade; the upgrade is worth planning post-v2.1.
+
+## Version Compatibility
+
+| Package A | Compatible With | Notes |
+|-----------|-----------------|-------|
+| Node 20 `--env-file` | Express 4.21 | No conflicts. Express reads process.env after Node loads it. |
+| TypeScript 5.7 (`module: Node16`) | Node 20 ESM | Node16 moduleResolution matches Node's actual ESM algorithm. `.js` extensions required in relative imports — already enforced in the codebase. |
+| Vite 6 build output | Express `express.static` | Vite emits hashed asset filenames. Express static middleware serves them correctly. The SPA fallback catches all non-asset routes. |
+| launchd `KeepAlive: true` | `ThrottleInterval: 10` | ThrottleInterval prevents restart loops on rapid crashes. 10 seconds is the minimum recommended interval. Already set in server plist. |
 
 ## Sources
 
-- [Claude Agent SDK Overview](https://platform.claude.com/docs/en/agent-sdk/overview) -- Official documentation, capabilities, comparison with Client SDK
-- [Claude Agent SDK TypeScript API Reference](https://platform.claude.com/docs/en/agent-sdk/typescript) -- Full types, Options interface, query() function, tool() helper
-- [Claude Agent SDK Custom Tools Guide](https://platform.claude.com/docs/en/agent-sdk/custom-tools) -- tool(), createSdkMcpServer(), error handling, annotations
-- [Claude Agent SDK Sessions Guide](https://platform.claude.com/docs/en/agent-sdk/sessions) -- resume, continue, fork, session persistence
-- [Claude Agent SDK Streaming vs Single Mode](https://platform.claude.com/docs/en/agent-sdk/streaming-vs-single-mode) -- Input mode comparison
-- [Claude Agent SDK Quickstart](https://platform.claude.com/docs/en/agent-sdk/quickstart) -- Installation, prerequisites (Node.js 18+)
-- [@anthropic-ai/claude-agent-sdk on npm](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk) -- v0.2.81, last published 2026-03-21
-- [Zod 4 compatibility issue #38](https://github.com/anthropics/claude-agent-sdk-typescript/issues/38) -- Confirmed both Zod 3 and Zod 4 supported as peer deps
-- [react-markdown on GitHub](https://github.com/remarkjs/react-markdown) -- v10.1.0, React component-based rendering
-- [remark-gfm on npm](https://www.npmjs.com/package/remark-gfm) -- v4.0.1, GFM support plugin
+- [launchd.info Tutorial](https://www.launchd.info/) — KeepAlive, ThrottleInterval, domain-based bootstrap/bootout commands (HIGH confidence)
+- [launchd.plist(5) man page](https://keith.github.io/xcode-man-pages/launchd.plist.5.html) — KeepAlive.Crashed, SuccessfulExit, ThrottleInterval key documentation (HIGH confidence)
+- [Kickstarting and tearing down with launchctl — Eclectic Light](https://eclecticlight.co/2019/08/27/kickstarting-and-tearing-down-with-launchctl/) — kickstart vs load deprecation rationale (MEDIUM confidence)
+- [MacRumors: launchctl legacy subcommands deprecated](https://forums.macrumors.com/threads/launchctl-legacy-subcommands-deprecated.2431281/) — Ventura deprecation confirmation (MEDIUM confidence)
+- [Node.js 20.6.0 built-in .env support — Dotenv blog](https://www.dotenv.org/blog/2023/10/28/node-20-6-0-includes-built-in-support-for-env-files.html) — `--env-file` availability and multiline limitation (HIGH confidence)
+- [Vite Build Options — vite.dev](https://vite.dev/config/build-options) — default `outDir` is `dist/` (HIGH confidence)
+- [Node.js 22 vs 20 — PkgPulse](https://www.pkgpulse.com/blog/nodejs-22-vs-nodejs-20-upgrade-guide) — EOL timeline, Active LTS status (MEDIUM confidence)
+- Direct inspection: `deploy/`, `packages/server/src/index.ts`, `package.json`, `tsconfig.base.json` (HIGH confidence)
+
+---
+*Stack research for: Minerva Money v2.1 Deployment Hardening*
+*Researched: 2026-03-23*

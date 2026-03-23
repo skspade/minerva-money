@@ -1,438 +1,349 @@
-# Architecture Patterns
+# Architecture Research
 
-**Domain:** Claude Agent SDK integration into existing Express/tRPC personal budgeting app
+**Domain:** Deployment hardening — launchd service, static file serving, deploy scripts for Express + Vite + SQLite monorepo on macOS
 **Researched:** 2026-03-23
+**Confidence:** HIGH (all findings verified against actual codebase and file system)
 
-## Recommended Architecture
+> NOTE: This file supersedes the v2.0 Agent SDK architecture document. It focuses exclusively on v2.1 deployment hardening. The v2.0 architecture is already implemented and unchanged.
 
-### High-Level Data Flow
+---
+
+## Standard Architecture
+
+### System Overview (Production, Post-v2.1)
 
 ```
-React Chat UI (ChatPage.tsx)
-    |
-    | POST /trpc/agent.chat (tRPC mutation)
-    |
-Express + tRPC Router (agent-router.ts)
-    |
-    | Creates/resumes Agent SDK session
-    | Collects messages until result
-    |
-Claude Agent SDK (query() — V1 stable API)
-    |  - systemPrompt: budgeting assistant persona
-    |  - tools: [] (all built-ins REMOVED)
-    |  - mcpServers: { minerva: inProcessMcpServer }
-    |  - allowedTools: ["mcp__minerva__*"]
-    |
-In-Process MCP Server (createSdkMcpServer)
-    |  - 10+ query tools (readOnlyHint: true)
-    |  - 9+ action tools (mutations)
-    |  - Each tool handler closes over db instance
-    |
-Existing Service Layer
-    |  budget-service, rules-service, reports-service,
-    |  category-service, transfer-service, sync-service
-    |
-SQLite via better-sqlite3
+┌─────────────────────────────────────────────────────────────┐
+│                    launchd (macOS init system)               │
+│  ┌───────────────────────────┐  ┌────────────────────────┐  │
+│  │  com.minerva.server       │  │  com.minerva.backup    │  │
+│  │  KeepAlive: true          │  │  StartInterval: 21600  │  │
+│  │  RunAtLoad: true          │  │  RunAtLoad: true       │  │
+│  │  ThrottleInterval: 10s    │  └──────────┬─────────────┘  │
+│  └──────────────┬────────────┘             │                 │
+└─────────────────┼────────────────────────  │  ───────────────┘
+                  │ spawns                   │ spawns
+                  ▼                          ▼
+┌─────────────────────────────┐   ┌─────────────────────────┐
+│  Node.js Express Process    │   │  Node.js Backup Process  │
+│  (packages/server/dist/     │   │  (packages/server/dist/  │
+│   index.js)                 │   │   backup/run-backup.js)  │
+│                             │   │                          │
+│  PORT 3001                  │   │  Opens DB directly       │
+│                             │   │  Writes to iCloud Drive  │
+│  /trpc/*   → tRPC router    │   │  Exits cleanly           │
+│  /health   → status check   │   └─────────────────────────┘
+│  /*        → static files   │
+│             (client/dist/)  │             │
+│                             │             ▼
+│  Schedulers (in-process):   │   ~/minerva-money/data/
+│    sync (croner)            │   minerva.db  ←────────────┐
+│    budget (croner)          │                            │
+│                             │                            │
+│  Agent SDK (in-process)     │                            │
+│    → Anthropic API          │                            │
+└─────────────────┬───────────┘                            │
+                  │ reads/writes                            │
+                  └────────────────────────────────────────┘
 ```
 
-### Key Architectural Decision: Agent SDK with Custom MCP Tools Only
+### Component Responsibilities
 
-The Claude Agent SDK (formerly Claude Code SDK) is a general-purpose agent runtime with built-in tools for file I/O, bash commands, web search, and code editing. **None of these are appropriate for a budgeting chatbot.** The architecture disables all built-in tools via `tools: []` and exclusively uses custom MCP tools defined with `tool()` and served through an in-process MCP server via `createSdkMcpServer()`.
+| Component | Responsibility | New vs Modified |
+|-----------|----------------|-----------------|
+| `deploy/com.minerva.server.plist` | launchd service definition — crash recovery, boot startup, env loading | MODIFY (fix node path) |
+| `deploy/com.minerva.backup.plist` | launchd backup scheduler — every 6 hours | MODIFY (fix paths for production) |
+| `deploy/setup.sh` | First-time install — copy plists, load services, verify health | MODIFY (use modern launchctl commands) |
+| `deploy/deploy.sh` | One-command update — pull, install, build, restart | VERIFY (already correct) |
+| `packages/server/src/index.ts` | Express static file serving, SIGTERM handler | VERIFY (already implemented) |
 
-**Confidence: HIGH** -- The `tools: []` option removes all built-ins from context. Custom tools via in-process MCP server are a first-class, documented pattern. See the official [Custom Tools Guide](https://platform.claude.com/docs/en/agent-sdk/custom-tools).
+---
 
-### Component Boundaries
+## Recommended Project Structure
 
-| Component | Responsibility | New/Modified | Communicates With |
-|-----------|---------------|-------------|-------------------|
-| `packages/server/src/agent/tools/query-tools.ts` | Read-only MCP tool definitions | **NEW** | Service layer functions |
-| `packages/server/src/agent/tools/action-tools.ts` | Mutation MCP tool definitions | **NEW** | Service layer functions |
-| `packages/server/src/agent/mcp-server.ts` | Create in-process MCP server via `createSdkMcpServer` | **NEW** | tools, agent-service |
-| `packages/server/src/agent/agent-service.ts` | Manage SDK sessions, execute queries, collect responses | **NEW** | mcp-server, tRPC context |
-| `packages/server/src/agent/agent-router.ts` | tRPC router for chat endpoint | **NEW** | agent-service |
-| `packages/server/src/agent/system-prompt.ts` | System prompt constant for budgeting assistant | **NEW** | agent-service |
-| `packages/server/src/sync/trpc-router.ts` | Add `agent: agentRouter` to `appRouter` | **MODIFIED** (add 1 import + 1 line) | agent-router |
-| `packages/server/src/index.ts` | No changes needed -- context already has db | **UNCHANGED** | -- |
-| `packages/client/src/pages/ChatPage.tsx` | Chat UI with message list, input, markdown | **NEW** | tRPC client |
-| `packages/client/src/app.tsx` | Add `/chat` route | **MODIFIED** (add route) | ChatPage |
-| `packages/client/src/components/Layout.tsx` | Add Chat nav link | **MODIFIED** (add link) | -- |
+```
+minverva-money/
+├── deploy/                          # All deployment config (co-located)
+│   ├── com.minerva.server.plist     # launchd server service
+│   ├── com.minerva.backup.plist     # launchd backup service
+│   ├── setup.sh                     # First-time install script
+│   └── deploy.sh                    # Ongoing deploy script
+├── packages/
+│   ├── server/
+│   │   ├── dist/                    # Compiled JS (tsc output) — served by launchd
+│   │   │   ├── index.js             # Entry point for launchd
+│   │   │   ├── backup/
+│   │   │   │   └── run-backup.js    # Entry point for backup plist
+│   │   │   └── db/
+│   │   │       └── ...
+│   │   ├── migrations/              # SQL files (NOT compiled — referenced at runtime)
+│   │   │   └── *.sql
+│   │   └── src/
+│   │       └── index.ts             # Static file serving already wired
+│   └── client/
+│       └── dist/                    # Vite build output — served by Express
+│           ├── index.html
+│           └── assets/
+└── ~/minerva-money/data/
+    └── minerva.db                   # SQLite DB (outside repo)
+```
 
-### Data Flow: Chat Request Lifecycle
+### Structure Rationale
 
-**Step 1: User sends message from React UI**
+- **`deploy/` at root:** All deployment artifacts in one place, version-controlled, no scattered config
+- **`packages/server/migrations/` outside `src/`:** SQL files are not TypeScript — `tsc` does not copy them. The path `../../migrations` from `dist/db/` correctly resolves to `packages/server/migrations/` at runtime (verified by path arithmetic)
+- **`packages/client/dist/` as static root:** Express uses `path.resolve(__dirname, '../../client/dist')` where `__dirname` is `packages/server/dist/` at runtime — resolves correctly to `packages/client/dist/`
+
+---
+
+## Architectural Patterns
+
+### Pattern 1: Express Serving Static Files (Already Implemented)
+
+**What:** In production (`NODE_ENV !== 'test'`), Express serves the Vite-built React app as static files, with a catch-all that serves `index.html` for client-side routing. tRPC requests go to `/trpc/*` before the catch-all, so API and UI share port 3001.
+
+**When to use:** Single-process deployment — avoids running nginx + Express separately. Perfect for single-user home server.
+
+**Trade-offs:** Simple to operate. The static file path is computed at startup once; if client dist is missing, the server starts anyway but 404s on all UI routes.
+
 ```typescript
-// ChatPage.tsx
-const chatMutation = trpc.agent.chat.useMutation();
-chatMutation.mutate({
-  message: "How much did I spend on groceries this month?",
-  sessionId: sessionId ?? undefined,
+// packages/server/src/index.ts (already in place)
+const clientDist = path.resolve(__dirname, '../../client/dist');
+app.use(express.static(clientDist));
+app.get('*', (_req, res) => {
+  res.sendFile(path.join(clientDist, 'index.html'));
 });
 ```
 
-**Step 2: tRPC router receives request, calls agent service**
-```typescript
-// agent-router.ts
-const agentRouter = router({
-  chat: publicProcedure
-    .input(z.object({
-      message: z.string().min(1),
-      sessionId: z.string().optional(),
-    }))
-    .mutation(async ({ ctx, input }) => {
-      return executeAgentQuery(ctx.db, input.message, input.sessionId);
-    }),
-});
+**Build dependency:** Client must be built before server starts in production. `npm run build` runs `--workspaces` which builds both packages (client first due to tsc project references on shared).
+
+### Pattern 2: launchd KeepAlive for Crash Recovery
+
+**What:** launchd's `KeepAlive: true` automatically restarts the process after any exit. `ThrottleInterval: 10` enforces a 10-second minimum between restarts, preventing rapid crash loops from hammering the CPU.
+
+**When to use:** Any long-running service on macOS that must survive crashes and boot automatically.
+
+**Trade-offs:** `ThrottleInterval` means there is a 10-second gap in availability after a crash. Acceptable for personal use. `RunAtLoad: true` starts the service immediately when `launchctl bootstrap` is called (first time or after reboot).
+
+```xml
+<!-- deploy/com.minerva.server.plist (pattern — not exact fix) -->
+<key>KeepAlive</key><true/>
+<key>RunAtLoad</key><true/>
+<key>ThrottleInterval</key><integer>10</integer>
 ```
 
-**Step 3: Agent service creates SDK session and collects response**
-```typescript
-// agent-service.ts
-import { query } from "@anthropic-ai/claude-agent-sdk";
+### Pattern 3: Node --env-file for Secret Loading (No dotenv Dependency)
 
-export async function executeAgentQuery(
-  db: Database.Database,
-  message: string,
-  sessionId?: string,
-): Promise<{ response: string; sessionId: string }> {
-  const mcpServer = createMinervaServer(db);
-  let resultSessionId = "";
-  let resultText = "";
+**What:** Node 20 natively supports `--env-file=.env` as a process flag. The plist passes it as a `ProgramArguments` entry before the script path.
 
-  for await (const msg of query({
-    prompt: message,
-    options: {
-      systemPrompt: SYSTEM_PROMPT,
-      tools: [],                              // Remove ALL built-in tools
-      mcpServers: { minerva: mcpServer },
-      allowedTools: ["mcp__minerva__*"],       // Auto-approve all custom tools
-      permissionMode: "bypassPermissions",
-      resume: sessionId,                       // Resume if continuing conversation
-      model: "claude-sonnet-4-20250514",
-    },
-  })) {
-    if (msg.type === "system" && msg.subtype === "init") {
-      resultSessionId = msg.session_id;
-    }
-    if (msg.type === "result" && msg.subtype === "success") {
-      resultText = msg.result;
-    }
-  }
+**When to use:** Any Node 20+ process that needs `.env` file loading without adding `dotenv` as a runtime dependency.
 
-  return { response: resultText, sessionId: resultSessionId };
-}
+**Trade-offs:** Requires Node 20+. Only reads the specified file — no cascade (`.env.local` etc.). Works correctly with launchd since `WorkingDirectory` is set to the repo root where `.env` lives.
+
+```xml
+<key>ProgramArguments</key>
+<array>
+  <string>/path/to/node</string>
+  <string>--env-file=.env</string>
+  <string>packages/server/dist/index.js</string>
+</array>
+<key>WorkingDirectory</key>
+<string>/Users/seanspade/Documents/Source/minverva-money</string>
 ```
 
-**Step 4: SDK calls custom MCP tools autonomously as needed**
+### Pattern 4: Separate Long-Lived vs Periodic launchd Services
 
-Claude reads tool descriptions, decides which to call, receives results, and may call additional tools before producing a final text response. The `for await` loop in Step 3 processes all intermediate messages and captures the final result.
+**What:** The server uses `KeepAlive: true` (perpetual). The backup uses `StartInterval: 21600` (periodic, exits after each run). These are fundamentally different service types in launchd.
 
-**Step 5: Response returned to client, rendered as markdown**
+**When to use:** This split is already the correct design — do not merge them into one process. The backup process opens the SQLite database directly (independent connection), performs the backup, then exits. This is safe because the server keeps WAL mode enabled, allowing concurrent readers.
 
-## Patterns to Follow
+**Trade-offs:** Two plist files to manage. The backup process cannot communicate with the server's in-process backup scheduler — they are completely independent. This is intentional and correct: the plist backup is the scheduled backup; the server's in-process backup fires post-sync as a bonus.
 
-### Pattern 1: Tool Factory with DB Closure
+---
 
-All tools need `db: Database.Database` but the `tool()` helper signature does not support injecting context. Use a factory function that closes over `db`.
+## Data Flow
 
-**Confidence: HIGH** -- This is the standard pattern. The `tool()` handler is an async function; closure is the natural way to provide dependencies.
+### Production Startup Flow
 
-```typescript
-// mcp-server.ts
-import { createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
-import { createQueryTools } from "./tools/query-tools.js";
-import { createActionTools } from "./tools/action-tools.js";
-
-export function createMinervaServer(db: Database.Database) {
-  return createSdkMcpServer({
-    name: "minerva",
-    version: "1.0.0",
-    tools: [
-      ...createQueryTools(db),
-      ...createActionTools(db),
-    ],
-  });
-}
+```
+macOS boot
+  → launchd reads ~/Library/LaunchAgents/com.minerva.server.plist
+  → spawns: node --env-file=.env packages/server/dist/index.js
+            (WorkingDirectory = repo root)
+  → index.js creates DB (~/minerva-money/data/minerva.db)
+  → runs migrations (packages/server/migrations/*.sql)
+  → mounts tRPC middleware at /trpc
+  → serves client/dist/ as static files
+  → starts sync scheduler (croner)
+  → starts budget scheduler (croner)
+  → listens on port 3001
 ```
 
-```typescript
-// tools/query-tools.ts
-import { tool } from "@anthropic-ai/claude-agent-sdk";
-import { z } from "zod";
-import { getBudgetSummary, getAvailableToBudget } from "../../budget/budget-service.js";
+### Deploy Flow
 
-export function createQueryTools(db: Database.Database) {
-  const getBudgetSummaryTool = tool(
-    "get_budget_summary",
-    "Get budget summary for a month showing allocated, spent, available, and rollover amounts per category. Amounts are in cents.",
-    { period: z.string().regex(/^\d{4}-\d{2}$/).describe("Month in YYYY-MM format, e.g. 2026-03") },
-    async ({ period }) => {
-      const summary = getBudgetSummary(db, period);
-      const available = getAvailableToBudget(db, period);
-      return {
-        content: [{ type: "text", text: JSON.stringify({ categories: summary, availableToBudget: available }) }],
-      };
-    },
-    { annotations: { readOnlyHint: true } }
-  );
-
-  return [getBudgetSummaryTool, /* ... more tools */];
-}
+```
+developer: ./deploy/deploy.sh
+  → git pull origin main
+  → npm install (workspace — all packages)
+  → npm run build (tsc for server, vite for client)
+  → launchctl kickstart -k "gui/$(id -u)/com.minerva.server"
+     (kickstart -k = kill running instance + restart with new binary)
+  → server reloads, picks up new packages/server/dist/index.js
+  → new packages/client/dist/ already in place (served on next request)
 ```
 
-### Pattern 2: Session Persistence via SDK
+### Request Flow (Production)
 
-The Agent SDK manages session persistence automatically (writes to `~/.claude/` by default). The server stores zero session state. The client tracks `sessionId` in React state and sends it on subsequent messages.
-
-**Confidence: HIGH** -- `persistSession: true` is the default. The `resume` option accepts a prior `session_id` to continue conversations with full context.
-
-```typescript
-// Client-side
-const [sessionId, setSessionId] = useState<string | null>(null);
-const [messages, setMessages] = useState<ChatMessage[]>([]);
-
-const chatMutation = trpc.agent.chat.useMutation({
-  onSuccess: (data) => {
-    setSessionId(data.sessionId);
-    setMessages(prev => [...prev, { role: "assistant", content: data.response }]);
-  },
-});
-
-function sendMessage(text: string) {
-  setMessages(prev => [...prev, { role: "user", content: text }]);
-  chatMutation.mutate({ message: text, sessionId: sessionId ?? undefined });
-}
+```
+Browser request
+  ↓
+port 3001 (Express)
+  ├── /trpc/*  → tRPC middleware → router → service layer → SQLite
+  ├── /health  → { status: 'ok' }
+  └── /*       → express.static(client/dist/)
+                  → SPA index.html (catch-all for client routing)
 ```
 
-### Pattern 3: Collect-and-Return (Not Streaming)
+### SIGTERM Flow (Graceful Shutdown)
 
-Per PROJECT.md's explicit decision: use collect-and-return over streaming for simplicity. The tRPC mutation waits for the full agent response before returning. This avoids WebSocket complexity.
-
-**Confidence: HIGH** -- The `for await` loop naturally collects all SDK messages. The final `result` message contains the complete response text.
-
-### Pattern 4: Rich Tool Descriptions with Financial Context
-
-Tool descriptions are critical -- Claude reads them to decide which tools to call. Include financial domain context, data format notes, and example use cases.
-
-```typescript
-// Good: Rich description with domain context
-tool(
-  "get_spending_by_category",
-  "Get total spending broken down by budget category for a date range. " +
-  "Amounts are in cents (integer). Excludes confirmed transfers between owned accounts. " +
-  "Returns categoryName, groupName, and total for each category with spending. " +
-  "Use this to answer questions like 'how much did I spend on groceries?' or 'what are my top spending categories?'",
-  { startDate: z.string().describe("Start date YYYY-MM-DD"), endDate: z.string().describe("End date YYYY-MM-DD") },
-  handler,
-  { annotations: { readOnlyHint: true } }
-);
+```
+launchctl kickstart -k (or OS shutdown)
+  → SIGTERM sent to Express process
+  → stopSyncScheduler() (croner)
+  → stopBudgetScheduler() (croner)
+  → server.close() (stops accepting new connections)
+  → process exits
+  → launchd restarts (if KeepAlive) or leaves stopped (if shutdown)
 ```
 
-### Pattern 5: Read-Only Annotations for Parallel Execution
+---
 
-Mark all query tools with `readOnlyHint: true`. This tells the SDK that these tools can be executed in parallel, improving response time when Claude needs data from multiple sources.
+## Scaling Considerations
 
-```typescript
-// Query tools: parallel-safe
-{ annotations: { readOnlyHint: true } }
+This is a single-user home server app. Scaling is not a concern. These notes exist only to explain why the architecture is appropriate at this scale and what would break if it were not.
 
-// Action tools: sequential (default)
-// No annotations needed -- destructiveHint defaults to true
-```
+| Concern | Single User (Current) | Notes |
+|---------|----------------------|-------|
+| Static file serving | Express is adequate | nginx would be overkill; no CDN needed |
+| Process management | launchd is sufficient | PM2/Docker add complexity with no benefit |
+| Database concurrency | WAL mode handles it | Backup + server can read simultaneously |
+| Port conflicts | Port 3001 is fixed | No load balancer needed |
 
-### Pattern 6: Error Handling in Tool Handlers
+---
 
-Return `isError: true` instead of throwing exceptions. This keeps the agent loop alive so Claude can explain the error to the user.
+## Anti-Patterns
 
-```typescript
-async ({ transactionId, categoryId }) => {
-  try {
-    updateTransactionCategory(db, transactionId, categoryId);
-    return { content: [{ type: "text", text: `Transaction ${transactionId} categorized successfully.` }] };
-  } catch (error) {
-    return {
-      content: [{ type: "text", text: `Failed to categorize transaction: ${error instanceof Error ? error.message : String(error)}` }],
-      isError: true,
-    };
-  }
-}
-```
+### Anti-Pattern 1: Using /usr/local/bin/node in Plist
 
-## Anti-Patterns to Avoid
+**What:** The plist hardcodes `/usr/local/bin/node` as the Node binary path.
 
-### Anti-Pattern 1: Exposing Built-in Agent Tools
-**What:** Allowing Read, Write, Edit, Bash, Glob, Grep, WebSearch tools.
-**Why bad:** The agent could read/write arbitrary files, run shell commands, or access the internet. Completely inappropriate for a budgeting chatbot. Also wastes context window on irrelevant tool definitions.
-**Instead:** Set `tools: []` to remove all built-ins. Use only custom MCP tools via `createSdkMcpServer`.
+**Why it's wrong:** This machine uses nvm. The actual binary is at `/Users/seanspade/.nvm/versions/node/v20.16.0/bin/node`. `/usr/local/bin/node` does not exist. The service will fail to start with a "program not found" error.
 
-### Anti-Pattern 2: Direct DB Access in Tool Handlers
-**What:** Writing raw SQL queries inside tool handlers instead of calling existing service functions.
-**Why bad:** Duplicates logic, bypasses business rules (e.g., transfer exclusion from spending reports, specificity scoring for rules), creates inconsistencies between UI and agent behavior.
-**Instead:** Tool handlers call existing service functions (`getBudgetSummary(db, period)`, `getSpendingByCategory(db, start, end)`, etc.). Only use direct queries for simple lookups not covered by existing services (e.g., `get_accounts` listing).
+**Do this instead:** Use the absolute nvm path. Alternatively, use a wrapper shell script that sources `.nvm/nvm.sh` before exec'ing node. The simplest fix: hardcode the nvm path directly in the plist since this is a single-machine deployment.
 
-### Anti-Pattern 3: Fresh Sessions Per Turn
-**What:** Ignoring session management -- creating a fresh `query()` call without `resume` for every user message.
-**Why bad:** Claude loses all conversation context. Each message becomes independent. The user cannot have multi-turn conversations ("What about last month?" after discussing current month).
-**Instead:** Capture `session_id` from the first `system.init` message, return it to the client, and pass it as `resume` on subsequent turns.
+### Anti-Pattern 2: Backup Plist Running TypeScript via tsx
 
-### Anti-Pattern 4: Using V2 Preview Interface in Production
-**What:** Using `unstable_v2_createSession()` / `unstable_v2_prompt()`.
-**Why bad:** Explicitly marked as **unstable preview** in official docs: "APIs may change based on feedback before becoming stable." Session forking is V1-only.
-**Instead:** Use the stable V1 `query()` API with `resume` for multi-turn conversations.
+**What:** The current backup plist uses `node --import tsx packages/server/src/backup/run-backup.ts`.
 
-### Anti-Pattern 5: Premature Streaming via WebSocket
-**What:** Building WebSocket infrastructure before validating response times with collect-and-return.
-**Why bad:** Adds significant complexity (WebSocket server, connection management, reconnection, client-side streaming state) that may not be needed for a single-user app.
-**Instead:** Start with tRPC mutation (collect-and-return). Measure actual response times. Only add streaming if latency is unacceptable.
+**Why it's wrong:** (1) launchd does not inherit the user's `PATH`, so `tsx` from `node_modules/.bin/` is not resolvable. (2) Running TypeScript source in production bypasses the compiled output. (3) The transpilation overhead adds latency to every scheduled backup.
 
-### Anti-Pattern 6: Putting Agent SDK in a Separate Process
-**What:** Running the agent as a separate microservice or worker process.
-**Why bad:** Unnecessary complexity. The in-process MCP server runs in the same Node.js process as Express. The SDK spawns its own subprocess internally -- no need for additional process management.
-**Instead:** The agent service is a module imported by the tRPC router, running in the same Express process.
+**Do this instead:** Point the backup plist at the compiled output: `packages/server/dist/backup/run-backup.js`. The `tsc` build already compiles this file. The plist should use the same compiled-JS pattern as the server plist.
 
-## New Components Detailed
+### Anti-Pattern 3: Using `launchctl load` in setup.sh
 
-### 1. Query Tools (`packages/server/src/agent/tools/query-tools.ts`)
+**What:** `setup.sh` uses `launchctl load ~/Library/LaunchAgents/com.minerva.server.plist`.
 
-Factory function returning read-only MCP tool definitions. Each wraps an existing service function or simple DB query.
+**Why it's wrong:** `launchctl load` is deprecated on macOS 10.10+. On modern macOS it still works but prints deprecation warnings to stderr. More importantly, `launchctl load` only loads — it does not start the service immediately if `RunAtLoad: false`. The modern command is `launchctl bootstrap gui/$(id -u) <plist-path>`.
 
-| Tool Name | Wraps | Parameters | Service |
-|-----------|-------|------------|---------|
-| `get_accounts` | Direct query | none | (simple SQL) |
-| `get_budget_summary` | `getBudgetSummary()` + `getAvailableToBudget()` | `period` | budget-service |
-| `get_spending_by_category` | `getSpendingByCategory()` | `startDate, endDate` | reports-service |
-| `get_spending_over_time` | `getSpendingOverTime()` | `startDate, endDate` | reports-service |
-| `get_net_worth` | `getNetWorth()` | `startDate?, endDate?` | reports-service |
-| `get_transactions` | Direct query with filters | `startDate?, endDate?, categoryId?, accountId?, limit?` | (filtered SQL) |
-| `get_categories` | `listGroupsWithCategories()` | none | category-service |
-| `get_rules` | `listRules()` | none | rules-service |
-| `get_sync_status` | Direct query (sync_log) | none | (simple SQL) |
-| `get_transfer_candidates` | `listTransferCandidates()` | none | transfer-service |
-| `get_budget_defaults` | `getDefaults()` | none | budget-service |
+**Do this instead:** Use `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.minerva.server.plist`. For re-loading an already-bootstrapped service use `launchctl kickstart gui/$(id -u)/com.minerva.server`. The `deploy.sh` already correctly uses `kickstart -k`.
 
-### 2. Action Tools (`packages/server/src/agent/tools/action-tools.ts`)
+### Anti-Pattern 4: Building Client After Server Starts
 
-Factory function returning mutation MCP tool definitions.
+**What:** Deploying without running the full build, or running `npm run start:prod` before `npm run build`.
 
-| Tool Name | Wraps | Parameters | Service |
-|-----------|-------|------------|---------|
-| `categorize_transaction` | `updateTransactionCategory()` | `transactionId, categoryId` | category-service |
-| `create_rule` | `createRule()` + `applyRule()` | `name, merchantPattern, matchType, amountMin, amountMax, memoPattern, categoryId` | rules-service |
-| `update_rule` | `updateRule()` | `id, ...ruleFields` | rules-service |
-| `delete_rule` | `deleteRule()` | `id` | rules-service |
-| `set_budget_allocation` | `setAllocation()` | `categoryId, period, amount` | budget-service |
-| `set_default_allocation` | `setDefaultAllocation()` | `categoryId, amount` | budget-service |
-| `confirm_transfer` | `confirmTransfer()` | `id` | transfer-service |
-| `dismiss_transfer` | `dismissTransfer()` | `id` | transfer-service |
-| `trigger_sync` | `runSync()` | none | sync-service |
+**Why it's wrong:** Express statically serves `packages/client/dist/`. If that directory is stale or absent, the UI silently serves old files or 404s. The API continues working but the UI is wrong or missing.
 
-### 3. MCP Server Factory (`packages/server/src/agent/mcp-server.ts`)
+**Do this instead:** Always run `npm run build` (which builds both workspaces) before restarting the server. The `deploy.sh` script enforces this order: pull → install → build → restart.
 
-Creates the in-process MCP server. Called once per agent query.
+---
 
-```typescript
-export function createMinervaServer(db: Database.Database) {
-  return createSdkMcpServer({
-    name: "minerva",
-    version: "1.0.0",
-    tools: [...createQueryTools(db), ...createActionTools(db)],
-  });
-}
-```
+## Integration Points
 
-### 4. System Prompt (`packages/server/src/agent/system-prompt.ts`)
+### New Components vs Existing (v2.1 Scope Only)
 
-Single exported string constant. Defines the agent persona and behavioral rules:
-- Identity: Minerva Money financial assistant
-- Envelope budgeting model awareness
-- Amounts stored in cents -- convert to dollars for display
-- Current date for default period calculations
-- When to ask for clarification vs infer (e.g., "this month" means current YYYY-MM)
-- Confirmation behavior: auto-execute most actions, ask user before budget amount changes
+| Component | Status | Change Required |
+|-----------|--------|-----------------|
+| `packages/server/src/index.ts` | Already has static serving + SIGTERM | Verify only — no changes needed |
+| `deploy/com.minerva.server.plist` | Exists but broken (wrong node path) | Fix: replace `/usr/local/bin/node` with nvm path |
+| `deploy/com.minerva.backup.plist` | Exists but uses tsx source path | Fix: point to `dist/backup/run-backup.js` |
+| `deploy/setup.sh` | Exists but uses deprecated `launchctl load` | Fix: use `launchctl bootstrap` |
+| `deploy/deploy.sh` | Exists and correct | Verify only |
 
-### 5. Agent Service (`packages/server/src/agent/agent-service.ts`)
+### Path Relationships (Verified)
 
-Core orchestration. Single exported function:
-- Creates in-process MCP server with `createMinervaServer(db)`
-- Calls `query()` with system prompt, no built-in tools, custom MCP tools, session resume
-- Iterates async generator, collects result text and session ID
-- Returns `{ response: string, sessionId: string }`
+| From | Path | Resolves To |
+|------|------|-------------|
+| `dist/db/connection.js` | `../../migrations` | `packages/server/migrations/` (correct) |
+| `dist/index.js` (__dirname) | `../../client/dist` | `packages/client/dist/` (correct) |
+| plist WorkingDirectory | `--env-file=.env` | repo root `.env` (correct) |
+| plist (server) entry point | `packages/server/dist/index.js` | compiled Express server (correct) |
+| plist (backup) entry point | currently `src/backup/run-backup.ts` | WRONG — fix to `dist/backup/run-backup.js` |
+| plist (both) node binary | `/usr/local/bin/node` | WRONG — does not exist on this machine |
 
-### 6. Agent Router (`packages/server/src/agent/agent-router.ts`)
+### launchd Service Communication
 
-tRPC router with single `chat` mutation. Input: `{ message: string, sessionId?: string }`. Output: `{ response: string, sessionId: string }`.
+The two services do NOT communicate. They interact only through the SQLite database file:
 
-### 7. Chat Page (`packages/client/src/pages/ChatPage.tsx`)
+| Service | DB Access | Mode |
+|---------|-----------|------|
+| `com.minerva.server` | Long-lived connection, WAL mode | Read + write |
+| `com.minerva.backup` | Opens fresh connection per run | Read only (backup API) |
 
-Full-height chat page:
-- Message list (user right-aligned, assistant left-aligned)
-- Markdown rendering for assistant responses (`react-markdown`)
-- Text input with send button
-- Session state in `useState` (sessionId)
-- Loading indicator during mutation
-- Error display
-- "New conversation" button to reset sessionId
+SQLite WAL mode allows simultaneous readers + one writer. The backup uses `db.backup()` which is a read-only snapshot — safe to run while the server is writing.
 
-## Integration Points Summary
+### Log Files (launchd stdout/stderr redirect)
 
-### Files Modified (3 total, minimal changes)
+| Service | Stdout | Stderr |
+|---------|--------|--------|
+| `com.minerva.server` | `~/Library/Logs/minerva-server.log` | `~/Library/Logs/minerva-server-error.log` |
+| `com.minerva.backup` | `~/Library/Logs/minerva-backup.log` | `~/Library/Logs/minerva-backup.log` |
 
-1. **`packages/server/src/sync/trpc-router.ts`** -- Add `agent: agentRouter` to `appRouter`
-2. **`packages/client/src/app.tsx`** -- Add `/chat` route
-3. **`packages/client/src/components/Layout.tsx`** -- Add Chat nav link
-
-### Files Created (7 total)
-
-1. `packages/server/src/agent/tools/query-tools.ts`
-2. `packages/server/src/agent/tools/action-tools.ts`
-3. `packages/server/src/agent/mcp-server.ts`
-4. `packages/server/src/agent/agent-service.ts`
-5. `packages/server/src/agent/agent-router.ts`
-6. `packages/server/src/agent/system-prompt.ts`
-7. `packages/client/src/pages/ChatPage.tsx`
-
-### Dependencies Added
-
-- `@anthropic-ai/claude-agent-sdk` (server)
-- `react-markdown` (client, for rendering assistant responses)
-
-### Shared Context
-
-The agent router uses the same tRPC context (`{ db, rateLimiter, client }`) as all existing routers. No changes to context creation in `index.ts`.
+---
 
 ## Build Order (Considering Dependencies)
 
 ```
-1. system-prompt.ts          (no dependencies)
-2. query-tools.ts            (depends on: service layer functions, zod)
-3. action-tools.ts           (depends on: service layer functions, zod)
-4. mcp-server.ts             (depends on: query-tools, action-tools)
-5. agent-service.ts          (depends on: mcp-server, system-prompt, @anthropic-ai/claude-agent-sdk)
-6. agent-router.ts           (depends on: agent-service)
-7. trpc-router.ts mod        (depends on: agent-router)
-8. ChatPage.tsx              (depends on: agent router types, react-markdown)
-9. app.tsx + Layout.tsx mods  (depends on: ChatPage)
+Phase 1: Verify index.ts (no changes expected)
+  └── Confirm static serving + SIGTERM handler work as-is
+  └── Confirm build output paths are correct
+
+Phase 2: Fix plist files
+  1. com.minerva.server.plist — fix node binary path
+  2. com.minerva.backup.plist — fix node binary path + switch to dist/backup/run-backup.js
+
+Phase 3: Fix setup.sh
+  3. Replace `launchctl load` with `launchctl bootstrap gui/$(id -u)`
+  4. (verify) deploy.sh already uses `launchctl kickstart -k` — no change needed
+
+Phase 4: Integration test
+  5. npm run build (both workspaces)
+  6. ./deploy/setup.sh (copies plists, bootstraps services, health check)
+  7. Verify http://localhost:3001/health returns {"status":"ok"}
+  8. Verify http://localhost:3001/ serves the React app
+  9. Verify launchctl list | grep minerva shows both services running
 ```
 
-**Recommended grouping into phases:**
-- Phase 1: Server-side agent (steps 1-7) -- testable via direct function calls before UI exists
-- Phase 2: Chat UI (steps 8-9) -- connect to working agent
-
-## Scalability Considerations
-
-| Concern | Current (single user) | Notes |
-|---------|----------------------|-------|
-| Concurrent requests | Not an issue | Agent SDK spawns subprocess per query; sequential is fine |
-| Session storage | SDK persists to `~/.claude/` | Automatic, no management needed |
-| Context window | ~20 tools at ~100 tokens each = ~2K tokens | Well within limits; tool search not needed |
-| Response time | 3-15 seconds for collect-and-return | Acceptable for single user; add streaming later if needed |
-| API costs | ~$0.01-0.05 per query (Sonnet) | Minimal for personal use |
-| Memory | SDK spawns node subprocess | ~50-100MB additional per active query |
+---
 
 ## Sources
 
-- [Claude Agent SDK Overview](https://platform.claude.com/docs/en/agent-sdk/overview) -- HIGH confidence
-- [Agent SDK TypeScript Reference](https://platform.claude.com/docs/en/agent-sdk/typescript) -- HIGH confidence
-- [Custom Tools Guide](https://platform.claude.com/docs/en/agent-sdk/custom-tools) -- HIGH confidence
-- [MCP Integration Guide](https://platform.claude.com/docs/en/agent-sdk/mcp) -- HIGH confidence
-- [TypeScript V2 Preview](https://platform.claude.com/docs/en/agent-sdk/typescript-v2-preview) -- HIGH confidence (confirmed unstable)
-- [Agent SDK Quickstart](https://platform.claude.com/docs/en/agent-sdk/quickstart) -- HIGH confidence
+- Codebase inspection (HIGH confidence) — all path relationships and existing implementations verified by direct file reads
+- macOS launchd documentation (MEDIUM confidence) — `launchctl bootstrap` vs `load` distinction confirmed by known macOS 10.10+ deprecation
+- Node.js 20 `--env-file` flag — confirmed by `node --version` showing v20.16.0 (HIGH confidence)
+- nvm binary path — confirmed by `which node` on target machine (HIGH confidence)
+- SQLite WAL concurrent read safety — documented better-sqlite3 behavior (HIGH confidence)
+
+---
+
+*Architecture research for: v2.1 Deployment Hardening (launchd + static serving + deploy scripts)*
+*Researched: 2026-03-23*
