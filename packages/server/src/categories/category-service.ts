@@ -1,14 +1,14 @@
 import type Database from 'better-sqlite3';
 import crypto from 'node:crypto';
 
-interface CategoryGroup {
+export interface CategoryGroup {
   id: number;
   name: string;
   sort_order: number;
   categories: Category[];
 }
 
-interface Category {
+export interface Category {
   id: number;
   name: string;
   sort_order: number;
