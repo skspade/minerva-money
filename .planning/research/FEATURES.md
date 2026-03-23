@@ -1,218 +1,201 @@
-# Feature Research
+# Feature Landscape
 
-**Domain:** Personal envelope budgeting (self-hosted, single-user)
-**Researched:** 2026-03-22
-**Confidence:** HIGH
+**Domain:** AI conversational agent for personal envelope budgeting app (Claude Agent SDK)
+**Researched:** 2026-03-23
+**Confidence:** HIGH (Claude Agent SDK docs verified via official sources; financial chatbot patterns verified across multiple sources)
 
-## Feature Landscape
+## Table Stakes
 
-### Table Stakes (Users Expect These)
+Features users expect from any AI financial assistant. Missing these = the agent feels like a toy.
 
-Features users assume exist. Missing these = product feels incomplete.
+| Feature | Why Expected | Complexity | Dependencies | Notes |
+|---------|--------------|------------|--------------|-------|
+| Natural language balance queries | "How much is in my checking?" is the #1 question users ask any finance chatbot (Cleo, Monarch AI, etc.) | LOW | accounts table, no service fn needed (direct query) | Return formatted dollar amounts with account names |
+| Spending queries by category and period | "How much did I spend on groceries this month?" -- the core value of a finance chatbot | LOW | `reports-service.getSpendingByCategory()` | Must handle natural date expressions ("this month", "last 30 days", "in February") |
+| Budget summary queries | "How's my budget looking?" / "Am I over budget on dining out?" | LOW | `budget-service.getSpentForCategory()`, `budget-service.getAllocation()` | Show allocated vs spent vs remaining per category |
+| Transaction listing with filters | "Show me my last 5 Amazon transactions" / "What did I spend at Costco?" | LOW | Transactions table with payee/amount/date filters | Paginated or limited results; avoid dumping 500 transactions into context |
+| Net worth query | "What's my net worth?" | LOW | `reports-service.getNetWorthOverTime()` | Return current total and optionally trend direction |
+| Sync status check | "When was the last sync?" / "Are there any sync errors?" | LOW | sync_log table | Surface last sync time, status, and recent errors |
+| Markdown-rendered chat UI | Users expect formatted responses (tables, bold, lists) -- raw text feels broken | MEDIUM | New React page, markdown renderer | Full-height chat page with message bubbles, scrolling |
+| Message history in session | Users expect to scroll up and see prior messages in current conversation | LOW | Session state in React, SDK session resumption | Persist across page navigations within a session |
+| Tool result transparency | When the agent queries data, users want to see what it looked up (builds trust in a financial context) | LOW | Message stream parsing for tool calls | Show collapsible "looked up: account balances" indicators |
+| Error handling with graceful fallback | Agent must not crash on bad queries; should explain what went wrong | LOW | SDK `isError: true` pattern in tool handlers | Catch DB errors, return user-friendly messages |
 
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| Bank sync with auto-import | Every competitor does this; manual entry is a dealbreaker for most users | MEDIUM | SimpleFIN handles the heavy lifting; need polling, dedup, error handling |
-| Transaction categorization | Uncategorized transactions are useless data; users expect at least merchant-based auto-categorization | MEDIUM | Rules engine + manual fallback; Actual and YNAB both auto-create rules from user behavior |
-| Envelope/zero-based budgeting | Core methodology; the entire point of the app | HIGH | Monthly periods, category allocation from available funds, "every dollar has a job" |
-| Budget rollovers | YNAB and Actual both roll positive balances forward; users expect unspent grocery money to persist | MEDIUM | Positive balances roll forward; overspending must deduct from next month's available funds |
-| Overspending handling | When you overspend a category, the system must account for it clearly | MEDIUM | YNAB distinguishes cash vs credit overspending; for single-user simplicity, roll overspending into next month's "to budget" |
-| Account balances dashboard | Users need a single view of all accounts and total net worth | LOW | Aggregate from SimpleFIN synced data; group by account type |
-| Spending by category reports | "Where did my money go?" is the #1 question users ask | MEDIUM | Pie/bar charts, filterable by date range, category group |
-| Net worth tracking over time | Every competitor tracks this; users want to see the trend line | MEDIUM | Requires daily balance snapshots; chart over time |
-| Transaction search and filtering | Users need to find specific transactions by payee, amount, date, category | LOW | Standard list with filters; full-text search on payee/memo |
-| Transfer detection | Transfers between own accounts must not count as spending; double-counting destroys budget accuracy | MEDIUM | Auto-suggest matching debits/credits by amount/date proximity; manual confirm |
-| Split transactions | A single purchase may span categories (e.g., Walmart: groceries + household) | MEDIUM | YNAB and Monarch both support this; Monarch even has rule-based auto-splitting |
-| Manual transaction entry | Sometimes you pay cash or need to add something before sync catches it | LOW | Simple form; match against incoming synced transactions later |
-| Category groups | Organizing 30+ categories into groups (Housing, Food, Transport) is expected | LOW | Both YNAB and Actual use category groups; essential for readability |
+## Differentiators
 
-### Differentiators (Competitive Advantage)
+Features that make this agent genuinely useful rather than a gimmick. Not expected, but valued.
 
-Features that set the product apart. Not required, but valuable for a Monarch Money replacement.
+| Feature | Value Proposition | Complexity | Dependencies | Notes |
+|---------|-------------------|------------|--------------|-------|
+| Transaction categorization via chat | "Categorize all Starbucks transactions as Dining Out" -- faster than clicking through UI for bulk operations | MEDIUM | `rules-service.createRule()`, `rules-service.categorizeNewTransactions()` | Creates a rule AND applies retroactively; agent explains what it did |
+| Rule management via chat | "Create a rule: anything from Amazon over $50 goes to Shopping" | MEDIUM | `rules-service.createRule()`, `rules-service.updateRule()`, `rules-service.deleteRule()` | Agent must validate inputs (category exists, no conflicting rules) |
+| Budget adjustment via chat | "Increase my Groceries budget to $600 this month" | LOW | `budget-service.setAllocation()`, `budget-service.setDefaultAllocation()` | Confirmation required for amount changes per PROJECT.md |
+| Transfer management via chat | "Mark these two transactions as a transfer" / "Show pending transfer suggestions" | MEDIUM | `transfer-service.confirmTransfer()`, `transfer-service.rejectCandidate()` | Agent shows both sides of the transfer pair for confirmation |
+| Trigger sync via chat | "Sync my accounts now" | LOW | `sync-service.runSync()` | Fire-and-forget; report result when complete |
+| Spending insights via natural language | "What's my biggest expense category?" / "Am I spending more on dining this month vs last?" | MEDIUM | `reports-service.getSpendingByCategory()`, `reports-service.getSpendingOverTime()` | Agent computes comparisons, not just raw data dumps |
+| Confirmation flow for destructive actions | Agent auto-executes reads and safe writes; requires explicit "yes" for budget amount changes | MEDIUM | SDK `canUseTool` callback or hooks | Per PROJECT.md: auto-execute most actions, confirm amount changes |
+| System prompt with financial context | Agent knows about envelope budgeting philosophy, account structure, category groups -- speaks the user's language | LOW | System prompt with app context injected | Include current month, pay schedule, category list |
+| Multi-turn conversation with context | "How much did I spend on groceries?" -> "Compare that to last month" -- agent remembers prior context | LOW | SDK session management (`resume` option) | SDK handles this natively via session persistence |
 
-| Feature | Value Proposition | Complexity | Notes |
-|---------|-------------------|------------|-------|
-| Rules-based categorization with retroactive apply | Most apps only apply rules to new transactions; retroactive application across all history is powerful for fixing categorization mistakes en masse | MEDIUM | PROJECT.md specifies this; most-specific-rule-wins conflict resolution |
-| Twice-monthly funding schedule | Aligned to actual pay schedule (15th and last day); YNAB and Actual have no concept of funding schedules — they just say "budget what you have" | LOW | Pre-populate envelope allocations on pay dates using default amounts; unique to this user's workflow |
-| Default per-category budget allocations | Set-it-and-forget-it monthly defaults that auto-populate; reduces repetitive budgeting work each month | LOW | Manually overridable; most competitors require re-entering or copying from prior month |
-| Sync error visibility | Monarch buries sync issues; having a clear status indicator with error logs builds trust in the data | LOW | Last sync time, per-account status, error details; most competitors show minimal sync info |
-| Self-hosted data ownership | No subscription fees, no vendor lock-in, complete data control | LOW | Already decided in architecture; differentiates from Monarch ($100/yr) and YNAB ($110/yr) |
-| Automated iCloud backup | SQLite snapshot backups without cloud vendor complexity | LOW | Atomic .backup command; scheduled post-sync and every 6 hours |
-| Fast local-first performance | SQLite + single user = instant queries; no cloud round-trips | LOW | Actual Budget markets this heavily; genuine UX advantage over Monarch's cloud latency |
+## Anti-Features
 
-### Anti-Features (Deliberately NOT Building)
+Features to explicitly NOT build for the v2.0 agent.
 
-Features that seem good but create problems for a single-user self-hosted app.
-
-| Feature | Why Requested | Why Problematic | Alternative |
-|---------|---------------|-----------------|-------------|
-| Multi-user / household sharing | Monarch and YNAB support it; seems standard | Adds auth, permissions, data isolation, conflict resolution — massive complexity for no value in single-user context | Single-user by design; no auth layer needed |
-| Mobile native app | Monarch and YNAB have iOS/Android apps | Building and maintaining native apps is a separate full project; web is accessible from any device | Responsive web UI works on phone browsers; Lunch Money takes this same approach |
-| Investment portfolio tracking | Monarch shows holdings, gains/losses, allocation | Requires parsing complex brokerage data, handling cost basis, dividends, lots — enormous scope | Balance-only tracking for net worth; display total value per investment account |
-| Recurring transaction forecasting | YNAB and Monarch predict upcoming bills | Requires pattern detection, scheduling engine, and false positive handling; real transactions arrive via bank sync anyway | SimpleFIN sync surfaces real transactions; no predictions needed |
-| AI/ML-powered categorization | Marketed heavily by newer apps | Requires training data, model hosting, ongoing tuning; rules engine is deterministic and debuggable | Rules engine with most-specific-wins; user controls the logic transparently |
-| Bill calendar view | Monarch and Lunch Money show bills on a calendar | Adds a scheduling/recurrence system that duplicates what bank sync provides; more UI surface to maintain | Transaction list with date filtering; budget view shows monthly allocation |
-| Cryptocurrency tracking | Lunch Money supports crypto | Completely out of scope; adds exchange rate APIs, wallet integration, volatile asset handling | Not applicable to user's financial picture |
-| Goal tracking / savings targets | YNAB Targets, Monarch Goals | Adds goal state management, progress tracking UI, allocation logic; envelope categories already serve this purpose | Use envelope categories for savings goals (e.g., "Vacation Fund" category with rollover) |
-| Credit card payment tracking | YNAB has dedicated credit card payment categories | Adds significant complexity distinguishing credit spending from payment; for a single user, credit card payments are transfers | Treat credit card payments as transfers between accounts; spending is tracked when the charge occurs |
-| Push notifications / email alerts | Seems useful for sync failures or budget warnings | Requires notification infrastructure (email service, push tokens); in-app indicator is sufficient for single user checking their own app | In-app sync status indicator; check the dashboard when you want updates |
-| Data export (CSV/PDF reports) | Nice for tax time or sharing with accountant | Scope creep for v1; SQLite is directly queryable if needed | Direct SQLite access for ad-hoc queries; add CSV export later if needed |
+| Anti-Feature | Why It Seems Good | Why Avoid | What to Do Instead |
+|--------------|-------------------|-----------|-------------------|
+| Financial advice / recommendations | AI finance chatbots like Cleo offer "should you buy this?" coaching | Liability risk even for personal use; Claude's training data is stale for financial advice; adds hallucination risk | Agent answers data questions only; "Here's what you spent" not "Here's what you should do" |
+| Streaming token-by-token responses | Feels responsive in ChatGPT-style UIs | PROJECT.md explicitly chose collect-and-return for simplicity; streaming adds WebSocket complexity, partial message handling, and UI state management | Collect full response then render; add streaming in v2.x if response times are problematic |
+| Persistent chat history across sessions | Some chatbots save full conversation history permanently | Adds a chat_messages table, storage growth, search over history; SDK sessions already persist on disk | Start fresh conversations; SDK session resume handles within-session continuity |
+| Agent-initiated proactive alerts | "Hey, you're 90% through your dining budget!" | Requires background monitoring, notification system, push mechanism; completely different architecture from request-response chat | User asks the agent when they want to know; dashboard already shows budget status |
+| Voice input/output | Feels futuristic for a finance assistant | Massive scope (speech-to-text, text-to-speech APIs, audio handling); web Speech API is flaky | Text-only chat; users can use OS-level dictation if they want |
+| Agent modifying the database schema | "Add a new category called Travel" via agent creating categories | Agent should use existing service functions, not evolve the data model; category creation is a UI concern with sort ordering | Agent can suggest creating a category; user does it in the UI, or add a category-creation tool in v2.x |
+| Multi-agent orchestration | One agent for queries, another for actions, a coordinator | SDK supports subagents but single-agent with multiple tools is simpler and sufficient for this scope | Single agent with all tools; partition via tool naming conventions |
+| File system access for the agent | SDK built-in tools (Read, Write, Bash, etc.) are powerful | Agent should NOT have filesystem access; it's a financial data assistant, not a code assistant; filesystem tools are a security risk | Only expose custom MCP tools wrapping service functions; set `tools: []` to remove all built-ins |
 
 ## Feature Dependencies
 
 ```
-[SimpleFIN Sync]
-    └──requires──> [Account Setup]
-    └──enables──> [Transaction Import]
-                       └──enables──> [Transaction Categorization]
-                       |                  └──requires──> [Categories & Groups]
-                       |                  └──enhanced-by──> [Rules Engine]
-                       └──enables──> [Transfer Detection]
-                       └──enables──> [Balance Snapshots]
+[Claude Agent SDK Setup]
+    |-- requires --> [Anthropic API Key in .env]
+    |-- requires --> [Custom MCP Server with Tools]
+    |                   |-- requires --> [Query Tools wrapping service fns]
+    |                   |                   |-- wraps --> reports-service
+    |                   |                   |-- wraps --> budget-service (read)
+    |                   |                   |-- wraps --> category-service (read)
+    |                   |                   |-- wraps --> rules-service (read)
+    |                   |                   |-- wraps --> sync_log queries
+    |                   |                   |-- wraps --> accounts/transactions queries
+    |                   |
+    |                   |-- requires --> [Action Tools wrapping service fns]
+    |                                       |-- wraps --> rules-service (create/update/delete)
+    |                                       |-- wraps --> budget-service (set allocation)
+    |                                       |-- wraps --> transfer-service (confirm/reject)
+    |                                       |-- wraps --> sync-service (trigger sync)
+    |                                       |-- wraps --> transaction categorization
+    |
+    |-- requires --> [System Prompt]
+    |                   |-- includes --> envelope budgeting context
+    |                   |-- includes --> available tools description
+    |                   |-- includes --> confirmation rules
+    |
+    |-- requires --> [tRPC Agent Endpoint]
+    |                   |-- exposes --> POST /agent.chat
+    |                   |-- handles --> collect-and-return response pattern
+    |                   |-- handles --> session management
+    |
+    |-- enables --> [Chat UI Page]
+                       |-- requires --> tRPC agent endpoint
+                       |-- requires --> markdown rendering library
+                       |-- requires --> message state management
+                       |-- requires --> tool call display components
 
-[Rules Engine]
-    └──requires──> [Categories & Groups]
-    └──requires──> [Transaction Import]
-    └──enables──> [Retroactive Rule Application]
-
-[Envelope Budgeting]
-    └──requires──> [Categories & Groups]
-    └──requires──> [Transaction Categorization]
-    └──enhanced-by──> [Default Allocations]
-    └──enhanced-by──> [Funding Schedule]
-    └──enables──> [Rollover Tracking]
-
-[Dashboard]
-    └──requires──> [Account Balances] (from sync)
-    └──requires──> [Spending by Category] (from categorized transactions)
-    └──requires──> [Balance Snapshots] (for trends)
-
-[Net Worth Tracking]
-    └──requires──> [Balance Snapshots]
-    └──requires──> [Investment Account Balances] (balance-only)
-
-[Spending Reports]
-    └──requires──> [Transaction Categorization]
-    └──enhanced-by──> [Transfer Detection] (excludes transfers from spending)
-
-[iCloud Backup]
-    └──requires──> [SQLite Database] (independent of other features)
+[Confirmation Flow]
+    |-- requires --> [Action Tools]
+    |-- requires --> [SDK canUseTool or PreToolUse hook]
+    |-- triggers for --> budget amount changes
 ```
 
 ### Dependency Notes
 
-- **Transaction Categorization requires Categories & Groups:** Categories must exist before transactions can be assigned to them; build category management first.
-- **Envelope Budgeting requires Transaction Categorization:** Budget vs. actual tracking only works when transactions flow into the right categories.
-- **Dashboard requires multiple data sources:** It aggregates balances, spending, and trends — build the data layer first, dashboard last.
-- **Transfer Detection enhances Spending Reports:** Without transfer exclusion, reports double-count money movement between accounts.
-- **Rules Engine enhances Transaction Categorization:** Rules automate what manual categorization starts; build manual first, then automate.
+- **Custom MCP tools require existing service functions:** The v1.0 service layer was designed with agent exposure in mind (per PROJECT.md key decision). All business logic lives in service functions that accept a `db` parameter -- these are directly wrappable as tool handlers.
+- **Chat UI requires tRPC endpoint first:** Build the server-side agent integration before the UI; test with direct API calls initially.
+- **Confirmation flow requires tool classification:** Must categorize each tool as "auto-approve" or "needs confirmation" before building the UI confirmation dialog.
+- **System prompt requires category/account data:** The system prompt should include current categories and account names so the agent can resolve natural language references like "my checking account" or "groceries."
 
-## MVP Definition
+## MVP Recommendation
 
-### Launch With (v1)
+### Build First (v2.0 Core)
 
-Minimum viable product -- what's needed to replace Monarch Money.
+1. **Query tools** (all read-only tools) -- immediate value with zero risk; users can ask questions about their finances
+2. **tRPC agent endpoint** with collect-and-return -- server-side agent execution keeps API key secure
+3. **Chat UI with markdown rendering** -- the interface for interacting with the agent
+4. **System prompt with financial context** -- makes the agent knowledgeable about the user's specific setup
 
-- [ ] SimpleFIN sync with deduplication -- core data pipeline; nothing works without transactions flowing in
-- [ ] Account and balance display -- see all accounts and balances at a glance
-- [ ] Categories, category groups, and manual categorization -- organize transactions meaningfully
-- [ ] Rules engine with retroactive application -- automate categorization; retroactive apply fixes history in bulk
-- [ ] Transfer detection (auto-suggest + manual confirm) -- prevent double-counting in budgets
-- [ ] Envelope budgeting with monthly periods and rollovers -- the core budgeting methodology
-- [ ] Default allocations and twice-monthly funding -- matches pay schedule, reduces repetitive work
-- [ ] Dashboard with balances, top categories, trends -- the daily landing page
-- [ ] Net worth tracking with daily balance snapshots -- requires investment balance-only display
-- [ ] Basic spending reports (by category, over time) -- "where did my money go?"
-- [ ] Sync error logging and status indicator -- trust the data
-- [ ] iCloud Drive SQLite backup -- data safety
+### Build Second (v2.0 Actions)
 
-### Add After Validation (v1.x)
+5. **Action tools** (categorize, rules, budgets, transfers, sync) -- the agent can now DO things, not just answer questions
+6. **Confirmation flow** for budget amount changes -- safety net for the one category of destructive action
+7. **Tool call transparency in UI** -- users see what the agent looked up or changed
 
-Features to add once core is working and daily-drivable.
+### Defer (v2.x)
 
-- [ ] Split transactions -- handle multi-category purchases (Walmart runs, etc.)
-- [ ] Manual transaction entry with sync matching -- for cash purchases or pre-sync entries
-- [ ] Advanced reporting (income vs expense, cash flow, custom date ranges) -- deeper analysis
-- [ ] Transaction search with full-text and advanced filters -- power user need that grows with data volume
-- [ ] Budget templates / copy from prior month -- speed up monthly budget setup
-
-### Future Consideration (v2+)
-
-Features to defer until the app is stable and daily-driven.
-
-- [ ] CSV export for tax prep -- useful but SQLite is queryable directly
-- [ ] Budget vs actual variance reports -- nice visualization, not critical
-- [ ] Year-over-year spending comparison -- requires 12+ months of data to be meaningful
-- [ ] Category spending alerts/warnings -- in-app notifications when approaching budget limits
+- **Streaming responses** -- only if collect-and-return response times are unacceptable (likely 3-8 seconds per query)
+- **Persistent chat history** -- start fresh each time; revisit if users want conversation continuity
+- **Category creation via agent** -- add as a tool later if frequently requested
+- **Spending comparison insights** -- agent can already compute these with existing tools; add dedicated comparison tools if needed
 
 ## Feature Prioritization Matrix
 
-| Feature | User Value | Implementation Cost | Priority |
-|---------|------------|---------------------|----------|
-| SimpleFIN sync + dedup | HIGH | MEDIUM | P1 |
-| Account/balance display | HIGH | LOW | P1 |
-| Categories & groups | HIGH | LOW | P1 |
-| Rules engine + retroactive | HIGH | MEDIUM | P1 |
-| Transfer detection | HIGH | MEDIUM | P1 |
-| Envelope budgeting + rollovers | HIGH | HIGH | P1 |
-| Default allocations + funding schedule | MEDIUM | LOW | P1 |
-| Dashboard | HIGH | MEDIUM | P1 |
-| Net worth + balance snapshots | MEDIUM | MEDIUM | P1 |
-| Spending reports | MEDIUM | MEDIUM | P1 |
-| Sync status/error display | MEDIUM | LOW | P1 |
-| iCloud backup | MEDIUM | LOW | P1 |
-| Split transactions | MEDIUM | MEDIUM | P2 |
-| Manual transaction entry | LOW | LOW | P2 |
-| Advanced reporting | MEDIUM | MEDIUM | P2 |
-| Transaction search/filters | MEDIUM | LOW | P2 |
-| Budget templates | LOW | LOW | P2 |
-| CSV export | LOW | LOW | P3 |
-| Budget variance reports | LOW | MEDIUM | P3 |
-| Year-over-year comparison | LOW | MEDIUM | P3 |
-| Category spending alerts | LOW | LOW | P3 |
+| Feature | User Value | Implementation Cost | Risk | Priority |
+|---------|------------|---------------------|------|----------|
+| Balance/spending/budget query tools | HIGH | LOW | LOW | P1 |
+| tRPC agent endpoint | HIGH | MEDIUM | MEDIUM | P1 |
+| Chat UI with markdown | HIGH | MEDIUM | LOW | P1 |
+| System prompt with context | HIGH | LOW | LOW | P1 |
+| Transaction listing tool | HIGH | LOW | LOW | P1 |
+| Sync status tool | MEDIUM | LOW | LOW | P1 |
+| Rule management tools | MEDIUM | MEDIUM | LOW | P2 |
+| Budget adjustment tools | MEDIUM | LOW | MEDIUM | P2 |
+| Confirmation flow | MEDIUM | MEDIUM | MEDIUM | P2 |
+| Transfer management tools | MEDIUM | MEDIUM | LOW | P2 |
+| Trigger sync tool | LOW | LOW | LOW | P2 |
+| Tool call transparency UI | MEDIUM | LOW | LOW | P2 |
+| Spending insights/comparisons | MEDIUM | MEDIUM | LOW | P3 |
+| Streaming responses | LOW | HIGH | MEDIUM | P3 |
+| Persistent chat history | LOW | MEDIUM | LOW | P3 |
 
 **Priority key:**
-- P1: Must have for launch (replaces Monarch Money)
-- P2: Should have, add once daily-drivable
-- P3: Nice to have, future consideration
+- P1: Core agent that answers financial questions (query-only agent + chat UI)
+- P2: Agent that takes actions (write tools + confirmation flow)
+- P3: Polish and enhancements (defer to v2.x)
 
-## Competitor Feature Analysis
+## Agent Tool Inventory
 
-| Feature | Monarch Money | YNAB | Actual Budget | Lunch Money | Minerva Money (Our Plan) |
-|---------|--------------|------|---------------|-------------|--------------------------|
-| Bank sync | Plaid + MX (13K+ institutions) | Direct import + file import | GoCardless (EU/UK) + SimpleFIN (US) | Plaid + manual CSV | SimpleFIN only (16K+ via MX) |
-| Budgeting method | Flexible (category or flex) | Zero-based / envelope | Envelope budgeting | Category-based | Envelope budgeting |
-| Rollover | Yes | Yes (positive rolls forward; overspending deducts from next month) | Yes (configurable per category) | Yes | Yes (positive forward; overspend deducts) |
-| Rules engine | Match on merchant/amount/category; auto-split | Auto-creates from behavior | Conditions (is/contains/matches/one-of) + stages (pre/default/post) | Robust rules with regex | Match on merchant/amount/memo; most-specific-wins; retroactive |
-| Transfer detection | Category-based exclusion + rules | Manual categorization | Split transaction editor | Manual | Auto-suggest + manual confirm |
-| Split transactions | Yes + rule-based auto-split | Yes | Yes | Yes | v1.x (post-launch) |
-| Net worth | Yes + investment detail | Yes | Yes (reports) | Yes + crypto | Yes (balance-only investments) |
-| Reports | Spending, income, net worth, custom | Spending, net worth, age of money | Net worth, cash flow, custom reports | Stats, trends, query tool | Spending by category, trends, net worth |
-| Goal tracking | Yes (custom goals) | Yes (YNAB Targets) | No | No | No (use envelope categories) |
-| Multi-user | Yes (household) | Yes (up to 6) | No | Yes (partner sharing) | No (single user) |
-| Mobile app | iOS + Android | iOS + Android | Web only (PWA-like) | iOS + Android (web-first) | Web only (responsive) |
-| Self-hosted | No | No | Yes | No | Yes |
-| Pricing | $100/yr | $110/yr | Free (self-hosted) | $100/yr | Free (SimpleFIN $15/yr) |
-| Manual entry | Yes | Yes (primary workflow) | Yes | Yes | v1.x |
-| Calendar view | Yes (bills) | No | No | Yes | No (anti-feature) |
-| Credit card handling | Standard account | Dedicated payment categories | Standard account | Standard account | Standard account (payments = transfers) |
+Concrete mapping of tools to existing service layer.
+
+### Query Tools (Read-Only, Auto-Approve)
+
+| Tool Name | Description | Service/Source | Input | Output |
+|-----------|-------------|----------------|-------|--------|
+| `get_account_balances` | List all accounts with current balances | accounts table | none | account name, type, balance |
+| `get_budget_summary` | Budget status for current or specified month | `budget-service` fns | period (optional) | per-category: allocated, spent, remaining |
+| `get_spending_by_category` | Spending breakdown by category | `reports-service.getSpendingByCategory()` | startDate, endDate | category, group, total |
+| `get_spending_over_time` | Monthly spending trend | `reports-service.getSpendingOverTime()` | startDate, endDate | period, total |
+| `get_net_worth` | Net worth over time | `reports-service.getNetWorthOverTime()` | startDate, endDate | date, total |
+| `list_transactions` | Search/filter transactions | transactions table | payee, category, dateRange, limit | transaction list |
+| `list_categories` | All categories and groups | `category-service.listGroupsWithCategories()` | none | groups with categories |
+| `list_rules` | All categorization rules | `rules-service` | none | rules with conditions |
+| `get_sync_status` | Last sync time and errors | sync_log table | none | last sync time, status, errors |
+| `get_uncategorized_transactions` | Transactions without a category | transactions table | limit | transaction list |
+| `get_transfer_suggestions` | Pending transfer candidates | `transfer-service` | none | transfer pairs |
+
+### Action Tools (Write, Most Auto-Approve)
+
+| Tool Name | Description | Service/Source | Confirmation Required |
+|-----------|-------------|----------------|----------------------|
+| `categorize_transaction` | Set category on a single transaction | transactions UPDATE | No |
+| `create_rule` | Create a categorization rule | `rules-service.createRule()` + retroactive apply | No |
+| `update_rule` | Modify an existing rule | `rules-service.updateRule()` | No |
+| `delete_rule` | Remove a categorization rule | `rules-service.deleteRule()` | No |
+| `set_budget_allocation` | Set budget amount for category/period | `budget-service.setAllocation()` | YES -- amount change |
+| `set_default_allocation` | Set default monthly budget for category | `budget-service.setDefaultAllocation()` | YES -- amount change |
+| `confirm_transfer` | Confirm a suggested transfer pair | `transfer-service.confirmTransfer()` | No |
+| `reject_transfer` | Reject a suggested transfer pair | `transfer-service.rejectCandidate()` | No |
+| `trigger_sync` | Run a SimpleFIN sync now | `sync-service.runSync()` | No |
 
 ## Sources
 
-- [YNAB Features](https://www.ynab.com/features) -- official feature listing
-- [YNAB Overspending Guide](https://support.ynab.com/en_us/overspending-in-ynab-a-guide-ryWoxEyi) -- rollover and overspending mechanics
-- [YNAB Monthly Rollovers](https://www.ynab.com/blog/master-your-monthly-rollovers) -- rollover behavior details
-- [Monarch Money](https://www.monarch.com) -- competitor feature overview
-- [Monarch Transaction Rules](https://help.monarch.com/hc/en-us/articles/360048393372-Creating-Transaction-Rules) -- rules engine details
-- [Monarch Split Transactions](https://help.monarch.com/hc/en-us/articles/360050178492-Splitting-Transactions) -- split transaction support
-- [Actual Budget Docs - Budgeting](https://actualbudget.org/docs/budgeting/) -- envelope budgeting implementation
-- [Actual Budget Docs - Rules](https://actualbudget.org/docs/budgeting/rules/) -- rules engine with stages and conditions
-- [Actual Budget Envelope Budgeting](https://actualbudget.org/docs/getting-started/envelope-budgeting/) -- methodology explanation
-- [Lunch Money Features](https://lunchmoney.app/features) -- competitor feature listing
-- [Key Features Every Personal Finance App Needs in 2026](https://financialpanther.com/key-features-every-personal-finance-app-needs-in-2026/) -- industry expectations
-- [Best Budgeting Apps 2026 - NerdWallet](https://www.nerdwallet.com/finance/learn/best-budget-apps) -- market comparison
-- [Zero-Based Budgeting Apps 2026 Comparison](https://waypointbudget.com/blog/zero-based-budgeting-apps-2026) -- envelope budgeting landscape
+- [Claude Agent SDK Overview](https://platform.claude.com/docs/en/agent-sdk/overview) -- official SDK capabilities, built-in tools, session management (HIGH confidence)
+- [Claude Agent SDK TypeScript Reference](https://platform.claude.com/docs/en/agent-sdk/typescript) -- `query()`, `tool()`, `createSdkMcpServer()` API, Options type (HIGH confidence)
+- [Claude Agent SDK Custom Tools Guide](https://platform.claude.com/docs/en/agent-sdk/custom-tools) -- tool definition pattern, MCP server creation, error handling, annotations (HIGH confidence)
+- [Claude Agent SDK Quickstart](https://platform.claude.com/docs/en/agent-sdk/quickstart) -- agent loop pattern, permission modes, streaming (HIGH confidence)
+- [@anthropic-ai/claude-agent-sdk npm](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk) -- v0.2.81, Node.js 18+ required (HIGH confidence)
+- [Cleo AI Financial Assistant](https://web.meetcleo.com/) -- personal finance chatbot feature patterns (MEDIUM confidence)
+- [Finance AI Chatbot: Use Cases & Best Solutions 2026](https://www.gptbots.ai/blog/finance-ai-chatbot) -- industry feature expectations (MEDIUM confidence)
+- [How to Build an AI-Powered Financial Assistant App in 2026](https://intellias.com/ai-financial-assistant-app-development/) -- architecture patterns (MEDIUM confidence)
+- [Using AI chatbots for personal finance management](https://medium.com/@PedalsUp/using-ai-chatbots-for-personal-finance-management-c87b2fa4cbb7) -- NLP query patterns, budget management features (LOW confidence)
+- [How I Built a Personal Finance AI Assistant with Local Language Models](https://medium.com/@sunbyrne/how-i-built-a-personal-finance-ai-assistant-with-local-language-models-2c0603b95cdc) -- implementation patterns (LOW confidence)
 
 ---
-*Feature research for: Personal envelope budgeting (self-hosted, single-user)*
-*Researched: 2026-03-22*
+*Feature research for: AI conversational agent for personal envelope budgeting app*
+*Researched: 2026-03-23*

@@ -1,569 +1,438 @@
 # Architecture Patterns
 
-**Domain:** Personal budgeting / envelope budgeting web app
-**Researched:** 2026-03-22
+**Domain:** Claude Agent SDK integration into existing Express/tRPC personal budgeting app
+**Researched:** 2026-03-23
 
 ## Recommended Architecture
 
-Three-layer monolith in a monorepo. Single process serves both API and static assets. No microservices, no BFF, no separate worker processes. SQLite is the only data store.
+### High-Level Data Flow
 
 ```
-Browser (React SPA)
+React Chat UI (ChatPage.tsx)
     |
-    | tRPC over HTTP (JSON batched)
+    | POST /trpc/agent.chat (tRPC mutation)
     |
-Express Server
-    |--- tRPC Router Layer (procedures grouped by domain)
-    |--- Service Layer (business logic, orchestration)
-    |--- Data Access Layer (better-sqlite3 queries)
+Express + tRPC Router (agent-router.ts)
     |
-SQLite file (~/minerva-money/data/minerva.db)
+    | Creates/resumes Agent SDK session
+    | Collects messages until result
     |
-    |--- launchd scheduled backup --> iCloud Drive
+Claude Agent SDK (query() — V1 stable API)
+    |  - systemPrompt: budgeting assistant persona
+    |  - tools: [] (all built-ins REMOVED)
+    |  - mcpServers: { minerva: inProcessMcpServer }
+    |  - allowedTools: ["mcp__minerva__*"]
+    |
+In-Process MCP Server (createSdkMcpServer)
+    |  - 10+ query tools (readOnlyHint: true)
+    |  - 9+ action tools (mutations)
+    |  - Each tool handler closes over db instance
+    |
+Existing Service Layer
+    |  budget-service, rules-service, reports-service,
+    |  category-service, transfer-service, sync-service
+    |
+SQLite via better-sqlite3
 ```
+
+### Key Architectural Decision: Agent SDK with Custom MCP Tools Only
+
+The Claude Agent SDK (formerly Claude Code SDK) is a general-purpose agent runtime with built-in tools for file I/O, bash commands, web search, and code editing. **None of these are appropriate for a budgeting chatbot.** The architecture disables all built-in tools via `tools: []` and exclusively uses custom MCP tools defined with `tool()` and served through an in-process MCP server via `createSdkMcpServer()`.
+
+**Confidence: HIGH** -- The `tools: []` option removes all built-ins from context. Custom tools via in-process MCP server are a first-class, documented pattern. See the official [Custom Tools Guide](https://platform.claude.com/docs/en/agent-sdk/custom-tools).
 
 ### Component Boundaries
 
-| Component | Responsibility | Communicates With |
-|-----------|---------------|-------------------|
-| **React SPA** | UI rendering, user interaction, client-side cache | tRPC client (via TanStack Query) |
-| **tRPC Router Layer** | Input validation (Zod), procedure definitions, request/response shaping | Service Layer |
-| **Service Layer** | Business logic: budgeting math, categorization rules, sync orchestration, transfer detection | Data Access Layer, SimpleFIN Client |
-| **Data Access Layer** | SQL queries, transactions, migrations | SQLite via better-sqlite3 |
-| **SimpleFIN Client** | HTTP calls to SimpleFIN API, response normalization | SimpleFIN API (external) |
-| **Backup Module** | Atomic SQLite snapshots to iCloud Drive | SQLite file, filesystem |
-| **Scheduler** | Cron-like triggers for sync and backup | Service Layer, Backup Module |
+| Component | Responsibility | New/Modified | Communicates With |
+|-----------|---------------|-------------|-------------------|
+| `packages/server/src/agent/tools/query-tools.ts` | Read-only MCP tool definitions | **NEW** | Service layer functions |
+| `packages/server/src/agent/tools/action-tools.ts` | Mutation MCP tool definitions | **NEW** | Service layer functions |
+| `packages/server/src/agent/mcp-server.ts` | Create in-process MCP server via `createSdkMcpServer` | **NEW** | tools, agent-service |
+| `packages/server/src/agent/agent-service.ts` | Manage SDK sessions, execute queries, collect responses | **NEW** | mcp-server, tRPC context |
+| `packages/server/src/agent/agent-router.ts` | tRPC router for chat endpoint | **NEW** | agent-service |
+| `packages/server/src/agent/system-prompt.ts` | System prompt constant for budgeting assistant | **NEW** | agent-service |
+| `packages/server/src/sync/trpc-router.ts` | Add `agent: agentRouter` to `appRouter` | **MODIFIED** (add 1 import + 1 line) | agent-router |
+| `packages/server/src/index.ts` | No changes needed -- context already has db | **UNCHANGED** | -- |
+| `packages/client/src/pages/ChatPage.tsx` | Chat UI with message list, input, markdown | **NEW** | tRPC client |
+| `packages/client/src/app.tsx` | Add `/chat` route | **MODIFIED** (add route) | ChatPage |
+| `packages/client/src/components/Layout.tsx` | Add Chat nav link | **MODIFIED** (add link) | -- |
 
-### Why These Boundaries
+### Data Flow: Chat Request Lifecycle
 
-**tRPC routers do NOT contain business logic.** They validate input with Zod, call a service function, and return the result. This keeps procedures thin and testable.
-
-**Service layer is the core.** All business rules live here: envelope allocation math, rule matching, dedup logic, transfer detection. Services call the data access layer but never import `better-sqlite3` directly.
-
-**Data access layer owns SQL.** Every SQL query lives in dedicated data access modules. Services never construct SQL strings. This isolates the database from business logic and makes queries easy to find and optimize.
-
-**SimpleFIN client is isolated.** It knows nothing about the database or business logic. It fetches, normalizes, and returns typed data. The sync service orchestrates between SimpleFIN client and data access.
-
-### Data Flow
-
-#### Sync Flow (Primary Data Ingestion)
-
-```
-1. Scheduler triggers sync (or user clicks "Sync Now")
-2. SyncService.runSync()
-3.   --> SimpleFINClient.fetchAccounts({ startDate, endDate })
-4.   --> SimpleFIN API returns raw account + transaction JSON
-5.   --> SimpleFINClient normalizes response to typed objects
-6.   --> SyncService.processAccounts(normalizedAccounts)
-7.       --> For each account:
-8.           AccountDAO.upsertAccount(account)
-9.           BalanceSnapshotDAO.recordSnapshot(accountId, balance, date)
-10.      --> For each transaction:
-11.          DeduplicationService.isDuplicate(tx) -- check transactionId, then hash
-12.          If new: TransactionDAO.insert(tx)
-13.          CategorizationService.categorize(tx) -- apply rules
-14.          TransferDetectionService.checkForMatch(tx) -- look for offsetting tx
-15. --> SyncStatusDAO.recordSyncResult(success/error, timestamp)
-16. --> BackupModule.triggerPostSyncBackup()
-17. --> TanStack Query invalidation (client refetches stale data)
+**Step 1: User sends message from React UI**
+```typescript
+// ChatPage.tsx
+const chatMutation = trpc.agent.chat.useMutation();
+chatMutation.mutate({
+  message: "How much did I spend on groceries this month?",
+  sessionId: sessionId ?? undefined,
+});
 ```
 
-#### Budget Flow (User Assigns Money)
-
-```
-1. User opens budget view for current month
-2. Client fetches: budget allocations + category balances + envelope states
-3.   --> BudgetService.getMonthBudget(year, month)
-4.       --> BudgetDAO.getAllocations(year, month)
-5.       --> TransactionDAO.getCategorySpending(year, month)
-6.       --> Calculate: allocated - spent + rollover = available per envelope
-7. User adjusts an envelope allocation
-8.   --> BudgetService.setAllocation(categoryId, year, month, amount)
-9.       --> BudgetDAO.upsertAllocation(categoryId, year, month, amount)
-10.      --> Return updated budget state
-```
-
-#### Categorization Flow
-
-```
-1. New transaction arrives (via sync) or user creates rule
-2. CategorizationService.categorize(transaction)
-3.   --> RuleDAO.getMatchingRules(transaction.merchant, transaction.amount, transaction.memo)
-4.   --> Score rules by specificity (field count)
-5.   --> Apply most-specific rule (ties: newest wins)
-6.   --> TransactionDAO.setCategoryId(transactionId, categoryId)
-7.
-8. When rule is created/updated:
-9.   --> RuleDAO.upsertRule(rule)
-10.  --> CategorizationService.reapplyRule(rule)
-11.      --> TransactionDAO.getUncategorizedOrMatchingTransactions()
-12.      --> Re-evaluate all affected transactions
+**Step 2: tRPC router receives request, calls agent service**
+```typescript
+// agent-router.ts
+const agentRouter = router({
+  chat: publicProcedure
+    .input(z.object({
+      message: z.string().min(1),
+      sessionId: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      return executeAgentQuery(ctx.db, input.message, input.sessionId);
+    }),
+});
 ```
 
-## Database Schema Design
+**Step 3: Agent service creates SDK session and collects response**
+```typescript
+// agent-service.ts
+import { query } from "@anthropic-ai/claude-agent-sdk";
 
-Six core tables plus supporting tables. Use views (prefixed `v_`) for common query patterns, following Actual Budget's pattern of separating storage from presentation.
+export async function executeAgentQuery(
+  db: Database.Database,
+  message: string,
+  sessionId?: string,
+): Promise<{ response: string; sessionId: string }> {
+  const mcpServer = createMinervaServer(db);
+  let resultSessionId = "";
+  let resultText = "";
 
-### Core Tables
+  for await (const msg of query({
+    prompt: message,
+    options: {
+      systemPrompt: SYSTEM_PROMPT,
+      tools: [],                              // Remove ALL built-in tools
+      mcpServers: { minerva: mcpServer },
+      allowedTools: ["mcp__minerva__*"],       // Auto-approve all custom tools
+      permissionMode: "bypassPermissions",
+      resume: sessionId,                       // Resume if continuing conversation
+      model: "claude-sonnet-4-20250514",
+    },
+  })) {
+    if (msg.type === "system" && msg.subtype === "init") {
+      resultSessionId = msg.session_id;
+    }
+    if (msg.type === "result" && msg.subtype === "success") {
+      resultText = msg.result;
+    }
+  }
 
-```sql
--- Financial institution accounts
-CREATE TABLE accounts (
-  id TEXT PRIMARY KEY,          -- UUID
-  simplefin_id TEXT UNIQUE,     -- SimpleFIN's account identifier
-  name TEXT NOT NULL,
-  institution TEXT,
-  type TEXT NOT NULL,            -- checking, savings, credit, loan, investment
-  balance INTEGER NOT NULL DEFAULT 0,  -- cents (integer math, no floats)
-  available_balance INTEGER,
-  currency TEXT DEFAULT 'USD',
-  is_off_budget INTEGER DEFAULT 0,  -- investment accounts are off-budget
-  sort_order INTEGER DEFAULT 0,
-  closed INTEGER DEFAULT 0,
-  updated_at TEXT NOT NULL
-);
-
--- Budget categories (envelopes)
-CREATE TABLE categories (
-  id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  group_id TEXT REFERENCES category_groups(id),
-  is_income INTEGER DEFAULT 0,
-  sort_order INTEGER DEFAULT 0,
-  hidden INTEGER DEFAULT 0
-);
-
-CREATE TABLE category_groups (
-  id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  is_income INTEGER DEFAULT 0,
-  sort_order INTEGER DEFAULT 0
-);
-
--- Individual financial transactions
-CREATE TABLE transactions (
-  id TEXT PRIMARY KEY,
-  account_id TEXT NOT NULL REFERENCES accounts(id),
-  category_id TEXT REFERENCES categories(id),
-  date TEXT NOT NULL,              -- ISO 8601 date (YYYY-MM-DD)
-  amount INTEGER NOT NULL,         -- cents, negative = outflow
-  merchant TEXT,
-  memo TEXT,
-  simplefin_id TEXT,               -- original SimpleFIN transactionId
-  dedup_hash TEXT,                 -- account+date+amount+merchant hash
-  is_transfer INTEGER DEFAULT 0,
-  transfer_pair_id TEXT,           -- links to the other side of a transfer
-  is_pending INTEGER DEFAULT 0,
-  imported_at TEXT NOT NULL,
-  UNIQUE(simplefin_id),
-  UNIQUE(dedup_hash)
-);
-
--- Monthly budget allocations per category
-CREATE TABLE budget_allocations (
-  id TEXT PRIMARY KEY,
-  category_id TEXT NOT NULL REFERENCES categories(id),
-  month TEXT NOT NULL,             -- YYYY-MM format
-  amount INTEGER NOT NULL DEFAULT 0,  -- cents allocated this month
-  UNIQUE(category_id, month)
-);
-
--- Default monthly allocation per category (template)
-CREATE TABLE category_defaults (
-  category_id TEXT PRIMARY KEY REFERENCES categories(id),
-  monthly_amount INTEGER NOT NULL DEFAULT 0  -- cents, auto-split across pay periods
-);
-
--- Categorization rules
-CREATE TABLE rules (
-  id TEXT PRIMARY KEY,
-  category_id TEXT NOT NULL REFERENCES categories(id),
-  merchant_pattern TEXT,           -- substring or regex match
-  amount_min INTEGER,              -- cents
-  amount_max INTEGER,              -- cents
-  memo_pattern TEXT,               -- substring or regex match
-  specificity INTEGER NOT NULL,    -- count of non-null conditions (1-3)
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
-);
+  return { response: resultText, sessionId: resultSessionId };
+}
 ```
 
-### Supporting Tables
+**Step 4: SDK calls custom MCP tools autonomously as needed**
 
-```sql
--- Daily balance snapshots for trends
-CREATE TABLE balance_snapshots (
-  id TEXT PRIMARY KEY,
-  account_id TEXT NOT NULL REFERENCES accounts(id),
-  date TEXT NOT NULL,              -- YYYY-MM-DD
-  balance INTEGER NOT NULL,        -- cents
-  UNIQUE(account_id, date)
-);
+Claude reads tool descriptions, decides which to call, receives results, and may call additional tools before producing a final text response. The `for await` loop in Step 3 processes all intermediate messages and captures the final result.
 
--- Sync status tracking
-CREATE TABLE sync_log (
-  id TEXT PRIMARY KEY,
-  started_at TEXT NOT NULL,
-  completed_at TEXT,
-  status TEXT NOT NULL,            -- running, success, error
-  error_message TEXT,
-  accounts_synced INTEGER DEFAULT 0,
-  transactions_added INTEGER DEFAULT 0
-);
-
--- App configuration / settings
-CREATE TABLE settings (
-  key TEXT PRIMARY KEY,
-  value TEXT
-);
-```
-
-### Key Schema Decisions
-
-**Store money as integers (cents).** Floating point math causes rounding errors in financial calculations. Store $45.67 as 4567. Format for display only at the UI layer.
-
-**Month as YYYY-MM string in budget_allocations.** Simple to query, sort, and group. No date arithmetic needed.
-
-**Specificity as computed column on rules.** Pre-calculate `specificity = (merchant_pattern IS NOT NULL) + (amount_min IS NOT NULL OR amount_max IS NOT NULL) + (memo_pattern IS NOT NULL)` on insert/update. Avoids recalculating during rule matching.
-
-**Dedup hash as UNIQUE constraint.** The database enforces deduplication at the storage level. INSERT OR IGNORE handles duplicates without application code.
-
-**UUIDs as primary keys.** Use `crypto.randomUUID()`. Auto-increment IDs leak information and cause issues with backups/restores.
+**Step 5: Response returned to client, rendered as markdown**
 
 ## Patterns to Follow
 
-### Pattern 1: Repository Pattern for Data Access
+### Pattern 1: Tool Factory with DB Closure
 
-**What:** Each domain entity gets a dedicated DAO (Data Access Object) module that encapsulates all SQL queries for that entity.
-**When:** Always. Every SQL query goes through a DAO.
+All tools need `db: Database.Database` but the `tool()` helper signature does not support injecting context. Use a factory function that closes over `db`.
+
+**Confidence: HIGH** -- This is the standard pattern. The `tool()` handler is an async function; closure is the natural way to provide dependencies.
 
 ```typescript
-// src/server/dao/transactions.ts
-import type { Database } from 'better-sqlite3';
+// mcp-server.ts
+import { createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
+import { createQueryTools } from "./tools/query-tools.js";
+import { createActionTools } from "./tools/action-tools.js";
 
-export function createTransactionDAO(db: Database) {
-  const insertStmt = db.prepare(`
-    INSERT OR IGNORE INTO transactions (id, account_id, date, amount, merchant, memo, simplefin_id, dedup_hash, imported_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
+export function createMinervaServer(db: Database.Database) {
+  return createSdkMcpServer({
+    name: "minerva",
+    version: "1.0.0",
+    tools: [
+      ...createQueryTools(db),
+      ...createActionTools(db),
+    ],
+  });
+}
+```
 
-  const byCategoryMonth = db.prepare(`
-    SELECT category_id, SUM(amount) as total
-    FROM transactions
-    WHERE date >= ? AND date < ? AND is_transfer = 0
-    GROUP BY category_id
-  `);
+```typescript
+// tools/query-tools.ts
+import { tool } from "@anthropic-ai/claude-agent-sdk";
+import { z } from "zod";
+import { getBudgetSummary, getAvailableToBudget } from "../../budget/budget-service.js";
 
-  return {
-    insert(tx: NewTransaction) {
-      return insertStmt.run(tx.id, tx.accountId, tx.date, tx.amount, tx.merchant, tx.memo, tx.simpleFinId, tx.dedupHash, tx.importedAt);
+export function createQueryTools(db: Database.Database) {
+  const getBudgetSummaryTool = tool(
+    "get_budget_summary",
+    "Get budget summary for a month showing allocated, spent, available, and rollover amounts per category. Amounts are in cents.",
+    { period: z.string().regex(/^\d{4}-\d{2}$/).describe("Month in YYYY-MM format, e.g. 2026-03") },
+    async ({ period }) => {
+      const summary = getBudgetSummary(db, period);
+      const available = getAvailableToBudget(db, period);
+      return {
+        content: [{ type: "text", text: JSON.stringify({ categories: summary, availableToBudget: available }) }],
+      };
     },
-    getCategorySpending(startDate: string, endDate: string) {
-      return byCategoryMonth.all(startDate, endDate);
-    }
-  };
+    { annotations: { readOnlyHint: true } }
+  );
+
+  return [getBudgetSummaryTool, /* ... more tools */];
 }
 ```
 
-**Why:** Prepared statements are compiled once and reused. `better-sqlite3` is synchronous, so this pattern is natural and fast. Grouping queries by entity makes them discoverable.
+### Pattern 2: Session Persistence via SDK
 
-### Pattern 2: Service Layer Orchestration
+The Agent SDK manages session persistence automatically (writes to `~/.claude/` by default). The server stores zero session state. The client tracks `sessionId` in React state and sends it on subsequent messages.
 
-**What:** Services contain business logic and orchestrate between DAOs. They do not contain SQL.
-**When:** Any operation that involves business rules, multiple DAOs, or external services.
-
-```typescript
-// src/server/services/sync.ts
-export function createSyncService(deps: {
-  simplefin: SimpleFINClient;
-  accountDAO: AccountDAO;
-  transactionDAO: TransactionDAO;
-  snapshotDAO: BalanceSnapshotDAO;
-  categorizationService: CategorizationService;
-  syncLogDAO: SyncLogDAO;
-}) {
-  return {
-    async runSync() {
-      const logId = deps.syncLogDAO.start();
-      try {
-        const accounts = await deps.simplefin.fetchAccounts({ startDate: lastSyncDate() });
-        for (const account of accounts) {
-          deps.accountDAO.upsert(account);
-          deps.snapshotDAO.record(account.id, account.balance, today());
-          for (const tx of account.transactions) {
-            const result = deps.transactionDAO.insert(tx);
-            if (result.changes > 0) {
-              deps.categorizationService.categorize(tx);
-            }
-          }
-        }
-        deps.syncLogDAO.complete(logId, 'success');
-      } catch (err) {
-        deps.syncLogDAO.complete(logId, 'error', err.message);
-        throw err;
-      }
-    }
-  };
-}
-```
-
-### Pattern 3: tRPC Router as Thin Controller
-
-**What:** tRPC procedures validate input and delegate to services. No business logic in routers.
-**When:** Always.
+**Confidence: HIGH** -- `persistSession: true` is the default. The `resume` option accepts a prior `session_id` to continue conversations with full context.
 
 ```typescript
-// src/server/routers/budget.ts
-export const budgetRouter = router({
-  getMonth: publicProcedure
-    .input(z.object({ year: z.number(), month: z.number().min(1).max(12) }))
-    .query(({ input, ctx }) => {
-      return ctx.budgetService.getMonthBudget(input.year, input.month);
-    }),
+// Client-side
+const [sessionId, setSessionId] = useState<string | null>(null);
+const [messages, setMessages] = useState<ChatMessage[]>([]);
 
-  setAllocation: publicProcedure
-    .input(z.object({
-      categoryId: z.string().uuid(),
-      year: z.number(),
-      month: z.number().min(1).max(12),
-      amount: z.number().int(), // cents
-    }))
-    .mutation(({ input, ctx }) => {
-      return ctx.budgetService.setAllocation(input.categoryId, input.year, input.month, input.amount);
-    }),
+const chatMutation = trpc.agent.chat.useMutation({
+  onSuccess: (data) => {
+    setSessionId(data.sessionId);
+    setMessages(prev => [...prev, { role: "assistant", content: data.response }]);
+  },
 });
-```
 
-### Pattern 4: Dependency Injection via Context
-
-**What:** Create all DAOs and services at startup, pass them through tRPC context.
-**When:** App initialization.
-
-```typescript
-// src/server/context.ts
-export function createContext(db: Database) {
-  const accountDAO = createAccountDAO(db);
-  const transactionDAO = createTransactionDAO(db);
-  const ruleDAO = createRuleDAO(db);
-  const budgetDAO = createBudgetDAO(db);
-  const snapshotDAO = createBalanceSnapshotDAO(db);
-  const syncLogDAO = createSyncLogDAO(db);
-
-  const categorizationService = createCategorizationService({ ruleDAO, transactionDAO });
-  const budgetService = createBudgetService({ budgetDAO, transactionDAO });
-  const syncService = createSyncService({ /* ... */ });
-
-  return { accountDAO, transactionDAO, budgetService, syncService, categorizationService };
+function sendMessage(text: string) {
+  setMessages(prev => [...prev, { role: "user", content: text }]);
+  chatMutation.mutate({ message: text, sessionId: sessionId ?? undefined });
 }
 ```
 
-### Pattern 5: SQLite Transactions for Batch Operations
+### Pattern 3: Collect-and-Return (Not Streaming)
 
-**What:** Wrap multi-row inserts and cross-table updates in SQLite transactions.
-**When:** Sync ingestion, rule reapplication, budget period initialization.
+Per PROJECT.md's explicit decision: use collect-and-return over streaming for simplicity. The tRPC mutation waits for the full agent response before returning. This avoids WebSocket complexity.
+
+**Confidence: HIGH** -- The `for await` loop naturally collects all SDK messages. The final `result` message contains the complete response text.
+
+### Pattern 4: Rich Tool Descriptions with Financial Context
+
+Tool descriptions are critical -- Claude reads them to decide which tools to call. Include financial domain context, data format notes, and example use cases.
 
 ```typescript
-const insertMany = db.transaction((transactions: NewTransaction[]) => {
-  for (const tx of transactions) {
-    insertStmt.run(tx);
+// Good: Rich description with domain context
+tool(
+  "get_spending_by_category",
+  "Get total spending broken down by budget category for a date range. " +
+  "Amounts are in cents (integer). Excludes confirmed transfers between owned accounts. " +
+  "Returns categoryName, groupName, and total for each category with spending. " +
+  "Use this to answer questions like 'how much did I spend on groceries?' or 'what are my top spending categories?'",
+  { startDate: z.string().describe("Start date YYYY-MM-DD"), endDate: z.string().describe("End date YYYY-MM-DD") },
+  handler,
+  { annotations: { readOnlyHint: true } }
+);
+```
+
+### Pattern 5: Read-Only Annotations for Parallel Execution
+
+Mark all query tools with `readOnlyHint: true`. This tells the SDK that these tools can be executed in parallel, improving response time when Claude needs data from multiple sources.
+
+```typescript
+// Query tools: parallel-safe
+{ annotations: { readOnlyHint: true } }
+
+// Action tools: sequential (default)
+// No annotations needed -- destructiveHint defaults to true
+```
+
+### Pattern 6: Error Handling in Tool Handlers
+
+Return `isError: true` instead of throwing exceptions. This keeps the agent loop alive so Claude can explain the error to the user.
+
+```typescript
+async ({ transactionId, categoryId }) => {
+  try {
+    updateTransactionCategory(db, transactionId, categoryId);
+    return { content: [{ type: "text", text: `Transaction ${transactionId} categorized successfully.` }] };
+  } catch (error) {
+    return {
+      content: [{ type: "text", text: `Failed to categorize transaction: ${error instanceof Error ? error.message : String(error)}` }],
+      isError: true,
+    };
   }
-});
-// 100x faster than individual inserts
+}
 ```
-
-**Why:** `better-sqlite3` transactions are synchronous and dramatically faster for batch operations. A sync importing 200 transactions in a single transaction takes milliseconds vs. seconds for individual inserts.
 
 ## Anti-Patterns to Avoid
 
-### Anti-Pattern 1: SQL in Route Handlers
-**What:** Writing SQL queries directly in tRPC procedures.
-**Why bad:** Untestable, hard to find queries, business logic mixed with transport concerns.
-**Instead:** All SQL lives in DAO modules. Routers call services, services call DAOs.
+### Anti-Pattern 1: Exposing Built-in Agent Tools
+**What:** Allowing Read, Write, Edit, Bash, Glob, Grep, WebSearch tools.
+**Why bad:** The agent could read/write arbitrary files, run shell commands, or access the internet. Completely inappropriate for a budgeting chatbot. Also wastes context window on irrelevant tool definitions.
+**Instead:** Set `tools: []` to remove all built-ins. Use only custom MCP tools via `createSdkMcpServer`.
 
-### Anti-Pattern 2: Floating Point Money
-**What:** Storing or calculating money as `number` (float).
-**Why bad:** `0.1 + 0.2 !== 0.3` in JavaScript. Rounding errors accumulate and budgets won't balance.
-**Instead:** Store cents as integers. Format for display with `(amount / 100).toFixed(2)` only at the UI boundary.
+### Anti-Pattern 2: Direct DB Access in Tool Handlers
+**What:** Writing raw SQL queries inside tool handlers instead of calling existing service functions.
+**Why bad:** Duplicates logic, bypasses business rules (e.g., transfer exclusion from spending reports, specificity scoring for rules), creates inconsistencies between UI and agent behavior.
+**Instead:** Tool handlers call existing service functions (`getBudgetSummary(db, period)`, `getSpendingByCategory(db, start, end)`, etc.). Only use direct queries for simple lookups not covered by existing services (e.g., `get_accounts` listing).
 
-### Anti-Pattern 3: Over-Normalizing the Schema
-**What:** Creating separate tables for every relationship (e.g., transaction_categories join table, rule_conditions table).
-**Why bad:** Adds complexity without benefit for a single-user app. SQLite thrives on simple schemas with few joins.
-**Instead:** Inline foreign keys. A transaction has one category_id. A rule has nullable condition columns.
+### Anti-Pattern 3: Fresh Sessions Per Turn
+**What:** Ignoring session management -- creating a fresh `query()` call without `resume` for every user message.
+**Why bad:** Claude loses all conversation context. Each message becomes independent. The user cannot have multi-turn conversations ("What about last month?" after discussing current month).
+**Instead:** Capture `session_id` from the first `system.init` message, return it to the client, and pass it as `resume` on subsequent turns.
 
-### Anti-Pattern 4: Async Database Calls
-**What:** Using an async SQLite driver or wrapping better-sqlite3 in promises.
-**Why bad:** `better-sqlite3` is intentionally synchronous. Wrapping it in async adds overhead and complexity with zero benefit for a single-user app.
-**Instead:** Use synchronous calls directly. The only async boundary is the SimpleFIN HTTP client.
+### Anti-Pattern 4: Using V2 Preview Interface in Production
+**What:** Using `unstable_v2_createSession()` / `unstable_v2_prompt()`.
+**Why bad:** Explicitly marked as **unstable preview** in official docs: "APIs may change based on feedback before becoming stable." Session forking is V1-only.
+**Instead:** Use the stable V1 `query()` API with `resume` for multi-turn conversations.
 
-### Anti-Pattern 5: Client-Side Budget Calculations
-**What:** Sending raw transactions to the client and calculating budget state in React.
-**Why bad:** Moves financial logic to the client where it's duplicated, harder to test, and slower for large transaction sets.
-**Instead:** Server computes budget state (allocated, spent, available, rollover) and sends computed values.
+### Anti-Pattern 5: Premature Streaming via WebSocket
+**What:** Building WebSocket infrastructure before validating response times with collect-and-return.
+**Why bad:** Adds significant complexity (WebSocket server, connection management, reconnection, client-side streaming state) that may not be needed for a single-user app.
+**Instead:** Start with tRPC mutation (collect-and-return). Measure actual response times. Only add streaming if latency is unacceptable.
 
-### Anti-Pattern 6: Global Mutable State for Scheduler
-**What:** Using `setInterval` or a global timer for sync/backup scheduling.
-**Why bad:** Leaks between tests, no clean shutdown, hard to reason about.
-**Instead:** Create a scheduler object at startup that can be stopped cleanly. Use `node-cron` or a simple wrapper around `setTimeout` with cancellation.
+### Anti-Pattern 6: Putting Agent SDK in a Separate Process
+**What:** Running the agent as a separate microservice or worker process.
+**Why bad:** Unnecessary complexity. The in-process MCP server runs in the same Node.js process as Express. The SDK spawns its own subprocess internally -- no need for additional process management.
+**Instead:** The agent service is a module imported by the tRPC router, running in the same Express process.
 
-## Monorepo Structure
+## New Components Detailed
 
-```
-minerva-money/
-  package.json              # workspace root
-  packages/
-    shared/                 # shared types and utilities
-      src/
-        types/              # domain types (Account, Transaction, Budget, etc.)
-        constants.ts        # shared constants
-        money.ts            # cent <-> dollar utilities
-    server/
-      src/
-        index.ts            # Express + tRPC setup, scheduler start
-        context.ts          # DI container creation
-        db/
-          connection.ts     # better-sqlite3 initialization
-          migrations/       # SQL migration files
-        dao/                # data access objects
-          accounts.ts
-          transactions.ts
-          budget.ts
-          rules.ts
-          balance-snapshots.ts
-          sync-log.ts
-          settings.ts
-        services/           # business logic
-          sync.ts
-          categorization.ts
-          budget.ts
-          transfer-detection.ts
-          backup.ts
-        routers/            # tRPC routers
-          accounts.ts
-          transactions.ts
-          budget.ts
-          rules.ts
-          sync.ts
-          settings.ts
-          index.ts          # mergeRouters
-        simplefin/
-          client.ts         # SimpleFIN HTTP client
-          types.ts          # SimpleFIN API types
-        scheduler.ts        # cron-like sync/backup scheduling
-    client/
-      src/
-        main.tsx
-        App.tsx
-        api/                # tRPC client setup
-          trpc.ts
-        components/
-          layout/           # shell, sidebar, header
-          dashboard/        # balance cards, spending chart, trends
-          budget/           # envelope grid, allocation editor
-          transactions/     # transaction list, filters, rule editor
-          accounts/         # account list, detail view
-          settings/         # sync config, category management
-          common/           # buttons, inputs, modals, etc.
-        hooks/              # custom hooks wrapping tRPC queries
-        utils/              # formatters, date helpers
+### 1. Query Tools (`packages/server/src/agent/tools/query-tools.ts`)
+
+Factory function returning read-only MCP tool definitions. Each wraps an existing service function or simple DB query.
+
+| Tool Name | Wraps | Parameters | Service |
+|-----------|-------|------------|---------|
+| `get_accounts` | Direct query | none | (simple SQL) |
+| `get_budget_summary` | `getBudgetSummary()` + `getAvailableToBudget()` | `period` | budget-service |
+| `get_spending_by_category` | `getSpendingByCategory()` | `startDate, endDate` | reports-service |
+| `get_spending_over_time` | `getSpendingOverTime()` | `startDate, endDate` | reports-service |
+| `get_net_worth` | `getNetWorth()` | `startDate?, endDate?` | reports-service |
+| `get_transactions` | Direct query with filters | `startDate?, endDate?, categoryId?, accountId?, limit?` | (filtered SQL) |
+| `get_categories` | `listGroupsWithCategories()` | none | category-service |
+| `get_rules` | `listRules()` | none | rules-service |
+| `get_sync_status` | Direct query (sync_log) | none | (simple SQL) |
+| `get_transfer_candidates` | `listTransferCandidates()` | none | transfer-service |
+| `get_budget_defaults` | `getDefaults()` | none | budget-service |
+
+### 2. Action Tools (`packages/server/src/agent/tools/action-tools.ts`)
+
+Factory function returning mutation MCP tool definitions.
+
+| Tool Name | Wraps | Parameters | Service |
+|-----------|-------|------------|---------|
+| `categorize_transaction` | `updateTransactionCategory()` | `transactionId, categoryId` | category-service |
+| `create_rule` | `createRule()` + `applyRule()` | `name, merchantPattern, matchType, amountMin, amountMax, memoPattern, categoryId` | rules-service |
+| `update_rule` | `updateRule()` | `id, ...ruleFields` | rules-service |
+| `delete_rule` | `deleteRule()` | `id` | rules-service |
+| `set_budget_allocation` | `setAllocation()` | `categoryId, period, amount` | budget-service |
+| `set_default_allocation` | `setDefaultAllocation()` | `categoryId, amount` | budget-service |
+| `confirm_transfer` | `confirmTransfer()` | `id` | transfer-service |
+| `dismiss_transfer` | `dismissTransfer()` | `id` | transfer-service |
+| `trigger_sync` | `runSync()` | none | sync-service |
+
+### 3. MCP Server Factory (`packages/server/src/agent/mcp-server.ts`)
+
+Creates the in-process MCP server. Called once per agent query.
+
+```typescript
+export function createMinervaServer(db: Database.Database) {
+  return createSdkMcpServer({
+    name: "minerva",
+    version: "1.0.0",
+    tools: [...createQueryTools(db), ...createActionTools(db)],
+  });
+}
 ```
 
-**Why monorepo with workspaces:** tRPC requires the shared router type to be importable by the client. A monorepo with a `shared` package makes this trivial without publishing packages. The `shared` package contains domain types used by both client and server.
+### 4. System Prompt (`packages/server/src/agent/system-prompt.ts`)
 
-## Suggested Build Order
+Single exported string constant. Defines the agent persona and behavioral rules:
+- Identity: Minerva Money financial assistant
+- Envelope budgeting model awareness
+- Amounts stored in cents -- convert to dollars for display
+- Current date for default period calculations
+- When to ask for clarification vs infer (e.g., "this month" means current YYYY-MM)
+- Confirmation behavior: auto-execute most actions, ask user before budget amount changes
 
-Build in dependency order. Each phase produces something runnable.
+### 5. Agent Service (`packages/server/src/agent/agent-service.ts`)
 
-### Phase 1: Foundation (no UI needed)
+Core orchestration. Single exported function:
+- Creates in-process MCP server with `createMinervaServer(db)`
+- Calls `query()` with system prompt, no built-in tools, custom MCP tools, session resume
+- Iterates async generator, collects result text and session ID
+- Returns `{ response: string, sessionId: string }`
 
-1. **SQLite database + migrations** -- Schema is the foundation. Everything depends on it.
-2. **DAO layer** -- Basic CRUD for accounts, transactions, categories.
-3. **SimpleFIN client** -- Already partially built per PROJECT.md. Finalize and test.
-4. **Sync service** -- Connect SimpleFIN client to DAOs. Deduplication logic.
-5. **tRPC server** -- Wire up Express + tRPC with basic account/transaction procedures.
+### 6. Agent Router (`packages/server/src/agent/agent-router.ts`)
 
-**Rationale:** Get real data flowing into the database before building UI. Test sync with actual SimpleFIN data early to catch API surprises.
+tRPC router with single `chat` mutation. Input: `{ message: string, sessionId?: string }`. Output: `{ response: string, sessionId: string }`.
 
-### Phase 2: Core UI + Transactions
+### 7. Chat Page (`packages/client/src/pages/ChatPage.tsx`)
 
-6. **React app shell** -- Layout, sidebar, routing.
-7. **Account list + balances** -- Display synced accounts. First visible proof of life.
-8. **Transaction list** -- Display, sort, filter transactions. Manual categorization.
-9. **Sync UI** -- "Sync Now" button, sync status indicator, last sync time.
+Full-height chat page:
+- Message list (user right-aligned, assistant left-aligned)
+- Markdown rendering for assistant responses (`react-markdown`)
+- Text input with send button
+- Session state in `useState` (sessionId)
+- Loading indicator during mutation
+- Error display
+- "New conversation" button to reset sessionId
 
-**Rationale:** Users need to see their data before they can budget against it. Transaction viewing validates that sync is working correctly.
+## Integration Points Summary
 
-### Phase 3: Budgeting Engine
+### Files Modified (3 total, minimal changes)
 
-10. **Category/envelope management** -- CRUD for categories and groups.
-11. **Budget allocation system** -- Monthly allocations, defaults, the budget grid.
-12. **Rollover logic** -- Carry unspent funds forward.
-13. **Budget views** -- The envelope grid showing allocated/spent/available per category.
+1. **`packages/server/src/sync/trpc-router.ts`** -- Add `agent: agentRouter` to `appRouter`
+2. **`packages/client/src/app.tsx`** -- Add `/chat` route
+3. **`packages/client/src/components/Layout.tsx`** -- Add Chat nav link
 
-**Rationale:** Budgeting depends on categorized transactions. Categories should exist and have transactions before building the budget math.
+### Files Created (7 total)
 
-### Phase 4: Intelligence Layer
+1. `packages/server/src/agent/tools/query-tools.ts`
+2. `packages/server/src/agent/tools/action-tools.ts`
+3. `packages/server/src/agent/mcp-server.ts`
+4. `packages/server/src/agent/agent-service.ts`
+5. `packages/server/src/agent/agent-router.ts`
+6. `packages/server/src/agent/system-prompt.ts`
+7. `packages/client/src/pages/ChatPage.tsx`
 
-14. **Categorization rules engine** -- Rule CRUD, matching, specificity scoring, retroactive application.
-15. **Transfer detection** -- Auto-suggest matching transactions, manual confirm/link.
+### Dependencies Added
 
-**Rationale:** Rules and transfers are refinements on top of working transaction + budget flows. They improve data quality but aren't prerequisites for core function.
+- `@anthropic-ai/claude-agent-sdk` (server)
+- `react-markdown` (client, for rendering assistant responses)
 
-### Phase 5: Trends + Polish
+### Shared Context
 
-16. **Balance snapshots** -- Daily recording, historical data accumulation.
-17. **Dashboard** -- Net worth trend, top spending categories, summary cards.
-18. **Spending trends** -- Category-level spending over time charts.
-19. **Backup automation** -- launchd plist, post-sync backup trigger.
+The agent router uses the same tRPC context (`{ db, rateLimiter, client }`) as all existing routers. No changes to context creation in `index.ts`.
 
-**Rationale:** Trends need historical data, which accumulates over time. Build the recording mechanism early (Phase 1 snapshots in sync), but defer visualization until core features work.
-
-### Build Order Dependencies
+## Build Order (Considering Dependencies)
 
 ```
-Schema ─────> DAOs ─────> Services ─────> tRPC Routers ─────> React UI
-                |              |
-                |         SimpleFIN Client
-                |              |
-                └──── Sync Service ────> Sync UI
-                                            |
-                            Categories ─────> Budget Engine ──> Budget UI
-                                |                                  |
-                            Rules Engine                    Dashboard/Trends
-                                |
-                        Transfer Detection
+1. system-prompt.ts          (no dependencies)
+2. query-tools.ts            (depends on: service layer functions, zod)
+3. action-tools.ts           (depends on: service layer functions, zod)
+4. mcp-server.ts             (depends on: query-tools, action-tools)
+5. agent-service.ts          (depends on: mcp-server, system-prompt, @anthropic-ai/claude-agent-sdk)
+6. agent-router.ts           (depends on: agent-service)
+7. trpc-router.ts mod        (depends on: agent-router)
+8. ChatPage.tsx              (depends on: agent router types, react-markdown)
+9. app.tsx + Layout.tsx mods  (depends on: ChatPage)
 ```
+
+**Recommended grouping into phases:**
+- Phase 1: Server-side agent (steps 1-7) -- testable via direct function calls before UI exists
+- Phase 2: Chat UI (steps 8-9) -- connect to working agent
 
 ## Scalability Considerations
 
-This is a single-user app on a local server. Scalability means "does it stay fast as data grows over years?"
-
-| Concern | Year 1 (~5K txns) | Year 5 (~25K txns) | Year 10+ (~50K+ txns) |
-|---------|--------------------|--------------------|----------------------|
-| Query speed | No concern, SQLite handles millions of rows | Add indexes on date, category_id, account_id | Consider archiving old snapshots |
-| DB file size | < 10 MB | < 50 MB | < 100 MB -- still trivial for SQLite |
-| Sync speed | Milliseconds | Milliseconds | Milliseconds -- batch inserts are fast |
-| Backup size | Trivial | Trivial | Still under iCloud limits |
-| Budget calculations | Instant | Instant | Index on transactions(date, category_id) keeps it fast |
-
-**Bottom line:** SQLite handles this workload without any optimization for the foreseeable future. Do not prematurely optimize. Add indexes only when queries are measurably slow.
-
-### Indexes to Create from Day 1
-
-```sql
-CREATE INDEX idx_transactions_date ON transactions(date);
-CREATE INDEX idx_transactions_account ON transactions(account_id);
-CREATE INDEX idx_transactions_category ON transactions(category_id);
-CREATE INDEX idx_transactions_dedup ON transactions(dedup_hash);
-CREATE INDEX idx_budget_month ON budget_allocations(month);
-CREATE INDEX idx_snapshots_date ON balance_snapshots(account_id, date);
-```
-
-These are cheap to maintain and will keep common queries fast from the start.
+| Concern | Current (single user) | Notes |
+|---------|----------------------|-------|
+| Concurrent requests | Not an issue | Agent SDK spawns subprocess per query; sequential is fine |
+| Session storage | SDK persists to `~/.claude/` | Automatic, no management needed |
+| Context window | ~20 tools at ~100 tokens each = ~2K tokens | Well within limits; tool search not needed |
+| Response time | 3-15 seconds for collect-and-return | Acceptable for single user; add streaming later if needed |
+| API costs | ~$0.01-0.05 per query (Sonnet) | Minimal for personal use |
+| Memory | SDK spawns node subprocess | ~50-100MB additional per active query |
 
 ## Sources
 
-- [Actual Budget Database Documentation](https://actualbudget.org/docs/contributing/project-details/database/) -- local-first SQLite architecture, views pattern (HIGH confidence)
-- [Budget App Database Schema Design](https://www.imade-athing.com/things/software/budget-app/2020/04/28/beginning-budget-app-database.html) -- envelope budgeting schema with accounts, categories, transactions, budget tables (MEDIUM confidence)
-- [tRPC Official Documentation](https://trpc.io/) -- router/procedure patterns, Express adapter, Zod integration (HIGH confidence)
-- [Marmelab tRPC + React + SQLite Demo](https://github.com/marmelab/trpc-react-sqlite-demo) -- reference implementation of tRPC with React frontend and Express backend (MEDIUM confidence)
-- [Better Stack tRPC Guide](https://betterstack.com/community/guides/scaling-nodejs/trpc-explained/) -- tRPC architecture patterns with Express (MEDIUM confidence)
+- [Claude Agent SDK Overview](https://platform.claude.com/docs/en/agent-sdk/overview) -- HIGH confidence
+- [Agent SDK TypeScript Reference](https://platform.claude.com/docs/en/agent-sdk/typescript) -- HIGH confidence
+- [Custom Tools Guide](https://platform.claude.com/docs/en/agent-sdk/custom-tools) -- HIGH confidence
+- [MCP Integration Guide](https://platform.claude.com/docs/en/agent-sdk/mcp) -- HIGH confidence
+- [TypeScript V2 Preview](https://platform.claude.com/docs/en/agent-sdk/typescript-v2-preview) -- HIGH confidence (confirmed unstable)
+- [Agent SDK Quickstart](https://platform.claude.com/docs/en/agent-sdk/quickstart) -- HIGH confidence

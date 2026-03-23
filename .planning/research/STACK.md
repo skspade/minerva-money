@@ -1,212 +1,282 @@
-# Stack Research
+# Technology Stack
 
-**Domain:** Personal budgeting / finance web app (self-hosted)
-**Researched:** 2026-03-22
-**Confidence:** HIGH
+**Project:** Minerva Money v2.0 -- Claude Agent Integration
+**Researched:** 2026-03-23
+**Scope:** NEW dependencies only. Existing v1.0 stack is validated and unchanged.
 
-## Core Stack (Pre-decided)
+## Existing Stack (Reference Only -- DO NOT CHANGE)
 
-These are locked in per project constraints. Not up for debate.
+| Technology | Version | Purpose |
+|------------|---------|---------|
+| React | ^19.2.4 | UI framework |
+| Tailwind CSS | ^4.2.2 | Styling |
+| Vite | ^6.0.0 | Build tool |
+| Express | ^4.21.0 | HTTP server |
+| tRPC | ^11.14.1 | Type-safe API |
+| better-sqlite3 | ^11.7.0 | SQLite database |
+| TanStack Query | ^5.95.0 | Server state |
+| Zod | ^4.3.6 | Schema validation |
+| croner | ^10.0.1 | Cron scheduling |
 
-| Technology | Version | Purpose | Notes |
-|------------|---------|---------|-------|
-| React | 19.x | UI framework | Latest stable |
-| Tailwind CSS | 4.x | Styling (custom components, no UI library) | CSS-first config in v4 |
-| Express | 4.x | HTTP server | Stable, well-understood |
-| tRPC | 11.x (v11.12.0) | End-to-end type-safe API layer | v11 adds SSE subscriptions, FormData support |
-| better-sqlite3 | 11.x | SQLite driver | Synchronous API, excellent perf for single-user |
-| TanStack Query | 5.x | Server state management | Pairs with tRPC via @trpc/react-query |
-| TypeScript | 5.x | Language | Full-stack type safety |
+## New Dependencies for v2.0
 
-## Recommended Stack
+### Server: `@anthropic-ai/claude-agent-sdk`
 
-### Build & Dev Tools
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| `@anthropic-ai/claude-agent-sdk` | ^0.2.81 | Agent runtime with built-in tool loop, session management, and custom tool support via in-process MCP servers | Handles the entire agent loop (prompt -> tool calls -> tool results -> repeat -> final response), session persistence, and context management. Custom tools defined with `tool()` + `createSdkMcpServer()` using Zod schemas -- same Zod 4 already in the project. |
 
-| Technology | Version | Purpose | Why Recommended |
-|------------|---------|---------|-----------------|
-| Vite | 8.x (8.0.1) | Frontend build tool | New standard for React apps. Vite 8 ships Rolldown (Rust bundler) for 10-30x faster builds. Native ESM dev server with instant HMR. CRA is dead. |
-| tsx | 4.x | TypeScript runner for server | Zero-config, runs .ts files directly in Node.js. No build step needed for dev. Faster than ts-node. |
-| tsup | 8.x | Server production build | Bundles Express/tRPC server for production. Simple config, outputs CJS. Only needed for deployment. |
+**Confidence:** HIGH -- verified via official Anthropic documentation at platform.claude.com and npm registry.
 
-**Confidence:** HIGH -- Vite 8 confirmed released 2026-03-12. tsx and tsup are standard Node.js TypeScript tooling.
+**Why Agent SDK over `@anthropic-ai/sdk` (Client SDK):**
 
-### Validation
+The Client SDK gives you raw API access where you implement the tool loop yourself:
 
-| Library | Version | Purpose | Why Recommended |
-|---------|---------|---------|-----------------|
-| Zod | 4.x (4.3.6) | Runtime validation & tRPC input schemas | Default validator for tRPC. v4 has faster parsing, smaller bundles, better TypeScript compile times. Defines API contract once, validates at runtime, infers types at compile time. |
+```typescript
+// Client SDK: YOU manage the loop
+let response = await client.messages.create({ ...params });
+while (response.stop_reason === "tool_use") {
+  const result = yourToolExecutor(response.tool_use);
+  response = await client.messages.create({ tool_result: result, ...params });
+}
+```
 
-**Confidence:** HIGH -- Zod is the canonical tRPC validator per official docs.
+The Agent SDK handles all of this internally:
 
-### Date/Time Handling
+```typescript
+// Agent SDK: SDK manages the loop
+for await (const message of query({ prompt: "...", options: { ... } })) {
+  if (message.type === "result") console.log(message.result);
+}
+```
 
-| Library | Version | Purpose | Why Recommended |
-|---------|---------|---------|-----------------|
-| date-fns | 4.x (4.1.0) | Date manipulation, formatting, comparison | Tree-shakeable (only import what you use). Functional API fits TypeScript well. v4 adds first-class timezone support via @date-fns/tz. Needed for budget period calculations (15th/last day), transaction date handling, and trend charts. |
+Additional Agent SDK advantages for this project:
+- **Session management built-in:** Resume conversations with `resume: sessionId`. Sessions persist to disk automatically. Critical for multi-turn chat.
+- **Custom tools via in-process MCP:** `tool()` helper uses Zod schemas for type-safe input validation. `createSdkMcpServer()` bundles tools into an in-process server (no separate process). Tools are called as `mcp__minerva__get_account_balances`.
+- **Tool access control:** `tools: []` removes ALL built-in tools (Read, Bash, Edit, etc.). `allowedTools: ["mcp__minerva__*"]` pre-approves only your custom tools. The financial agent never gets file system or shell access.
+- **Error handling:** Tool handlers returning `{ isError: true }` let the agent retry or explain the failure without crashing the loop.
 
-**Confidence:** HIGH -- date-fns v4 confirmed via npm/official blog. Functional, immutable, tree-shakeable.
+**Zod compatibility:** The `tool()` function explicitly supports both Zod 3 and Zod 4 (documented in TypeScript API reference). The project's Zod ^4.3.6 works without any adapter or compatibility layer.
 
-**Why not dayjs:** dayjs is 2KB but requires plugins for everything (timezone, formatting, etc.) and the plugin system adds complexity. date-fns is more TypeScript-native and tree-shakes to comparable sizes when you only import what you need.
+### Client: Markdown Rendering
 
-**Why not Temporal API:** Still Stage 3 as of March 2026. Only available in Firefox Nightly. Not production-ready. Revisit in 2027.
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| `react-markdown` | ^10.1.0 | Render agent markdown responses as React components | Converts markdown to React virtual DOM (not `dangerouslySetInnerHTML`). Safe by default -- blocks raw HTML. Custom component overrides via `components` prop for applying Tailwind classes to headings, tables, lists, code blocks. The standard React markdown library. |
+| `remark-gfm` | ^4.0.1 | GitHub Flavored Markdown plugin | Agent responses will include tables (financial data summaries), task lists (confirmation flows), and strikethrough text. GFM is not built into react-markdown -- this plugin adds tables, strikethrough, autolinks, and task lists. |
 
-### Money/Currency Handling
+**Confidence:** HIGH -- react-markdown is the dominant React markdown library (12M+ weekly downloads), maintained by the unified/remark ecosystem. remark-gfm is the standard GFM plugin.
 
-| Library | Version | Purpose | Why Recommended |
-|---------|---------|---------|-----------------|
-| currency.js | 2.x (2.0.3) | Currency arithmetic and formatting | Lightweight (1.14KB), zero dependencies. Handles floating-point precision by working with integers internally. Simple API: `currency(19.99).add(0.01)` returns correct result. Includes built-in formatting (`$1,000.00`). |
+**Why react-markdown over alternatives:**
+- **Over `marked`:** marked outputs HTML strings requiring `dangerouslySetInnerHTML`. react-markdown outputs React components -- safer, more customizable, better Tailwind integration.
+- **Over `markdown-it`:** Same dangerouslySetInnerHTML problem as marked.
+- **Over `markdown-to-jsx`:** Less ecosystem support, fewer plugins, smaller community.
 
-**Confidence:** MEDIUM -- currency.js is stable and widely used but hasn't had a release in a while. The API is simple and correct, which is what matters for a single-currency (USD) personal finance app.
+## Dependencies NOT Needed
 
-**Why not dinero.js:** dinero.js v2 is still in alpha. v1 works but the project's future is uncertain. Overkill for a single-currency app -- dinero.js shines for multi-currency with exchange rates.
+| Library | Why Skip |
+|---------|----------|
+| `@anthropic-ai/sdk` | Agent SDK handles the tool loop. Client SDK would mean reimplementing orchestration that Agent SDK already provides. |
+| `socket.io` / `ws` | PROJECT.md specifies collect-and-return for v2.0. A tRPC mutation awaiting the full response is simpler. Upgrade to streaming later if response times are slow. |
+| `react-syntax-highlighter` | Financial assistant will not produce code blocks. Defer until needed. Avoids ~200KB bundle addition. |
+| `@ai-sdk/anthropic` (Vercel AI SDK) | Unnecessary abstraction layer. Agent SDK provides everything needed directly. |
+| `marked` / `markdown-it` | Outputs HTML strings, requires dangerouslySetInnerHTML. react-markdown is safer. |
+| Any auth library | Single user on private home server (unchanged from v1.0). |
+| `@anthropic-ai/bedrock-sdk` | Not using AWS. Direct API key auth via ANTHROPIC_API_KEY in .env. |
 
-**Why not raw integers:** You could store cents as integers and format manually, but currency.js handles edge cases (rounding, display) that you would otherwise have to write yourself. The 1KB cost is worth the correctness guarantee.
+## Integration Architecture
 
-### Charts & Visualization
+### Server-Side Agent Execution
 
-| Library | Version | Purpose | Why Recommended |
-|---------|---------|---------|-----------------|
-| Recharts | 3.x (3.8.0) | Spending trends, category breakdowns, net worth over time | Declarative React components built on D3/SVG. Line charts (trends), bar charts (category spending), area charts (net worth). 3.6M weekly downloads, excellent docs. Good enough for a personal finance dashboard -- you need maybe 4-5 chart types, not custom visualizations. |
+The Agent SDK runs server-side inside the Express process. The Anthropic API key stays on the server, never exposed to the client.
 
-**Confidence:** HIGH -- Recharts 3.8.0 confirmed on npm. Most popular React chart library.
+```
+Express + tRPC (existing)
+  |
+  +-- New tRPC router: agent.chat (mutation)
+  |     |
+  |     +-- Calls query() with user prompt + session options
+  |     +-- Collects all result messages (collect-and-return)
+  |     +-- Returns { response: string, sessionId: string }
+  |
+  +-- Custom MCP Server (in-process via createSdkMcpServer)
+        |
+        +-- Query tools (readOnlyHint: true):
+        |     get_account_balances   --> accountsService
+        |     get_budget_summary     --> budgetService
+        |     get_spending_by_category --> transactionsService
+        |     get_net_worth          --> snapshotService
+        |     get_transactions       --> transactionsService
+        |     get_categories         --> categoriesService
+        |     get_rules              --> rulesService
+        |     get_sync_status        --> syncService
+        |
+        +-- Action tools (destructiveHint: true):
+              categorize_transaction --> rulesService
+              create_rule            --> rulesService
+              update_rule            --> rulesService
+              adjust_budget          --> budgetService
+              confirm_transfer       --> transferService
+              trigger_sync           --> syncService
+```
 
-**Why not Chart.js/react-chartjs-2:** Canvas-based, harder to style consistently with Tailwind. SVG (Recharts) integrates better with React's component model and is easier to customize.
+### Custom Tool Definition Pattern
 
-**Why not Visx:** Low-level D3 primitives. You would spend days building what Recharts gives you in an hour. Visx is for when Recharts can not do what you need -- unlikely for standard finance charts.
+```typescript
+import { tool, createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
+import { z } from "zod";
+import { accountsService } from "../accounts/accounts-service";
 
-### Database Migrations
+const getAccountBalances = tool(
+  "get_account_balances",
+  "Get current balances for all accounts or a specific account by name",
+  {
+    accountName: z.string().optional()
+      .describe("Account name to filter by, or omit for all accounts")
+  },
+  async (args) => {
+    const accounts = args.accountName
+      ? accountsService.getByName(args.accountName)
+      : accountsService.getAll();
+    return {
+      content: [{ type: "text", text: JSON.stringify(accounts) }]
+    };
+  },
+  { annotations: { readOnlyHint: true } }
+);
 
-| Library | Version | Purpose | Why Recommended |
-|---------|---------|---------|-----------------|
-| Custom migration runner | N/A | Schema versioning via `PRAGMA user_version` | For a single-user SQLite app, a heavyweight migration framework is unnecessary. Write a simple runner (~50 lines) that: reads `PRAGMA user_version`, runs numbered SQL files in `/migrations/`, updates `user_version` in a transaction. SQLite's `user_version` pragma is purpose-built for this. |
+const minervaServer = createSdkMcpServer({
+  name: "minerva",
+  version: "1.0.0",
+  tools: [getAccountBalances, /* ... */]
+});
+```
 
-**Confidence:** HIGH -- `PRAGMA user_version` is a documented SQLite feature. This pattern is well-established (see Actual Budget, Litestream docs, multiple blog posts).
+### tRPC Integration Pattern
 
-**Why not Knex/Drizzle/Prisma:** All are ORMs or query builders that add abstraction over better-sqlite3's already-clean API. You would be adding a dependency to generate SQL that you can write directly. For a single-user app with ~10-15 tables, raw SQL migrations are simpler and more transparent.
+```typescript
+export const agentRouter = router({
+  chat: publicProcedure
+    .input(z.object({
+      message: z.string(),
+      sessionId: z.string().optional()
+    }))
+    .mutation(async ({ input }) => {
+      const messages: string[] = [];
+      let sessionId: string | undefined;
 
-**Why not @blackglory/better-sqlite3-migrations:** It works, but it is a thin wrapper you can replicate in 50 lines without a dependency. Fewer dependencies = fewer things to break.
+      for await (const msg of query({
+        prompt: input.message,
+        options: {
+          ...(input.sessionId ? { resume: input.sessionId } : {}),
+          mcpServers: { minerva: minervaServer },
+          allowedTools: ["mcp__minerva__*"],
+          tools: [],                              // CRITICAL: removes ALL built-in tools
+          systemPrompt: "You are Minerva, a personal finance assistant...",
+          maxTurns: 10,
+          permissionMode: "bypassPermissions",
+          allowDangerouslySkipPermissions: true,
+          persistSession: true
+        }
+      })) {
+        if (msg.type === "assistant") {
+          for (const block of msg.message.content) {
+            if ("text" in block) messages.push(block.text);
+          }
+        }
+        if (msg.type === "result") {
+          sessionId = msg.session_id;
+        }
+      }
 
-### Testing
+      return { response: messages.join("\n"), sessionId };
+    })
+});
+```
 
-| Library | Version | Purpose | Why Recommended |
-|---------|---------|---------|-----------------|
-| Vitest | 4.x (4.1.0) | Unit and integration tests | Native Vite integration (shared config, transforms, plugins). 10-20x faster than Jest in watch mode. ESM-native (no CJS/ESM interop issues). Jest-compatible API so existing knowledge transfers. |
-| @testing-library/react | 16.x (16.3.2) | React component testing | Standard for testing React components by behavior, not implementation. Works with Vitest out of the box. |
-| jsdom | latest | DOM environment for Vitest | Vitest's default browser environment for component tests. Lightweight, good enough for a personal finance app's UI tests. |
+**Critical configuration notes:**
+- `tools: []` -- Removes ALL built-in tools (Read, Edit, Bash, Glob, Grep, WebSearch, WebFetch). The financial agent should ONLY access data through custom tools that wrap service functions. Never give it file system or shell access.
+- `allowedTools: ["mcp__minerva__*"]` -- Wildcard pre-approves all tools on the minerva MCP server. No permission prompts.
+- `permissionMode: "bypassPermissions"` + `allowDangerouslySkipPermissions: true` -- Required for headless server execution where no human is present to approve tool calls.
+- `maxTurns: 10` -- Prevents runaway loops. A budget query might need 2-3 tool calls; a complex multi-step action might need 5-6. 10 is a safe ceiling.
 
-**Confidence:** HIGH -- Vitest 4.1.0 confirmed on npm. @testing-library/react 16.3.2 confirmed. Standard pairing for React + Vite projects.
+### Session Management
 
-**Why not Jest:** Jest requires extra config for ESM/TypeScript, is slower, and does not share Vite's transform pipeline. For a Vite project, Vitest is the obvious choice.
+The Agent SDK persists sessions to `~/.claude/projects/<encoded-cwd>/` automatically.
 
-### HTTP Client (SimpleFIN Integration)
+- **First message:** `query()` creates a new session. Capture `session_id` from the result message.
+- **Follow-up messages:** Pass `resume: sessionId` to continue the conversation with full context.
+- **Storage:** Store `sessionId` in server memory (single user, single process). No need for database storage. If the server restarts, the user starts a new conversation -- acceptable for v2.0.
+- **Cleanup:** Sessions accumulate on disk. Consider a periodic cleanup of sessions older than 7 days.
 
-| Library | Version | Purpose | Why Recommended |
-|---------|---------|---------|-----------------|
-| Node.js built-in `fetch` | N/A (Node 18+) | HTTP requests to SimpleFIN API | SimpleFIN is a simple REST API (GET with auth header). No need for axios or got. Node's built-in fetch (stable since Node 18) handles this with zero dependencies. |
+### Client-Side Chat UI Pattern
 
-**Confidence:** HIGH -- SimpleFIN API is documented REST. Node.js fetch is stable and sufficient.
+```tsx
+import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
-### Scheduled Tasks
+function ChatMessage({ content }: { content: string }) {
+  return (
+    <Markdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        table: ({ children }) => (
+          <table className="w-full border-collapse text-sm">{children}</table>
+        ),
+        th: ({ children }) => (
+          <th className="border-b px-3 py-2 text-left font-medium">{children}</th>
+        ),
+        td: ({ children }) => (
+          <td className="border-b px-3 py-2">{children}</td>
+        ),
+        // ... other component overrides for Tailwind styling
+      }}
+    >
+      {content}
+    </Markdown>
+  );
+}
+```
 
-| Library | Version | Purpose | Why Recommended |
-|---------|---------|---------|-----------------|
-| croner | 9.x | Cron scheduling for sync and backup jobs | TypeScript-native, handles DST/timezone edge cases correctly. Needed for: twice-daily SimpleFIN sync, 6-hour backup schedule, daily balance snapshots. Lightweight with no dependencies. |
+## Environment Variables
 
-**Confidence:** MEDIUM -- croner is well-regarded but less popular than node-cron. Chosen for TypeScript support and correct timezone handling, which matters for financial date boundaries.
+Add to `.env` (already gitignored):
 
-**Why not node-cron:** node-cron lacks proper timezone/DST handling. For a finance app where "sync at midnight" must mean actual midnight (not DST-shifted), croner is safer.
+```
+ANTHROPIC_API_KEY=sk-ant-...
+```
 
-**Why not system cron:** The app runs on a home iMac. Keeping scheduling in-process is simpler to deploy and monitor (sync status indicator requires in-app awareness).
-
-### Logging
-
-| Library | Version | Purpose | Why Recommended |
-|---------|---------|---------|-----------------|
-| pino | 9.x | Structured JSON logging | Fast, low-overhead, structured logs. Log sync results, errors, and audit trail. JSON output is easy to search. pino-pretty for dev readability. |
-
-**Confidence:** MEDIUM -- pino is the standard Node.js logger. Version should be verified at install time.
-
-### Supporting Utilities
-
-| Library | Version | Purpose | When to Use |
-|---------|---------|---------|-------------|
-| nanoid | 5.x | Generate unique IDs | Transaction dedup hashes, internal record IDs. Smaller and faster than uuid. |
-| superjson | 2.x | Serialize Dates/BigInt over tRPC | tRPC transformer for rich types. Dates come back as Date objects, not strings. |
-
-**Confidence:** MEDIUM -- Standard tRPC ecosystem libraries. Verify versions at install time.
-
-## Development Tools
-
-| Tool | Purpose | Notes |
-|------|---------|-------|
-| ESLint | Code quality | Use flat config (eslint.config.js). typescript-eslint for type-aware rules. |
-| Prettier | Code formatting | Set once, never think about formatting again. |
-| lint-staged + husky | Pre-commit hooks | Run ESLint + Prettier on staged files only. |
+The Agent SDK reads `ANTHROPIC_API_KEY` from the environment automatically. The server already loads `.env` via `tsx watch --env-file=../../.env`, so the key will be available to the Agent SDK running in the same process.
 
 ## Installation
 
 ```bash
-# Core (pre-decided)
-npm install react react-dom @trpc/server @trpc/client @trpc/react-query @tanstack/react-query better-sqlite3 express
+# Server (from packages/server)
+npm install @anthropic-ai/claude-agent-sdk
 
-# Supporting libraries
-npm install zod date-fns recharts currency.js croner pino nanoid superjson
-
-# Dev dependencies
-npm install -D typescript vite @vitejs/plugin-react vitest @testing-library/react jsdom tsx tsup @types/better-sqlite3 @types/express eslint prettier pino-pretty
+# Client (from packages/client)
+npm install react-markdown remark-gfm
 ```
 
-## Alternatives Considered
+Total new dependencies: 3 packages (plus their transitive deps).
 
-| Recommended | Alternative | When to Use Alternative |
-|-------------|-------------|-------------------------|
-| date-fns | dayjs | If bundle size is the absolute top priority and you only need basic formatting |
-| currency.js | Raw integer math | If you want zero dependencies and are willing to handle formatting/rounding yourself |
-| Recharts | Visx | If you need highly custom, brand-specific chart designs that Recharts cannot produce |
-| Custom migrations | Drizzle ORM | If the schema grows beyond ~20 tables and you want generated type-safe queries |
-| croner | System crontab | If you move to a Linux server and want OS-level scheduling |
-| Vitest | Jest | Never, for this project. Vitest is strictly better with Vite. |
-| pino | console.log | For prototyping only. Switch to pino before any real data flows. |
+## Version Pinning Strategy
 
-## What NOT to Use
-
-| Avoid | Why | Use Instead |
-|-------|-----|-------------|
-| Moment.js | Deprecated, mutable, massive bundle (329KB) | date-fns |
-| Prisma | Heavy ORM with engine binary. Overkill for SQLite single-user. Adds cold-start time. | Raw SQL with better-sqlite3 |
-| Knex | Query builder abstraction you don't need. better-sqlite3's API is already clean. | Raw SQL with better-sqlite3 |
-| axios | Unnecessary dependency when Node.js has built-in fetch | Native fetch |
-| Create React App | Deprecated, unmaintained | Vite |
-| ts-node | Slower than tsx, more complex config, ESM issues | tsx |
-| Ant Design / Material UI | Against project constraint (custom Tailwind components). Massive bundle. | Tailwind + custom components |
-| Chart.js | Canvas-based, harder to integrate with React/Tailwind styling | Recharts (SVG) |
-
-## Version Compatibility
-
-| Package | Compatible With | Notes |
-|---------|-----------------|-------|
-| Vite 8.x | React 19.x | Confirmed compatible, @vitejs/plugin-react |
-| Vitest 4.x | Vite 8.x | Same ecosystem, shared config |
-| tRPC 11.x | Zod 4.x | Zod is the default tRPC validator |
-| tRPC 11.x | TanStack Query 5.x | Via @trpc/react-query |
-| tRPC 11.x | superjson 2.x | Data transformer for rich types |
-| better-sqlite3 11.x | Node.js 20+ | Native addon, requires node-gyp at install |
+| Package | Range | Rationale |
+|---------|-------|-----------|
+| `@anthropic-ai/claude-agent-sdk` | `^0.2.81` | Pre-1.0, actively developed. Caret is acceptable for a single-user app where you control deploys. Pin to exact version if stability is critical. |
+| `react-markdown` | `^10.1.0` | Stable, mature. Caret is safe. |
+| `remark-gfm` | `^4.0.1` | Stable plugin. Caret is safe. |
 
 ## Sources
 
-- [Vite 8.0 release blog](https://vite.dev/blog/announcing-vite8) -- Confirmed Rolldown bundler, March 2026
-- [tRPC v11 announcement](https://trpc.io/blog/announcing-trpc-v11) -- SSE, FormData, RSC support
-- [Zod npm](https://www.npmjs.com/package/zod) -- v4.3.6 confirmed
-- [Recharts npm](https://www.npmjs.com/package/recharts) -- v3.8.0 confirmed
-- [date-fns blog](https://blog.date-fns.org/v3-is-out/) -- v4 with timezone support
-- [Vitest 4.0 blog](https://vitest.dev/blog/vitest-4) -- Browser Mode stable, v4.1.0 latest
-- [currency.js docs](https://currency.js.org/) -- v2.0.3, integer-based precision
-- [SimpleFIN developer guide](https://beta-bridge.simplefin.org/info/developers) -- REST API docs
-- [SQLite PRAGMA user_version](https://levlaz.org/sqlite-db-migrations-with-pragma-user_version/) -- Migration pattern
-- [croner vs node-cron comparison](https://www.pkgpulse.com/blog/node-cron-vs-node-schedule-vs-croner-task-scheduling-nodejs-2026) -- Timezone handling
-- [Vitest vs Jest 2026](https://devtoolswatch.com/en/vitest-vs-jest-2026) -- Performance benchmarks
-- [MDN Temporal API status](https://developer.mozilla.org/en-US/blog/javascript-temporal-is-coming/) -- Stage 3, not production-ready
-
----
-*Stack research for: Minerva Money (personal budgeting app)*
-*Researched: 2026-03-22*
+- [Claude Agent SDK Overview](https://platform.claude.com/docs/en/agent-sdk/overview) -- Official documentation, capabilities, comparison with Client SDK
+- [Claude Agent SDK TypeScript API Reference](https://platform.claude.com/docs/en/agent-sdk/typescript) -- Full types, Options interface, query() function, tool() helper
+- [Claude Agent SDK Custom Tools Guide](https://platform.claude.com/docs/en/agent-sdk/custom-tools) -- tool(), createSdkMcpServer(), error handling, annotations
+- [Claude Agent SDK Sessions Guide](https://platform.claude.com/docs/en/agent-sdk/sessions) -- resume, continue, fork, session persistence
+- [Claude Agent SDK Streaming vs Single Mode](https://platform.claude.com/docs/en/agent-sdk/streaming-vs-single-mode) -- Input mode comparison
+- [Claude Agent SDK Quickstart](https://platform.claude.com/docs/en/agent-sdk/quickstart) -- Installation, prerequisites (Node.js 18+)
+- [@anthropic-ai/claude-agent-sdk on npm](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk) -- v0.2.81, last published 2026-03-21
+- [Zod 4 compatibility issue #38](https://github.com/anthropics/claude-agent-sdk-typescript/issues/38) -- Confirmed both Zod 3 and Zod 4 supported as peer deps
+- [react-markdown on GitHub](https://github.com/remarkjs/react-markdown) -- v10.1.0, React component-based rendering
+- [remark-gfm on npm](https://www.npmjs.com/package/remark-gfm) -- v4.0.1, GFM support plugin
