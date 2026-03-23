@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 2: SimpleFIN Data Pipeline** - SimpleFIN client with mock fixtures, sync service with layered deduplication, scheduled auto-sync, and sync error logging
 - [ ] **Phase 3: Accounts and Transactions UI** - React app shell, account list with balances, transaction list with sort/filter/search, and sync status controls
 - [ ] **Phase 4: Category Management** - Category groups and categories CRUD, manual transaction categorization, transaction split across categories, and manual transaction entry
-- [ ] **Phase 5: Categorization Rules Engine** - Rules matching on merchant/amount/memo, specificity-based conflict resolution, retroactive application with preview, and auto-apply to future transactions
+- [x] **Phase 5: Categorization Rules Engine** - Rules matching on merchant/amount/memo, specificity-based conflict resolution, retroactive application with preview, and auto-apply to future transactions (completed 2026-03-23)
 - [ ] **Phase 6: Transfer Detection** - Auto-suggest transfer pairs from offsetting transactions, manual confirm/link UI, and exclusion of confirmed transfers from reports
 - [ ] **Phase 7: Budget Engine** - Monthly envelope allocations, default allocations, twice-monthly auto-funding, rollover math (positive forward, negative deducts from available-to-budget)
 - [ ] **Phase 8: Budget UI** - Budget grid showing allocated/spent/available per category, manual allocation overrides, and budget period navigation
@@ -196,7 +196,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 2. SimpleFIN Data Pipeline | 0/4 | Not started | - |
 | 3. Accounts and Transactions UI | 0/4 | Not started | - |
 | 4. Category Management | 0/4 | Not started | - |
-| 5. Categorization Rules Engine | 0/4 | Not started | - |
+| 5. Categorization Rules Engine | 0/4 | Complete    | 2026-03-23 |
 | 6. Transfer Detection | 0/3 | Not started | - |
 | 7. Budget Engine | 0/4 | Not started | - |
 | 8. Budget UI | 0/3 | Not started | - |
