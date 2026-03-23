@@ -91,46 +91,46 @@ Deferred to v2.x or later. Tracked but not in current roadmap.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| AGENT-01 | — | Pending |
-| AGENT-02 | — | Pending |
-| AGENT-03 | — | Pending |
-| AGENT-04 | — | Pending |
-| AGENT-05 | — | Pending |
-| QUERY-01 | — | Pending |
-| QUERY-02 | — | Pending |
-| QUERY-03 | — | Pending |
-| QUERY-04 | — | Pending |
-| QUERY-05 | — | Pending |
-| QUERY-06 | — | Pending |
-| QUERY-07 | — | Pending |
-| QUERY-08 | — | Pending |
-| QUERY-09 | — | Pending |
-| QUERY-10 | — | Pending |
-| ACTION-01 | — | Pending |
-| ACTION-02 | — | Pending |
-| ACTION-03 | — | Pending |
-| ACTION-04 | — | Pending |
-| ACTION-05 | — | Pending |
-| ACTION-06 | — | Pending |
-| ACTION-07 | — | Pending |
-| ACTION-08 | — | Pending |
-| UI-01 | — | Pending |
-| UI-02 | — | Pending |
-| UI-03 | — | Pending |
-| UI-04 | — | Pending |
-| UI-05 | — | Pending |
-| UI-06 | — | Pending |
-| SAFE-01 | — | Pending |
-| SAFE-02 | — | Pending |
-| SAFE-03 | — | Pending |
-| SAFE-04 | — | Pending |
-| SAFE-05 | — | Pending |
+| AGENT-01 | Phase 14 | Pending |
+| AGENT-02 | Phase 14 | Pending |
+| AGENT-03 | Phase 14 | Pending |
+| AGENT-04 | Phase 14 | Pending |
+| AGENT-05 | Phase 14 | Pending |
+| QUERY-01 | Phase 14 | Pending |
+| QUERY-02 | Phase 14 | Pending |
+| QUERY-03 | Phase 14 | Pending |
+| QUERY-04 | Phase 14 | Pending |
+| QUERY-05 | Phase 14 | Pending |
+| QUERY-06 | Phase 14 | Pending |
+| QUERY-07 | Phase 14 | Pending |
+| QUERY-08 | Phase 14 | Pending |
+| QUERY-09 | Phase 14 | Pending |
+| QUERY-10 | Phase 14 | Pending |
+| SAFE-01 | Phase 14 | Pending |
+| SAFE-03 | Phase 14 | Pending |
+| SAFE-04 | Phase 14 | Pending |
+| SAFE-05 | Phase 14 | Pending |
+| UI-01 | Phase 15 | Pending |
+| UI-02 | Phase 15 | Pending |
+| UI-03 | Phase 15 | Pending |
+| UI-04 | Phase 15 | Pending |
+| UI-05 | Phase 15 | Pending |
+| UI-06 | Phase 15 | Pending |
+| ACTION-01 | Phase 16 | Pending |
+| ACTION-02 | Phase 16 | Pending |
+| ACTION-03 | Phase 16 | Pending |
+| ACTION-04 | Phase 16 | Pending |
+| ACTION-05 | Phase 16 | Pending |
+| ACTION-06 | Phase 16 | Pending |
+| ACTION-07 | Phase 16 | Pending |
+| ACTION-08 | Phase 16 | Pending |
+| SAFE-02 | Phase 16 | Pending |
 
 **Coverage:**
 - v2.0 requirements: 34 total
-- Mapped to phases: 0
-- Unmapped: 34
+- Mapped to phases: 34
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-23*
-*Last updated: 2026-03-23 after initial definition*
+*Last updated: 2026-03-23 after roadmap creation*
