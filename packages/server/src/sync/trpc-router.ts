@@ -41,6 +41,11 @@ import {
   getBudgetSummary,
   getAvailableToBudget,
 } from '../budget/budget-service.js';
+import {
+  getSpendingByCategory,
+  getSpendingOverTime,
+  getNetWorth,
+} from '../reports/reports-service.js';
 
 const syncRouter = router({
   trigger: publicProcedure.mutation(async ({ ctx }) => {
@@ -409,6 +414,26 @@ const budgetRouter = router({
     }),
 });
 
+const reportsRouter = router({
+  spendingByCategory: publicProcedure
+    .input(z.object({ startDate: z.string(), endDate: z.string() }))
+    .query(({ ctx, input }) => {
+      return getSpendingByCategory(ctx.db, input.startDate, input.endDate);
+    }),
+
+  spendingOverTime: publicProcedure
+    .input(z.object({ startDate: z.string(), endDate: z.string() }))
+    .query(({ ctx, input }) => {
+      return getSpendingOverTime(ctx.db, input.startDate, input.endDate);
+    }),
+
+  netWorth: publicProcedure
+    .input(z.object({ startDate: z.string().optional(), endDate: z.string().optional() }))
+    .query(({ ctx, input }) => {
+      return getNetWorth(ctx.db, input.startDate, input.endDate);
+    }),
+});
+
 export const appRouter = router({
   sync: syncRouter,
   accounts: accountsRouter,
@@ -417,6 +442,7 @@ export const appRouter = router({
   rules: rulesRouter,
   transfers: transfersRouter,
   budget: budgetRouter,
+  reports: reportsRouter,
 });
 
 export type AppRouter = typeof appRouter;

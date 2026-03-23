@@ -1,18 +1,18 @@
 import type Database from 'better-sqlite3';
 
-interface SpendingByCategory {
+export interface SpendingByCategory {
   categoryId: number;
   categoryName: string;
   groupName: string;
   total: number;
 }
 
-interface SpendingOverTime {
+export interface SpendingOverTime {
   period: string;
   total: number;
 }
 
-interface NetWorthPoint {
+export interface NetWorthPoint {
   date: string;
   total: number;
 }
