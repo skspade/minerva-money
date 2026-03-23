@@ -241,7 +241,14 @@ export default function TransactionsPage() {
                   <td className="px-4 py-2 text-sm">
                     {new Date(txn.date + 'T00:00:00').toLocaleDateString()}
                   </td>
-                  <td className="px-4 py-2 text-sm">{txn.payee}</td>
+                  <td className="px-4 py-2 text-sm">
+                    {txn.payee}
+                    {txn.isTransfer && (
+                      <span className="ml-2 inline-block px-1.5 py-0.5 text-xs font-medium bg-purple-100 text-purple-700 rounded">
+                        Transfer
+                      </span>
+                    )}
+                  </td>
                   <td className={`px-4 py-2 text-sm text-right ${txn.amount < 0 ? 'text-red-600' : 'text-gray-900'}`}>
                     {formatCurrency(txn.amount)}
                   </td>

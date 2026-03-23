@@ -179,7 +179,12 @@ const transactionsRouter = router({
         a.name AS account_name, t.category_id, t.rule_id,
         c.name AS category_name, cg.name AS group_name,
         cr.name AS rule_name,
-        (SELECT COUNT(*) FROM transaction_splits ts WHERE ts.transaction_id = t.id) AS split_count
+        (SELECT COUNT(*) FROM transaction_splits ts WHERE ts.transaction_id = t.id) AS split_count,
+        CASE WHEN EXISTS (
+          SELECT 1 FROM transfer_links tl
+          WHERE (tl.transaction_a_id = t.id OR tl.transaction_b_id = t.id)
+          AND tl.confirmed = 1
+        ) THEN 1 ELSE 0 END AS is_transfer
       FROM transactions t
       JOIN accounts a ON t.account_id = a.id
       LEFT JOIN categories c ON t.category_id = c.id
@@ -192,6 +197,7 @@ const transactionsRouter = router({
       category_id: number | null; category_name: string | null;
       group_name: string | null; rule_id: number | null;
       rule_name: string | null; split_count: number;
+      is_transfer: number;
     }[];
 
     return rows.map(r => ({
@@ -208,6 +214,7 @@ const transactionsRouter = router({
       ruleId: r.rule_id,
       ruleName: r.rule_name,
       splitCount: r.split_count,
+      isTransfer: r.is_transfer === 1,
     }));
   }),
 
