@@ -177,13 +177,13 @@ Plans:
   3. User can view a line chart of spending over time showing month-over-month patterns
   4. User can view a net worth trend line chart drawn from daily balance snapshots
   5. All charts load from SQL aggregations — no row-level hydration for trend calculations
-**Plans**: TBD
+**Plans**: 4 plans (2 waves)
 
 Plans:
-- [ ] 09-01: Reporting service — spending by category query (date range, exclude transfers), spending over time query (monthly aggregation), net worth query (balance snapshots)
-- [ ] 09-02: Spending reports UI — pie/bar chart (Recharts), date range filter, category drill-down
-- [ ] 09-03: Trends UI — spending over time line chart, net worth line chart, month labels
-- [ ] 09-04: Dashboard landing page — account balances widget, top spending categories widget, budget progress widget, sync status widget
+- [ ] 09-01-PLAN.md — Reporting service: spending by category, spending over time, net worth SQL aggregation queries with TDD (Wave 1)
+- [ ] 09-02-PLAN.md — tRPC reports router and Recharts install: wire reporting service to API, install charting library (Wave 1)
+- [ ] 09-03-PLAN.md — Reports page: spending by category pie/bar toggle, spending over time line chart, net worth line chart, date range filter (Wave 2)
+- [ ] 09-04-PLAN.md — Dashboard landing page: account balances, budget progress, top spending, sync status widgets, routing and navigation updates (Wave 2)
 
 ## Progress
 
