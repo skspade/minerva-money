@@ -21,7 +21,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 7: Budget Engine** - Monthly envelope allocations, default allocations, twice-monthly auto-funding, rollover math (positive forward, negative deducts from available-to-budget)
 - [ ] **Phase 8: Budget UI** - Budget grid showing allocated/spent/available per category, manual allocation overrides, and budget period navigation
 - [ ] **Phase 9: Dashboard and Reporting** - Spending by category charts, spending trends over time, net worth trend using balance snapshots, and dashboard landing page
-- [ ] **Phase 10: Foundation Bug Fix & Verification** - Fix missing run-backup.ts, create Phase 1 VERIFICATION.md (Gap Closure)
+- [x] **Phase 10: Foundation Bug Fix & Verification** - Fix missing run-backup.ts, create Phase 1 VERIFICATION.md (Gap Closure) (completed 2026-03-23)
 - [ ] **Phase 11: Reporting Date Fix & Verification Sweep** - Fix off-by-one date bug, create VERIFICATION.md for Phases 5, 6, 9 (Gap Closure)
 - [ ] **Phase 12: Budget Defaults UI** - Add budget defaults management UI, wire to existing tRPC procedures (Gap Closure)
 
@@ -240,6 +240,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 7. Budget Engine | 0/4 | Not started | - |
 | 8. Budget UI | 0/3 | Not started | - |
 | 9. Dashboard and Reporting | 0/4 | Not started | - |
-| 10. Foundation Bug Fix & Verification | 0/2 | Not started | - |
+| 10. Foundation Bug Fix & Verification | 2/2 | Complete    | 2026-03-23 |
 | 11. Reporting Date Fix & Verification Sweep | 0/0 | Not started | - |
 | 12. Budget Defaults UI | 0/0 | Not started | - |
