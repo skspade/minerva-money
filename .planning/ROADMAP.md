@@ -22,7 +22,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 8: Budget UI** - Budget grid showing allocated/spent/available per category, manual allocation overrides, and budget period navigation
 - [ ] **Phase 9: Dashboard and Reporting** - Spending by category charts, spending trends over time, net worth trend using balance snapshots, and dashboard landing page
 - [x] **Phase 10: Foundation Bug Fix & Verification** - Fix missing run-backup.ts, create Phase 1 VERIFICATION.md (Gap Closure) (completed 2026-03-23)
-- [ ] **Phase 11: Reporting Date Fix & Verification Sweep** - Fix off-by-one date bug, create VERIFICATION.md for Phases 5, 6, 9 (Gap Closure)
+- [x] **Phase 11: Reporting Date Fix & Verification Sweep** - Fix off-by-one date bug, create VERIFICATION.md for Phases 5, 6, 9 (Gap Closure) (completed 2026-03-23)
 - [ ] **Phase 12: Budget Defaults UI** - Add budget defaults management UI, wire to existing tRPC procedures (Gap Closure)
 
 ## Phase Details
@@ -213,7 +213,7 @@ Plans:
   2. Phase 5 VERIFICATION.md confirms CATG-02 through CATG-05 are satisfied
   3. Phase 6 VERIFICATION.md confirms CATG-07 through CATG-09 are satisfied
   4. Phase 9 VERIFICATION.md confirms REPT-01 through REPT-03 are satisfied
-**Plans:** 2 plans (2 waves)
+**Plans:** 2/2 plans complete
 Plans:
 - [ ] 11-01-PLAN.md — Fix off-by-one date boundary bug in spending queries (TDD)
 - [ ] 11-02-PLAN.md — Create VERIFICATION.md for Phases 5, 6, and 9
@@ -245,5 +245,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 8. Budget UI | 0/3 | Not started | - |
 | 9. Dashboard and Reporting | 0/4 | Not started | - |
 | 10. Foundation Bug Fix & Verification | 2/2 | Complete    | 2026-03-23 |
-| 11. Reporting Date Fix & Verification Sweep | 0/0 | Not started | - |
+| 11. Reporting Date Fix & Verification Sweep | 0/0 | Complete    | 2026-03-23 |
 | 12. Budget Defaults UI | 0/0 | Not started | - |
