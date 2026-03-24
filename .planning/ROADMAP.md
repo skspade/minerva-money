@@ -164,6 +164,6 @@ Phases execute in numeric order: 29 → 30 → 31
 | 26. Import Service and API | v2.3 | 2/2 | Complete | 2026-03-24 |
 | 27. Import UI and Navigation | v2.3 | 2/2 | Complete | 2026-03-24 |
 | 28. Phase 26 Verification | v2.3 | 1/1 | Complete | 2026-03-24 |
-| 29. Server Skip Support | 1/1 | Complete   | 2026-03-24 | - |
+| 29. Server Skip Support | 1/1 | Complete    | 2026-03-24 | - |
 | 30. Client Skip UI | v2.4 | 0/? | Not started | - |
 | 31. Stats Filtering and Polish | v2.4 | 0/? | Not started | - |
