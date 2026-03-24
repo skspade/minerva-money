@@ -189,6 +189,46 @@
 
 ---
 
+## Milestone: v2.4 — CSV Import Account Filtering
+
+**Shipped:** 2026-03-24
+**Phases:** 4 | **Plans:** 4 | **Requirements:** 10/10
+
+### What Was Built
+- Server-side partial account mapping support — skip rows for unmapped accounts, return per-account row counts
+- Skip option in account mapping dropdown with row count badges and amber visual styling
+- Client-side stats filtering — preview stats, sample rows, dedup notes all dynamically exclude skipped accounts
+- "Skip All Unmatched" convenience button and summary banner showing import scope
+- Confirm summary and results page reflecting filtered counts with skippedByAccountFilter stat
+- Formal verification with file-and-line evidence for all 10 requirements
+
+### What Worked
+- Pure helper function pattern (computeSkipFilterStats, validation helpers) made skip logic independently testable with 22 tests
+- Minimal server changes (Phase 29 was 1 plan) — most complexity correctly pushed to client-side filtering
+- Audit found only tech debt (SUMMARY.md frontmatter gaps), no requirement gaps — per-phase verification improving
+- Gap closure phase (32) was minimal — only VERIFICATION.md creation and traceability table fixes
+
+### What Was Inefficient
+- Phase 31 SUMMARY.md frontmatter still missing `requirements_completed` — same pattern as prior milestones
+- ROADMAP.md plan checkboxes for phases 29-31 still unchecked despite being complete — roadmap sync drift continues
+
+### Patterns Established
+- Sentinel value pattern (`__skip__`) for client-only state that shouldn't reach server
+- `computeSkipFilterStats()` pure helper for derived UI state from account mappings
+- Three-state form validation: undecided (blocks), all-skipped (blocks with message), ready (proceeds)
+
+### Key Lessons
+1. Client-side filtering via useMemo provides instant UI updates without server round-trips — correct pattern for preview-stage UX
+2. SUMMARY.md frontmatter gaps persist across 4 milestones now — workflow needs structural enforcement, not documentation reminders
+3. Small focused milestones (4 phases, 10 requirements) complete quickly and cleanly — scope discipline pays off
+
+### Cost Observations
+- Model mix: primarily opus for execution
+- Sessions: autopilot mode
+- Notable: entire milestone completed same day — 4 phases in rapid succession
+
+---
+
 ## Cross-Milestone Trends
 
 ### Process Evolution
@@ -200,6 +240,7 @@
 | v2.1 | 3 | 5 | Deployment hardening as first-class milestone |
 | v2.2 | 5 | 7 | Mobile-first responsive redesign |
 | v2.3 | 3 | 5 | CSV import reusing existing services |
+| v2.4 | 4 | 4 | Account-level skip filtering for selective import |
 
 ### Cumulative Quality
 
@@ -210,6 +251,7 @@
 | v2.1 | 259 | 16/16 | 0 |
 | v2.2 | 259 | N/A | 0 |
 | v2.3 | 313 | 23/23 | 1 (Phase 28) |
+| v2.4 | 334 | 10/10 | 1 (Phase 32) |
 
 ### Top Lessons (Verified Across Milestones)
 
@@ -218,3 +260,4 @@
 3. Service layer separation enables future integration with zero business logic duplication (v1.0 → v2.0 agent → v2.3 import)
 4. Milestone audit always finds real issues — never skip it (confirmed across all milestones)
 5. Reusing existing service functions dramatically reduces milestone scope (v2.3 was 3 phases because dedup/rules/transfers already existed)
+6. SUMMARY.md frontmatter `requirements_completed` is skipped in every milestone — needs structural workflow fix, not reminders (confirmed v2.0 + v2.3 + v2.4)
