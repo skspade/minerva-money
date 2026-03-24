@@ -1,14 +1,14 @@
 ---
 gsd_state_version: 1.0
-milestone: v2.4
-milestone_name: CSV Import Account Filtering
-status: completed
-last_updated: "2026-03-24T20:30:00.000Z"
+milestone: v2.5
+milestone_name: Chat Enhancements
+status: active
+last_updated: "2026-03-24T21:00:00.000Z"
 progress:
-  total_phases: 4
-  completed_phases: 4
-  total_plans: 4
-  completed_plans: 4
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
 ---
 
 # Project State
@@ -18,23 +18,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-24)
 
 **Core value:** Accurate, auto-synced financial data with envelope budgeting that lets you see where every dollar goes and how spending trends over time.
-**Current focus:** Planning next milestone
+**Current focus:** v2.5 Chat Enhancements — model selector and category creation
 
 ## Current Position
 
-Milestone: v2.4 CSV Import Account Filtering — SHIPPED 2026-03-24
-Phase: All complete (29-32)
-Status: Milestone archived
-Last activity: 2026-03-24 - Completed quick task 2: Add a UI button to trigger manual sync and backup
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-03-24 — Milestone v2.5 started
 
-Progress: [██████████] 100%
+Progress: [░░░░░░░░░░] 0%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 4 (v2.4)
-- Phases: 4/4
-- Requirements satisfied: 10/10
+- Total plans completed: 0 (v2.5)
+- Phases: 0/0
+- Requirements satisfied: 0/0
 
 ## Accumulated Context
 
@@ -59,5 +59,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-24
-Stopped at: Completed quick-2-PLAN.md (Sync Now button on Dashboard)
+Stopped at: Starting milestone v2.5
 Resume file: None

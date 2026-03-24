@@ -45,7 +45,16 @@ Accurate, auto-synced financial data with envelope budgeting that lets you see w
 
 ### Active
 
-(No active milestone — planning next)
+**Current Milestone: v2.5 Chat Enhancements**
+
+**Goal:** Add model selector and category creation to the Claude chat agent
+
+**Target features:**
+- Server-driven model selector (Haiku/Sonnet/Opus) with centralized model list endpoint
+- Model selector UI dropdown above chat input bar (mobile-friendly native select)
+- Category creation agent tool with duplicate name validation and confirmation flow
+- Category group creation agent tool with duplicate name validation and confirmation flow
+- System prompt updates for new tools with behavioral guidance (add-only, no delete/rename)
 
 ### Out of Scope
 
@@ -60,7 +69,7 @@ Accurate, auto-synced financial data with envelope budgeting that lets you see w
 - Agent-initiated proactive alerts — dashboard already shows budget status
 - Streaming agent responses — collect-and-return sufficient; upgrade if response times are slow
 - Persistent chat history database — SDK sessions handle within-session continuity
-- Category creation via agent — UI concern with sort ordering
+- Category deletion/rename via agent — UI concern with sort ordering; creation is safe but destructive ops stay in UI
 - Multi-agent orchestration — single agent sufficient
 
 ## Context
@@ -120,4 +129,4 @@ Accurate, auto-synced financial data with envelope budgeting that lets you see w
 | Pure helper functions for UI logic | Exported testable functions (validation, filtering, stats) | ✓ Good — 22 tests covering skip logic |
 
 ---
-*Last updated: 2026-03-24 after v2.4 milestone*
+*Last updated: 2026-03-24 after v2.5 milestone start*
