@@ -166,5 +166,5 @@ Full details: see Phase Details below
 | 23. Budget Cards | v2.2 | 1/1 | Complete | 2026-03-24 |
 | 24. Modal Conversions | v2.2 | 1/1 | Complete | 2026-03-24 |
 | 25. Remaining Pages | v2.2 | 2/2 | Complete | 2026-03-24 |
-| 26. Import Service and API | v2.3 | 0/0 | Not started | - |
+| 26. Import Service and API | 1/2 | In Progress|  | - |
 | 27. Import UI and Navigation | v2.3 | 0/0 | Not started | - |
