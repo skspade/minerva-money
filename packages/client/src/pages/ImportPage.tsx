@@ -221,6 +221,7 @@ export default function ImportPage() {
           previewResult={previewResult}
           executeResult={executeResult}
           executeMutation={executeMutation}
+          accountMappings={accountMappings}
           onImport={handleImport}
           onBack={() => { executeMutation.reset(); setExecuteResult(null); setStep('preview'); }}
           onReset={handleReset}
@@ -575,6 +576,7 @@ interface ResultsStepProps {
   previewResult: PreviewResult;
   executeResult: ExecuteResult | null;
   executeMutation: { isPending: boolean; isError: boolean; error: { message: string } | null };
+  accountMappings: Record<string, string>;
   onImport: () => void;
   onBack: () => void;
   onReset: () => void;
@@ -584,12 +586,17 @@ function ResultsStep({
   previewResult,
   executeResult,
   executeMutation,
+  accountMappings,
   onImport,
   onBack,
   onReset,
 }: ResultsStepProps) {
   // Before execution — show confirm summary
   if (!executeResult) {
+    const { skippedAccountNames, skippedRowCount } = computeSkipFilterStats(accountMappings, previewResult.rowCountByAccount);
+    const skippedAccountCount = skippedAccountNames.size;
+    const hasSkippedAccounts = skippedAccountCount > 0;
+
     return (
       <div className="space-y-6">
         <div className="bg-white rounded-lg shadow p-4 md:p-6">
@@ -607,7 +614,18 @@ function ResultsStep({
               <p className="text-2xl font-bold text-red-600">{previewResult.errors.length}</p>
               <p className="text-sm text-gray-600">Error rows</p>
             </div>
+            {hasSkippedAccounts && (
+              <div className="text-center p-3 bg-amber-50 rounded-lg">
+                <p className="text-2xl font-bold text-amber-600">{skippedRowCount}</p>
+                <p className="text-sm text-gray-600">Skipped (account filter)</p>
+              </div>
+            )}
           </div>
+          {hasSkippedAccounts && (
+            <p className="text-xs text-gray-500 mt-3">
+              Excludes {skippedRowCount} rows from {skippedAccountCount} skipped account{skippedAccountCount !== 1 ? 's' : ''}
+            </p>
+          )}
         </div>
 
         {executeMutation.isError && (
@@ -664,6 +682,12 @@ function ResultsStep({
             <p className="text-2xl font-bold text-purple-600">{executeResult.categorizedFromCsv}</p>
             <p className="text-sm text-gray-600">Categorized from CSV</p>
           </div>
+          {executeResult.skippedByAccountFilter > 0 && (
+            <div className="p-3 bg-amber-50 rounded-lg">
+              <p className="text-2xl font-bold text-amber-600">{executeResult.skippedByAccountFilter}</p>
+              <p className="text-sm text-gray-600">Skipped (account filter)</p>
+            </div>
+          )}
         </div>
       </div>
 
