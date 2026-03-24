@@ -202,6 +202,17 @@ export default function ImportPage() {
             });
           }}
           onContinue={() => setStep('results')}
+          onSkipAllUnmatched={() => {
+            setAccountMappings(prev => {
+              const next = { ...prev };
+              previewResult!.accounts.forEach(a => {
+                if (!next[a.csvName] || next[a.csvName] === '') {
+                  next[a.csvName] = SKIP_SENTINEL;
+                }
+              });
+              return next;
+            });
+          }}
         />
       )}
 
@@ -354,6 +365,7 @@ interface PreviewStepProps {
   onAccountMappingChange: (csvName: string, accountId: string) => void;
   onCategoryMappingChange: (csvName: string, categoryId: number) => void;
   onContinue: () => void;
+  onSkipAllUnmatched: () => void;
 }
 
 function PreviewStep({
@@ -366,17 +378,33 @@ function PreviewStep({
   onAccountMappingChange,
   onCategoryMappingChange,
   onContinue,
+  onSkipAllUnmatched,
 }: PreviewStepProps) {
+  const { skippedAccountNames, skippedRowCount } = computeSkipFilterStats(accountMappings, previewResult.rowCountByAccount);
+  const filteredTotalRows = previewResult.totalRows - skippedRowCount;
+  const filteredValidRows = previewResult.validRows - skippedRowCount;
+  const filteredSampleRows = previewResult.sampleRows.filter(row => !skippedAccountNames.has(row.accountName));
+  const skippedAccountCount = skippedAccountNames.size;
+  const mappedAccountCount = Object.values(accountMappings).filter(v => v !== '' && v !== SKIP_SENTINEL).length;
+  const hasSkippedAccounts = skippedAccountCount > 0;
+
   return (
     <div className="space-y-6">
+      {/* Summary banner */}
+      {hasSkippedAccounts && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
+          Importing from {mappedAccountCount} of {previewResult.accounts.length} accounts ({skippedAccountCount} skipped)
+        </div>
+      )}
+
       {/* Summary stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-white rounded-lg shadow p-4 text-center">
-          <p className="text-2xl font-bold text-gray-900">{previewResult.totalRows}</p>
+          <p className="text-2xl font-bold text-gray-900">{hasSkippedAccounts ? filteredTotalRows : previewResult.totalRows}</p>
           <p className="text-sm text-gray-500">Total rows</p>
         </div>
         <div className="bg-white rounded-lg shadow p-4 text-center">
-          <p className="text-2xl font-bold text-green-600">{previewResult.validRows}</p>
+          <p className="text-2xl font-bold text-green-600">{hasSkippedAccounts ? filteredValidRows : previewResult.validRows}</p>
           <p className="text-sm text-gray-500">Valid rows</p>
         </div>
         <div className="bg-white rounded-lg shadow p-4 text-center">
@@ -400,7 +428,7 @@ function PreviewStep({
               </tr>
             </thead>
             <tbody>
-              {previewResult.sampleRows.map((row, i) => (
+              {filteredSampleRows.map((row, i) => (
                 <tr key={i} className="border-b last:border-b-0">
                   <td className="py-2 pr-4 whitespace-nowrap">{row.date}</td>
                   <td className="py-2 pr-4 truncate max-w-[200px]">{row.merchantName}</td>
@@ -412,6 +440,11 @@ function PreviewStep({
             </tbody>
           </table>
         </div>
+        {hasSkippedAccounts && filteredSampleRows.length < previewResult.sampleRows.length && (
+          <p className="text-xs text-gray-500 mt-2">
+            Showing {filteredSampleRows.length} of {previewResult.sampleRows.length} sample rows ({previewResult.sampleRows.length - filteredSampleRows.length} excluded from skipped accounts)
+          </p>
+        )}
       </div>
 
       {/* Dedup stats */}
@@ -420,6 +453,11 @@ function PreviewStep({
           <span className="font-semibold text-green-600">{previewResult.dedupStats.newCount}</span> new transactions to import,{' '}
           <span className="font-semibold text-gray-500">{previewResult.dedupStats.duplicateCount}</span> duplicates to skip
         </p>
+        {hasSkippedAccounts && (
+          <p className="text-xs text-gray-500 mt-1">
+            Excludes {skippedRowCount} rows from {skippedAccountCount} skipped account{skippedAccountCount !== 1 ? 's' : ''}
+          </p>
+        )}
       </div>
 
       {/* Parse errors */}
@@ -438,7 +476,18 @@ function PreviewStep({
 
       {/* Account mappings */}
       <div className="bg-white rounded-lg shadow p-4 md:p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-3">Map Accounts</h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-lg font-semibold text-gray-900">Map Accounts</h3>
+          {previewResult.accounts.some(a => !accountMappings[a.csvName] || accountMappings[a.csvName] === '') && (
+            <button
+              type="button"
+              onClick={onSkipAllUnmatched}
+              className="text-sm text-amber-600 hover:text-amber-700 transition-colors"
+            >
+              Skip All Unmatched
+            </button>
+          )}
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {previewResult.accounts.map((acct) => (
             <div key={acct.csvName} className={`space-y-1 ${
