@@ -5,8 +5,8 @@ milestone_name: CSV Import
 status: unknown
 last_updated: "2026-03-24T17:03:30.753Z"
 progress:
-  total_phases: 9
-  completed_phases: 9
+  total_phases: 2
+  completed_phases: 1
   total_plans: 14
   completed_plans: 14
 ---
