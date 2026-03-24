@@ -62,7 +62,7 @@ Full details: see Phase Details below
 - [x] **Phase 23: Budget Cards** - Stacked category cards, progress bars, inline allocation editing (1 plan) (completed 2026-03-24)
     - [x] 23-01-PLAN.md — Extract AllocationCell, create BudgetCategoryCard, add mobile cards + responsive month selector (completed 2026-03-24)
 - [x] **Phase 24: Modal Conversions** - SplitModal, ManualTransactionForm, RuleForm, ManualLinkModal as bottom sheets (completed 2026-03-24)
-- [ ] **Phase 25: Remaining Pages** - Dashboard, Accounts, Reports, Chat, Categories, Rules mobile polish
+- [x] **Phase 25: Remaining Pages** - Dashboard, Accounts, Reports, Chat, Categories, Rules mobile polish (completed 2026-03-24)
 
 ## Phase Details
 
@@ -196,4 +196,4 @@ Full details: see Phase Details below
 | 22. Transaction Cards | 1/1 | Complete    | 2026-03-24 | — |
 | 23. Budget Cards | 1/1 | Complete    | 2026-03-24 | — |
 | 24. Modal Conversions | 1/1 | Complete    | 2026-03-24 | — |
-| 25. Remaining Pages | 1/2 | In Progress|  | — |
+| 25. Remaining Pages | 2/2 | Complete   | 2026-03-24 | — |
