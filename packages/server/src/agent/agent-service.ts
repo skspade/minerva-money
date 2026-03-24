@@ -4,6 +4,7 @@ import type Database from 'better-sqlite3';
 import type { Context } from '../sync/trpc.js';
 import { createMcpServer } from './mcp-server.js';
 import { getSystemPrompt } from './system-prompt.js';
+import { DEFAULT_MODEL_ID, TIMEOUT_MS, type ModelId } from './models.js';
 
 export interface ChatResult {
   response: string;
@@ -15,12 +16,13 @@ export async function chat(
   ctx: Context,
   message: string,
   sessionId?: string,
+  model: ModelId = DEFAULT_MODEL_ID,
 ): Promise<ChatResult> {
   const mcpServer = createMcpServer(db, ctx);
   const systemPrompt = getSystemPrompt();
 
   const options: Record<string, unknown> = {
-    model: 'claude-sonnet-4-20250514',
+    model,
     systemPrompt,
     mcpServers: { minerva: mcpServer },
     allowedTools: ['mcp__minerva__*'],
@@ -38,11 +40,11 @@ export async function chat(
   let resultText = '';
 
   try {
-    const timeoutMs = 30_000;
+    const timeoutMs = TIMEOUT_MS[model];
     const result = await Promise.race([
       collectResponse(query({ prompt: message, options })),
       new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Agent query timed out after 30 seconds')), timeoutMs),
+        setTimeout(() => reject(new Error(`Agent query timed out after ${timeoutMs / 1000} seconds (model: ${model})`)), timeoutMs),
       ),
     ]);
 
