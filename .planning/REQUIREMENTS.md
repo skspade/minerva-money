@@ -15,19 +15,19 @@ Requirements for CSV Import Account Filtering milestone. Each maps to roadmap ph
 
 ### Stats Filtering
 
-- [ ] **STAT-01**: Preview stats (total rows, valid rows) exclude rows from skipped accounts
-- [ ] **STAT-02**: Sample rows table excludes rows from skipped accounts
-- [ ] **STAT-03**: Dedup stats (new/duplicate counts) exclude rows from skipped accounts
+- [x] **STAT-01**: Preview stats (total rows, valid rows) exclude rows from skipped accounts
+- [x] **STAT-02**: Sample rows table excludes rows from skipped accounts
+- [x] **STAT-03**: Dedup stats (new/duplicate counts) exclude rows from skipped accounts
 
 ### Import Execution
 
 - [ ] **EXEC-01**: Server accepts partial account mappings and skips rows for unmapped accounts instead of throwing
-- [ ] **EXEC-02**: Confirm summary (step 3) reflects filtered counts excluding skipped accounts
+- [x] **EXEC-02**: Confirm summary (step 3) reflects filtered counts excluding skipped accounts
 
 ### Polish
 
-- [ ] **PLSH-01**: "Skip All Unmatched" button sets all accounts without auto-suggested matches to skip
-- [ ] **PLSH-02**: Filtered summary banner shows "Importing from X of Y accounts (Z skipped)"
+- [x] **PLSH-01**: "Skip All Unmatched" button sets all accounts without auto-suggested matches to skip
+- [x] **PLSH-02**: Filtered summary banner shows "Importing from X of Y accounts (Z skipped)"
 
 ## Future Requirements
 
@@ -49,13 +49,13 @@ None — this is a focused enhancement milestone.
 | SKIP-01 | Phase 30 | Pending |
 | SKIP-02 | Phase 30 | Pending |
 | SKIP-03 | Phase 30 | Pending |
-| STAT-01 | Phase 31 | Pending |
-| STAT-02 | Phase 31 | Pending |
-| STAT-03 | Phase 31 | Pending |
+| STAT-01 | Phase 31 | Complete |
+| STAT-02 | Phase 31 | Complete |
+| STAT-03 | Phase 31 | Complete |
 | EXEC-01 | Phase 29 | Pending |
-| EXEC-02 | Phase 31 | Pending |
-| PLSH-01 | Phase 31 | Pending |
-| PLSH-02 | Phase 31 | Pending |
+| EXEC-02 | Phase 31 | Complete |
+| PLSH-01 | Phase 31 | Complete |
+| PLSH-02 | Phase 31 | Complete |
 
 **Coverage:**
 - v2.4 requirements: 10 total
