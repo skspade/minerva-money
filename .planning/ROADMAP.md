@@ -84,7 +84,9 @@ Full details: see Phase Details below
   3. Duplicate transactions (matching dedup hash) are silently skipped via INSERT OR IGNORE, and the execute response reports the exact skip count
   4. After import, the rules engine has run on all imported transactions (setting category_id and rule_id where rules match), and transfer detection has identified candidate pairs
   5. The API rejects execution when any CSV account is unmapped, returning a clear validation error
-**Plans**: TBD
+**Plans**: 2 plans
+  - [ ] 26-01-PLAN.md — TDD: CSV parsing, validation, date parsing, amount conversion
+  - [ ] 26-02-PLAN.md — Preview/execute service, tRPC router, integration wiring
 
 ### Phase 27: Import UI and Navigation
 **Goal**: Users can import Monarch CSV files through a 3-step wizard accessible from both desktop and mobile navigation
