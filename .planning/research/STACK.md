@@ -1,198 +1,144 @@
 # Technology Stack
 
-**Project:** Minerva Money v2.3 CSV Import
+**Project:** Minerva Money v2.4 — CSV Import Account Filtering
 **Researched:** 2026-03-24
 **Confidence:** HIGH
-**Scope:** NEW capabilities only -- CSV/TSV parsing, file upload handling, validation
+**Scope:** Changes needed for account filtering/skip capability in existing CSV import
 
-## Context: Subsequent Milestone
+## Recommendation: Zero New Dependencies
 
-The core stack (React 19, Vite 6, Tailwind CSS v4, tRPC 11, TanStack Query, Express 4, better-sqlite3, Zod 4) is validated and unchanged. This document covers only what v2.3 adds.
+This milestone requires **no new libraries, no version bumps, and no stack changes**. Every feature is achievable with modifications to existing code using the current stack.
 
-**v2.3 goal:** Import transaction history from Monarch Money CSV exports into Minerva Money with deduplication, account/category mapping, and rules engine integration.
-
-**Existing patterns to preserve:**
-- tRPC-only API (no Express middleware for uploads)
-- `INSERT OR IGNORE` with `dedup_hash` UNIQUE constraint for deduplication
-- `generateDedupHash(accountId, date, amount, payee)` in `simplefin-client.ts`
-- Rules engine `applyRule()` for post-insertion categorization
-- Zod 4 for all input validation
+**Why:** The v2.4 scope is a behavioral refinement of existing CSV import functionality. It adds a "skip" option to a dropdown, filters arrays client-side, and relaxes a server-side validation check. These are pure logic changes to approximately 3 files.
 
 ---
 
-## Recommended Stack
+## Existing Stack (Unchanged)
 
-### New Dependencies
+### Technologies Relevant to v2.4
 
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| `csv-parse` | ^5.6.0 | Parse CSV/TSV transaction files on the server | Mature library (2840+ npm dependents), zero external dependencies, sync API returns parsed objects immediately, configurable delimiter for both comma and tab formats. Active maintenance (last published March 2026). |
-
-**One new package. That is all.**
-
-### No New Client Dependencies
-
-File reading uses the built-in browser `File.text()` API. No file upload library needed.
-
-### No New Validation Dependencies
-
-Zod 4 (already installed at `^4.3.6`) handles all validation for parsed rows and tRPC input schemas.
-
----
-
-## CSV Parsing: `csv-parse` Sync API
-
-**Import path:** `csv-parse/sync` -- synchronous, non-streaming parsing.
-
-**Why sync over streaming:** Transaction CSV files are small (even 10,000 rows is < 5MB). The entire file content arrives as a string in a tRPC mutation. Streaming adds complexity with zero benefit here. The sync API takes a string and returns an array of objects -- perfect for the request/response model.
-
-**Configuration for this project:**
-
-```typescript
-import { parse } from 'csv-parse/sync';
-
-const records = parse(fileContent, {
-  delimiter: detectedDelimiter, // '\t' or ','
-  columns: true,                // first row becomes object keys
-  skip_empty_lines: true,       // ignore blank lines
-  trim: true,                   // strip whitespace from values
-  relax_column_count: true,     // tolerate rows with fewer columns (e.g., missing Tags)
-  bom: true,                    // strip UTF-8 BOM if present (Excel exports often include this)
-});
-// records: Array<Record<string, string>>
-```
-
-**Delimiter auto-detection:** `csv-parse` does not auto-detect delimiters, but detection is trivial:
-
-```typescript
-function detectDelimiter(content: string): string {
-  const firstLine = content.split('\n')[0];
-  if (firstLine.includes('\t')) return '\t';
-  return ',';
-}
-```
-
-This makes the importer work for both comma-CSV and tab-TSV files without user configuration.
+| Technology | Current Version | Role in v2.4 | Change Needed |
+|------------|----------------|---------------|---------------|
+| React | ^19.0 | Render skip option in account dropdown, filter preview stats with `useMemo` | UI logic only |
+| TypeScript | ^5.7 | Type updates for skip sentinel value, new `skippedAccountCount` field | Type modifications |
+| Tailwind CSS | ^4.0 | Style the skip option distinctly (muted text) | CSS classes only |
+| tRPC | ^11.0 | Pass skip-aware mappings to execute endpoint | No schema change |
+| Zod 4 | ^3.24 | `accountMappings: z.record(z.string(), z.string())` already accepts partial records | None |
+| csv-parse | ^5.6 | Parsing is entirely unaffected by account filtering | None |
+| better-sqlite3 | ^11.7 | Query logic unchanged — rows are filtered before INSERT loop | None |
+| TanStack Query | ^5.64 | Same mutation flow, no new queries | None |
+| Vitest | ^3.0 | New test cases for skip behavior | Test additions only |
+| lucide-react | existing | No new icons needed | None |
 
 ---
 
-## Monarch Money Export Format
+## Libraries Explicitly NOT Needed
 
-**Columns (8 total):** Date, Merchant, Category, Account, Original Statement, Notes, Amount, Tags
-
-**Format:** Standard comma-delimited CSV (not tab-delimited). The PROJECT.md reference to "tab-delimited Monarch format" appears inaccurate based on Monarch's documentation and community tooling -- their exports use standard CSV. However, some users may re-export as TSV from spreadsheet software, so supporting both delimiters is prudent.
-
-**Amount format:** Positive for income, negative for expenses (as decimal dollars, e.g., `-45.67`). Must be converted to integer cents for storage.
-
-**Confidence:** MEDIUM -- based on third-party documentation (blog.tracefunc.com) consistent with Monarch help articles. Direct verification against an actual export file is recommended before implementation.
-
----
-
-## File Upload: Client-Side FileReader
-
-**Approach:** Read file as text on the client, send the string content via tRPC mutation.
-
-**Why NOT server-side multipart upload:**
-- Transaction CSVs are small (< 10MB)
-- tRPC mutations accept string payloads natively as JSON fields
-- Avoids adding `multer`, `busboy`, or `formidable` Express middleware
-- Preserves the existing tRPC-only API pattern (no raw Express routes)
-- Simpler error handling -- Zod validates the string content on the server
-
-**Client-side pattern:**
-
-```typescript
-// Modern File API -- cleaner than FileReader event callbacks
-const file = inputRef.current.files[0];
-const text = await file.text(); // Returns Promise<string>
-// Send as string field in tRPC mutation
-const preview = await trpc.import.preview.mutate({ content: text });
-```
-
-`File.text()` is supported in Chrome 76+, Firefox 69+, Safari 14+ -- all modern browsers.
-
-**File input element:**
-
-```tsx
-<input
-  type="file"
-  accept=".csv,.tsv,.txt"
-  onChange={handleFileSelect}
-  className="..." // Style with Tailwind to match app
-/>
-```
-
-No `react-dropzone` or drag-and-drop library needed. A styled file input is sufficient for a single-user app.
+| Library | Why Someone Might Consider It | Why It Is Unnecessary |
+|---------|-------------------------------|----------------------|
+| Any filtering library (lodash, ramda) | Client-side array filtering | Native `Array.filter()` is sufficient for filtering rows by account name |
+| Form library (react-hook-form) | Managing skip/map state per account | Existing `useState` + `Record<string, string>` handles this fine |
+| State management (zustand, jotai) | Tracking skip selections across components | Props flow through 3 components — adequate for this scope |
+| UI component library | Styled skip option in dropdown | A single `<option>` with distinct text is all that is needed |
 
 ---
 
-## What NOT to Add
+## Integration Points (Where Code Changes)
 
-| Library | Why NOT | Use Instead |
-|---------|---------|-------------|
-| `multer` / `busboy` / `formidable` | Multipart upload is unnecessary. Adds Express middleware that breaks the clean tRPC-only pattern. | Client `file.text()` + tRPC string mutation |
-| `papaparse` | Browser-focused library with auto-detection features we don't need. `csv-parse` is the standard Node.js choice with better TypeScript support and a dedicated sync API. | `csv-parse` |
-| `fast-csv` | Viable but `csv-parse` has more downloads, better docs, and cleaner sync API. | `csv-parse` |
-| `joi` / `yup` / `ajv` | Zod 4 already handles all validation. Adding another library is redundant. | Zod 4 (already installed) |
-| `react-dropzone` | Over-engineered for a simple file input. Single-user app doesn't need drag-and-drop polish. | Native `<input type="file">` styled with Tailwind |
-| Manual `String.split('\t')` | Fails on edge cases: quoted fields containing delimiters, escaped quotes, fields with embedded newlines. `csv-parse` handles all of these correctly. | `csv-parse` |
-| `xlsx` / `exceljs` | Excel format support is out of scope. Users can export CSV from any spreadsheet app. | CSV/TSV only |
+### 1. Account Mapping Dropdown (Client — ImportPage.tsx)
+
+**Current behavior:** `<select>` with `<option value="">Select account...</option>` as disabled placeholder, then account options. All accounts must be mapped to proceed.
+
+**Change:** Add `<option value="__skip__">Skip -- do not import</option>` after the disabled placeholder. The sentinel value `"__skip__"` is a string constant — no library needed, just a new `<option>` element.
+
+**Validation change:** `allAccountsMapped` currently requires every account to have a non-empty string mapping. Update to accept `"__skip__"` as a valid selection. The new check: every account must be either mapped to a real account ID OR set to `"__skip__"`.
+
+### 2. Preview Stats Filtering (Client — ImportPage.tsx)
+
+**Current behavior:** Stats cards show `previewResult.totalRows`, `previewResult.validRows`, `previewResult.dedupStats` with no filtering.
+
+**Change:** Use `useMemo` (already available from React — already imported) to compute filtered stats based on which accounts are marked as skip. Filter `sampleRows` to exclude skipped accounts. Recalculate row counts excluding skipped accounts. This is `Array.filter()` on existing arrays.
+
+**No server round-trip needed.** The preview data already includes `accountName` on every sample row and dedup entry. Client-side filtering is instant and avoids re-parsing the CSV.
+
+### 3. Server Execute Relaxation (Server — import-service.ts)
+
+**Current behavior:** `executeImport()` at line 363-365 throws `Error('Unmapped accounts: ...')` if any CSV account name is not a key in `accountMappings`.
+
+**Change:** Instead of throwing, filter out rows whose `accountName` is not in `accountMappings`. The client simply omits skipped accounts from the `accountMappings` record — no `"__skip__"` sentinel crosses the wire. Server sees fewer mappings and silently skips rows for accounts not in the map.
+
+This is a 3-line change: replace the throw with a filter, or skip rows inside the existing for-loop.
+
+### 4. Execute Result Updates (Server — import-service.ts)
+
+**Current behavior:** `ExecuteResult` interface has `importedCount`, `skippedCount` (dedup skips), `categorizedByRules`, `categorizedFromCsv`.
+
+**Change:** Add `skippedAccountCount: number` to distinguish "skipped because duplicate" from "skipped because account excluded." Increment this counter in the row loop when a row's account is not in the mappings.
+
+### 5. Results Step Updates (Client — ImportPage.tsx)
+
+**Current behavior:** Results step shows imported/skipped/categorized counts in a 2x2 grid.
+
+**Change:** Add a card for `skippedAccountCount` showing how many rows were excluded due to account filtering. Conditionally render it (only show if > 0) to keep the UI clean for imports without skipping.
+
+### 6. Router Schema (Server — import-router.ts)
+
+**No change needed.** The Zod schema `accountMappings: z.record(z.string(), z.string())` already accepts any number of key-value pairs. The validation that all accounts must be present was in the service layer (the throw), not in the Zod schema.
 
 ---
 
-## Integration Points
+## Sentinel Value Design Decision
 
-### Existing Code to Reuse
+**Use `"__skip__"` client-side only. Omit from server payload.**
 
-| Component | Location | Integration |
-|-----------|----------|-------------|
-| `generateDedupHash()` | `packages/server/src/sync/simplefin-client.ts` | Same hash formula (account+date+amount+payee) for imported transactions. **Extract to a shared utility** so both sync and import can use it without importing SimpleFIN code. |
-| Transaction INSERT | `packages/server/src/sync/sync-service.ts` | Same `INSERT OR IGNORE INTO transactions` with `dedup_hash` UNIQUE constraint. Imported transactions that match synced ones are silently skipped. |
-| Rules engine | `packages/server/src/rules/rules-service.ts` | Run rules on imported transactions post-import, same as the sync flow does. |
-| Account list | Existing tRPC procedure | Needed for the mapping UI -- user maps CSV "Account" strings to existing Minerva account IDs. |
-| Category list | `packages/server/src/categories/category-service.ts` | Needed for the mapping UI -- user maps CSV "Category" strings to existing Minerva category IDs. |
+- Client tracks skip selections with a `"__skip__"` sentinel in the `accountMappings` React state
+- When building the `execute` mutation payload, client strips entries where value is `"__skip__"`
+- Server receives only real account ID mappings — clean contract
+- Server treats any CSV account not present in the mappings record as "skip this account's rows"
 
-### New Code to Create
+**Why not a separate `skippedAccounts: string[]` field?** Unnecessary complexity. The absence of an account from the mappings record is the skip signal. One less field to validate, serialize, and document. The server does not need to know the user's intent — it just processes what it receives.
 
-| Component | Location | Purpose |
-|-----------|----------|---------|
-| CSV parse service | `packages/server/src/import/` | Parse content, detect delimiter, validate rows, extract unique accounts/categories for mapping |
-| Import tRPC router | `packages/server/src/import/` | `preview` mutation (parse + return mappings) and `execute` mutation (import with confirmed mappings) |
-| Import page | `packages/client/src/pages/ImportPage.tsx` | File upload, preview table, account/category mapping dropdowns, confirm/import button |
+**Why `"__skip__"` and not empty string `""`?** Empty string is already the "not yet selected" state for the disabled placeholder option. Using a distinct sentinel avoids ambiguity between "user hasn't chosen yet" and "user chose to skip."
+
+---
+
+## Testing Approach
+
+All tests use Vitest (already installed). No new test utilities needed.
+
+| Test Area | File | What to Test |
+|-----------|------|-------------|
+| Service: skip filtering | import-service.test.ts | `executeImport` with partial `accountMappings` skips rows for unmapped accounts |
+| Service: no throw on unmapped | import-service.test.ts | `executeImport` does not throw when accounts are absent from mappings |
+| Service: result counts | import-service.test.ts | `skippedAccountCount` accurately reflects filtered row count |
+| Service: mixed scenario | import-service.test.ts | Import with some accounts mapped, some skipped, some rows deduped — all counts correct |
 
 ---
 
 ## Alternatives Considered
 
-| Category | Recommended | Alternative | Why Not Alternative |
-|----------|-------------|-------------|---------------------|
-| CSV parsing | `csv-parse` (sync) | Manual `split()` | Breaks on quoted fields, escaped characters, embedded newlines |
-| CSV parsing | `csv-parse` (sync) | `papaparse` | Browser-focused, heavier, auto-detection unnecessary |
-| CSV parsing | `csv-parse` (sync) | `csv-parse` (streaming) | Overkill for <10MB files in a request/response model |
-| File upload | Client `file.text()` | Server multipart upload | Adds middleware, breaks tRPC pattern, unnecessary for small files |
-| File upload | `file.text()` | `FileReader` API | `file.text()` is the modern Promise-based replacement |
-| Validation | Zod 4 | Additional library | Already installed and used everywhere |
+| Decision | Chosen | Alternative | Why Not Alternative |
+|----------|--------|-------------|---------------------|
+| Skip signal | Omit from mappings record | Explicit `skippedAccounts` array | Extra field adds complexity with no benefit; absence-as-signal is simpler |
+| Client sentinel | `"__skip__"` string | Boolean flag per account | Would require restructuring `accountMappings` from `Record<string,string>` to a more complex type |
+| Stats filtering | Client-side `useMemo` | Server re-preview with skip list | Wastes a round trip; client already has all the data needed |
+| Server validation | Remove throw, filter in loop | New endpoint variant | Modifying existing behavior is simpler than adding endpoints |
 
 ---
 
 ## Installation
 
 ```bash
-# Single new dependency (server only)
-npm install csv-parse --workspace=packages/server
+# Nothing to install. Zero new dependencies.
 ```
 
 ---
 
 ## Sources
 
-- [csv-parse official documentation](https://csv.js.org/parse/) -- sync API, options reference
-- [csv-parse sync API docs](https://csv.js.org/parse/api/sync/) -- import path, usage examples
-- [csv-parse on npm](https://www.npmjs.com/package/csv-parse) -- version, download stats, dependents
-- [Monarch Money export format](https://blog.tracefunc.com/notes/monarch-money.html) -- column headers: Date, Merchant, Category, Account, Original Statement, Notes, Amount, Tags
-- [Monarch Money import help](https://help.monarch.com/hc/en-us/articles/4409682789908-Importing-Transaction-History-Manually) -- 8-column format, keyword-based mapping
-- [Monarch Money download history](https://help.monarch.com/hc/en-us/articles/15526600975764-Downloading-Transaction-or-Account-History) -- CSV export documentation
+- Existing codebase analysis: `import-service.ts` (lines 362-365 throw logic), `import-router.ts` (Zod schema), `ImportPage.tsx` (dropdown and validation logic) — PRIMARY source, HIGH confidence
+- No external research needed — this milestone modifies existing, well-understood code patterns
 
 ---
-*Stack research for: Minerva Money v2.3 CSV Import*
+*Stack research for: Minerva Money v2.4 CSV Import Account Filtering*
 *Researched: 2026-03-24*

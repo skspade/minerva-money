@@ -1,255 +1,192 @@
-# Domain Pitfalls
+# Pitfalls Research
 
-**Domain:** CSV import for personal finance app (adding to existing app with bank sync)
+**Domain:** Adding account skip/filter to existing CSV import system
 **Researched:** 2026-03-24
-**Confidence:** HIGH (patterns verified against existing codebase schema, dedup hash implementation, and shared `toCents()` function; amount parsing issues are well-documented JavaScript behavior)
+**Confidence:** HIGH (based on direct code analysis of existing import-service.ts and ImportPage.tsx)
 
 ## Critical Pitfalls
 
-Mistakes that cause data corruption, incorrect balances, or require database cleanup.
+### Pitfall 1: Dedup Stats Counting Skipped Accounts as "New"
 
-### Pitfall 1: Floating-Point Cents Conversion Truncation
+**What goes wrong:**
+The current `previewImport` code (import-service.ts lines 320-328) counts rows with unmapped accounts as "new" (`newCount++`). When a user skips an account, those rows inflate the "new transactions" count shown in preview and confirmation, making the user think they are importing more transactions than they actually will.
 
-**What goes wrong:** Dollar amounts like `$19.99` parsed as floats and multiplied by 100 produce `1998.9999999999998` instead of `1999`. Using `Math.floor()`, `Math.trunc()`, or `parseInt()` without rounding silently drops a cent. Over thousands of imported transactions, cumulative error can reach dollars.
+**Why it happens:**
+The existing logic treats "no mapping" and "skip" identically. The `accountIdMap` will not have an entry for skipped accounts, so they fall through to the `!entry.hasMappedAccount` branch which increments `newCount`. This was correct when unmapped meant "not yet selected" but becomes wrong when unmapped means "deliberately excluded."
 
-**Why it happens:** IEEE 754 floating-point cannot exactly represent most decimal fractions. `19.99 * 100 === 1998.9999999999998` in JavaScript. This is not a rare edge case -- it affects roughly 1 in 3 two-decimal dollar amounts.
+**How to avoid:**
+Distinguish three account states in the client-side stats recalculation: (1) mapped to a real account, (2) explicitly skipped, (3) not yet selected. Only count mapped rows toward newCount/duplicateCount. Skipped rows should be excluded entirely from dedup stats. The client must recompute these counts by filtering `previewResult` data based on current mapping state, since the server preview does not know about skip decisions.
 
-**Consequences:** Budget math is off by pennies. Spending reports don't reconcile with source data. The error is silent and only discovered when totals don't match Monarch's exported totals.
+**Warning signs:**
+Preview summary shows more "new transactions" than expected after skipping an account. The confirmation page numbers do not add up (new + duplicates != non-skipped valid rows).
 
-**Prevention:** The shared `toCents()` function in `packages/shared/src/types.ts` already uses `Math.round()` -- use it for all CSV amount conversion. The import service must call `toCents(parseFloat(row.amount))`, never `parseInt(parseFloat(row.amount) * 100)` or any truncation variant. The design doc correctly says "converted to cents on import" -- enforce this by importing `toCents` from `@minerva/shared`.
-
-**Detection:** Unit test with known problematic values: `19.99` (expect `1999`), `0.01` (expect `1`), `0.10` (expect `10`), `1.005` (expect `101`), `-18.32` (expect `-1832`). Verify `toCents(parseFloat("19.99")) === 1999`.
-
-**Phase warning:** Must be correct in the very first implementation. Fixing after import means re-importing all data or running manual SQL corrections.
-
----
-
-### Pitfall 2: Dedup Hash Mismatch Between CSV and Synced Transactions
-
-**What goes wrong:** The existing dedup hash is `sha256(accountId|date|amount|payee)` (from `generateDedupHash` in `simplefin-client.ts`). For the same real-world transaction, the payee string from Monarch will almost certainly differ from SimpleFIN's payee string. Example: Monarch shows `"Amazon"` but SimpleFIN provides `"AMAZON.COM AMZN.COM/BILL WA"`. The hashes won't match and the import creates a duplicate of an already-synced transaction.
-
-**Why it happens:** SimpleFIN passes raw bank strings directly. Monarch normalizes, truncates, and sometimes re-maps merchant names for display. The same transaction from the same bank will have different payee strings in each system.
-
-**Consequences:** Duplicate transactions inflate spending reports and budget consumption. For any date range where Monarch and SimpleFIN overlap, every transaction is doubled. This is catastrophic for budget accuracy.
-
-**Prevention:**
-1. **Date range guidance is essential.** The import UI should ask users when they started SimpleFIN sync and warn if the CSV contains transactions after that date. For the Monarch migration use case, users should import only historical transactions that predate their SimpleFIN connection.
-2. The design's `INSERT OR IGNORE` on `dedup_hash` handles exact hash matches (e.g., re-importing the same CSV twice). It will NOT catch cross-source duplicates with different payee strings.
-3. Show separate counts in import results: "N imported, M skipped (already exist), K skipped (unmapped category)" so users can verify dedup is working.
-4. Do NOT try to normalize payee strings for fuzzy matching -- this introduces false positives and complexity. Accept the limitation and mitigate via date range guidance.
-
-**Detection:** After import, query for transactions with the same account + date + absolute amount but different IDs. If these exist in overlapping date ranges, warn the user.
-
-**Phase warning:** The import UI should surface the overlap risk prominently. The import service itself cannot solve this -- it's a UX/guidance problem.
+**Phase to address:**
+Client-side stats filtering phase.
 
 ---
 
-### Pitfall 3: Amount Sign Convention Mismatch
+### Pitfall 2: Server executeImport Throws on Unmapped Accounts
 
-**What goes wrong:** Monarch exports expenses as negative numbers (`-18.32`) and income as positive (`2500.00`). If the import blindly passes these through, the sign must match what Minerva already stores. A sign flip means every expense appears as income and vice versa.
+**What goes wrong:**
+The current `executeImport` function (import-service.ts lines 362-366) explicitly throws: `throw new Error('Unmapped accounts: ...')`. If the client sends `accountMappings` that excludes skipped accounts, the server rejects the entire import.
 
-**Why it happens:** There is no universal standard. Some bank exports use positive for debits (you spent money). Monarch uses the opposite convention (negative = expense = balance decreased). The existing Minerva codebase stores expenses as negative cents (from SimpleFIN, which also uses negative for debits).
+**Why it happens:**
+The original design required all accounts to be mapped as a safety check. Adding a "skip" option to the dropdown without updating server validation causes a hard crash on execute.
 
-**Consequences:** All imported transactions have inverted amounts. Budget spending shows as zero. Income appears doubled. Requires complete re-import.
+**How to avoid:**
+Change the server validation to check that every CSV account is either mapped to a real account ID OR absent from the mappings (meaning skipped). The key insight: the client should NOT send skipped accounts in accountMappings at all. The server should filter `validTransformed` to only include rows whose `accountName` exists in `accountMappings`, then skip the rest. Replace the unmapped-accounts error with a filter step that counts filtered rows for the result.
 
-**Prevention:** The conventions match: Monarch negative = expense, SimpleFIN negative = expense, Minerva DB negative = expense. But this MUST be verified with actual Monarch export data before coding. Add a unit test that imports a Monarch row with amount `-18.32` and verifies it becomes `-1832` cents in the database. If the convention doesn't match, a single `* -1` fixes it, but it must be discovered before the first real import.
+**Warning signs:**
+Import button triggers a server error with "Unmapped accounts" message.
 
-**Detection:** Import 5-10 known transactions and verify amounts match expected signs. Check that expenses are negative and income is positive.
-
-**Phase warning:** Validate with real Monarch export data in the first implementation phase. A sign flip after a full import is catastrophic.
-
----
-
-### Pitfall 4: UTF-8 BOM Corrupts First Column Header
-
-**What goes wrong:** The design sends CSV content as a string via tRPC. The client reads the file with `FileReader.readAsText()` (defaults to UTF-8). If the Monarch CSV contains a UTF-8 BOM (`\uFEFF`), that invisible character becomes the first character of the first column header. The parser sees `"\uFEFFDate"` instead of `"Date"` and fails to find the required `Date` column.
-
-**Why it happens:** Excel and some Windows tools prepend a UTF-8 BOM (byte order mark) to CSV files. Users who open and re-save a Monarch CSV in Excel will have a BOM. `FileReader.readAsText()` does not strip it.
-
-**Consequences:** The parser fails with a confusing "missing required column: Date" error. The user sees all their data in the file but the app refuses to parse it. The error message gives no hint about the actual cause (an invisible character).
-
-**Prevention:** Strip BOM as the very first step of parsing:
-```typescript
-csvContent = csvContent.replace(/^\uFEFF/, '');
-```
-This is a single line of code but easy to forget. If using PapaParse, it handles BOM automatically.
-
-**Detection:** Test with a CSV string that starts with `\uFEFF`. Verify headers are still parsed correctly.
-
-**Phase warning:** Address in the CSV parser implementation. One-line fix, but produces an invisible and confusing bug if missed.
-
-## Moderate Pitfalls
-
-### Pitfall 5: Date Format Ambiguity
-
-**What goes wrong:** The design assumes Monarch dates are "already ISO-ish" (`2026-03-24`). But Monarch may export dates as `03/24/2026`, `3/24/2026`, or even locale-dependent formats depending on user settings or export version. The string `01/02/2026` is January 2nd in US format but February 1st internationally. Using `new Date("01/02/2026")` gives locale-dependent results.
-
-**Prevention:** Do NOT use `new Date()` or `Date.parse()` for CSV date parsing -- both are locale-dependent and unreliable. Use a deterministic regex-based parser:
-
-```typescript
-function parseDate(s: string): string {
-  const trimmed = s.trim();
-  // ISO: 2026-03-24
-  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
-  // US: 03/24/2026 or 3/24/2026
-  const match = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (match) {
-    const [, m, d, y] = match;
-    return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
-  }
-  throw new Error(`Unrecognized date format: "${trimmed}"`);
-}
-```
-
-Since this is a Monarch-specific parser, test with an actual Monarch export to determine the exact format, then support that format plus ISO as a fallback. The output must always be `YYYY-MM-DD` to match the existing `transactions.date` column format.
-
-**Detection:** Unit tests with `"2026-03-24"`, `"03/24/2026"`, `"3/24/2026"`, and invalid inputs. Validate output is always `YYYY-MM-DD`.
+**Phase to address:**
+Server-side execute changes phase -- must be done before or simultaneously with client UI changes.
 
 ---
 
-### Pitfall 6: Tab-Delimited vs Comma-Delimited Confusion
+### Pitfall 3: allAccountsMapped Gate Logic Blocks Import When Accounts Are Skipped
 
-**What goes wrong:** The PROJECT.md says "tab-delimited Monarch format" but Monarch's official documentation and community resources indicate the export is standard comma-delimited CSV. If the parser is hardcoded for tab separation, it treats each entire row as a single column and either crashes or produces garbage data.
+**What goes wrong:**
+The current gate check (ImportPage.tsx lines 105-107) requires every account to have a non-empty mapping: `previewResult.accounts.every((a) => accountMappings[a.csvName] && accountMappings[a.csvName] !== '')`. If the skip approach removes entries from accountMappings, this check blocks the Continue button. If a sentinel value like `"__skip__"` is used, it passes but must not leak to the server as an account ID.
 
-**Prevention:** Auto-detect the delimiter by inspecting the header line:
-```typescript
-const delimiter = headerLine.includes('\t') ? '\t' : ',';
-```
-Or better: use PapaParse which auto-detects delimiters. The actual Monarch export format should be verified with a real exported file before finalizing the parser. Support both delimiters to be safe.
+**Why it happens:**
+The original validation correctly enforced "all must be mapped." Adding skip without updating this gate means it either blocks valid skip scenarios or is removed entirely, losing protection against genuinely forgotten mappings.
 
-**Detection:** Test with both tab-delimited and comma-delimited input. Verify both produce the correct number of columns.
+**How to avoid:**
+Use a sentinel value for skip (e.g., `"__skip__"`) in the client-side accountMappings state. Update the gate to: every account must have a mapping that is either a real account ID or the skip sentinel. An empty string mapping is still "unmapped" and blocks import. Before sending to the server, strip skip-sentinel entries from accountMappings so the server only receives real mappings. This preserves the safety check while allowing skips.
 
----
+**Warning signs:**
+Continue button stays disabled after setting an account to "skip." Or: Continue button is enabled when an account has no mapping because the gate was loosened too much.
 
-### Pitfall 7: Naive String Split Instead of Proper CSV Parsing
-
-**What goes wrong:** A manual `line.split(',')` parser breaks on:
-- Merchant names with commas: `"Walmart Supercenter, #1234"` splits into two columns
-- Notes with embedded newlines: a quoted field spanning two lines is treated as two rows
-- Fields with escaped quotes: `"He said ""hello"""` is mangled
-
-This shifts all subsequent columns in the row, causing amount to be parsed from the wrong field (or failing entirely).
-
-**Prevention:** Use PapaParse (or equivalent RFC 4180-compliant parser). Do not write a manual split-based parser. PapaParse handles: quoted fields, embedded commas, embedded newlines, escaped double-quotes, BOM stripping, delimiter detection, and header row mapping. It's 14KB gzipped and battle-tested.
-
-```bash
-npm install papaparse
-npm install -D @types/papaparse
-```
-
-PapaParse can run on the server side (Node.js) for the tRPC endpoint.
-
-**Detection:** Test with merchant names containing commas, double quotes, and newlines. Verify all columns parse correctly.
+**Phase to address:**
+Client skip dropdown phase -- the dropdown and gate logic must be updated together.
 
 ---
 
-### Pitfall 8: Empty and Whitespace-Only Field Handling
+### Pitfall 4: Sample Rows and Row Counts Include Skipped Accounts
 
-**What goes wrong:** CSV rows may have empty fields for optional columns (Notes, Tags, Original Statement). The parser produces empty strings `""`, but downstream code may:
-- Insert `"undefined"` or `"null"` as literal strings if checking `if (!value)` and then using a template literal
-- Insert empty strings where `NULL` is expected (the `payee` column in transactions is nullable `TEXT`)
-- Fail validation on rows where optional fields are missing entirely (trailing delimiter absent)
-- Treat whitespace-only strings (` ` or `\t`) as valid data
+**What goes wrong:**
+The `sampleRows` (import-service.ts line 333: `validTransformed.slice(0, 10)`) takes the first 10 rows regardless of account. If a skipped account dominates the first rows of the CSV, the sample table shows irrelevant transactions. Similarly, `totalRows`, `validRows`, and error counts include skipped accounts, making the summary misleading.
 
-**Prevention:**
-- Trim all field values immediately after parsing
-- Map empty/whitespace-only strings to `null` for nullable database columns (`payee`, `memo`)
-- Validate only required fields (date, amount, account) for non-empty after trimming
-- Merchant/payee should never be `undefined` -- use `null` or the original statement as fallback
+**Why it happens:**
+The server preview computes stats before account skip decisions exist. The preview response includes all data. The client must filter what it displays based on current mapping state.
 
-**Detection:** Test with rows where: Notes is empty, Tags is missing (no trailing comma), Merchant is whitespace-only, Original Statement contains only spaces.
+**How to avoid:**
+Client-side filtering of displayed data. When an account is set to "skip": (1) filter that account's rows out of displayed sample table, (2) subtract that account's row count from displayed totals, (3) exclude validation errors from skipped account rows from the error count. The server response stays unchanged -- the client applies the filter layer.
 
----
+**Warning signs:**
+Sample table shows only transactions from skipped accounts. Row counts do not match what the user expects to import.
 
-### Pitfall 9: Category Mapping "Skip" Creates Mass Uncategorized Transactions
-
-**What goes wrong:** The design allows "Skip" for unmapped categories. If Monarch uses different category names than Minerva (likely), a user who doesn't carefully map each one ends up with hundreds of uncategorized transactions. These flood the "Uncategorized" section of the budget page, making it noisy and the budget useless until manually categorized.
-
-**Prevention:**
-1. **Show the impact before confirming:** "47 transactions (23%) will be imported without a category" is much more alarming than a quiet "Skip" default.
-2. **Pre-match by name similarity:** Auto-suggest Minerva categories that fuzzy-match Monarch names (e.g., "Entertainment & Recreation" matches "Entertainment"). Case-insensitive exact match first, then substring match. Don't require the user to manually map 30+ categories when most are obvious matches.
-3. **Rules engine mitigates:** The design correctly runs `categorizeNewTransactions` post-import. Existing rules will catch transactions matching known merchants, even if the category mapping was skipped.
-4. After import, show: "N transactions categorized by rules, M remain uncategorized."
-
-**Detection:** Import a CSV with Monarch category names that don't exactly match Minerva categories. Verify the mapping UI surfaces this clearly and the post-import summary shows uncategorized count.
+**Phase to address:**
+Client-side stats filtering phase.
 
 ---
 
-### Pitfall 10: Account Mapping Without Sufficient Context
+### Pitfall 5: Confirm Summary Does Not Reflect Filtered Counts
 
-**What goes wrong:** Monarch account names like `"CASHBACK DEBIT (...4271)"` don't obviously correspond to Minerva account names like `"Discover Checking"`. The user must mentally match accounts, and a wrong mapping puts transactions under the wrong account, skewing all account-level reports and net worth calculations.
+**What goes wrong:**
+The ResultsStep (ImportPage.tsx lines 477-527) shows `previewResult.dedupStats.newCount`, `previewResult.dedupStats.duplicateCount`, and `previewResult.errors.length` directly from the server response. These include skipped accounts. The user sees inflated numbers on the confirm page, then the actual import result shows fewer transactions.
 
-**Prevention:**
-- Show institution name and account type alongside both Monarch and Minerva account names in the mapping dropdown
-- If Monarch names include last-4 digits of account numbers, surface those prominently
-- Consider showing a sample transaction from each CSV account to help identification
-- There's no automated solution -- this is a UX problem. Make the mapping UI as informative as possible.
+**Why it happens:**
+The confirm summary reads from the unfiltered preview response. The server computed dedup stats before any skip decisions. If only the preview step is updated to filter displays but the confirm step still reads raw preview data, the numbers diverge.
 
-**Detection:** Post-import, the user should verify a few known transactions appear under the correct account.
+**How to avoid:**
+The confirm summary must use the same filtered stats as the preview step. Either: (1) compute filtered stats once and store them in component state when transitioning to confirm, or (2) derive filtered stats in both places from the same filtering function. The key point: `previewResult` is raw server data; display logic must always filter it through current skip state.
 
-## Minor Pitfalls
+**Warning signs:**
+"50 new transactions" on confirm page but only 30 actually imported. Numbers do not match between preview step and confirm step.
 
-### Pitfall 11: Transaction ID Generation Without Source Tracking
-
-**What goes wrong:** The design uses `crypto.randomUUID()` for imported transaction IDs. This works but provides no way to distinguish imported transactions from synced or manual ones. If a bug is later discovered in the import (e.g., sign was flipped), there's no easy way to find and delete/fix only the imported transactions.
-
-**Prevention:** Use a consistent UUID prefix or add an `import_source` column (or tag) to track provenance. A simpler approach: log the import batch with a timestamp and the set of created transaction IDs, so a rollback query can target them. Even just storing the import results (list of IDs) in the import log is sufficient.
-
-**Detection:** After a test import, verify you can identify which transactions came from the import vs. sync.
+**Phase to address:**
+Results step updates phase.
 
 ---
 
-### Pitfall 12: Re-Import Produces Confusing "0 Imported" Result
+### Pitfall 6: Category Mappings for Skipped Accounts Clutter the UI
 
-**What goes wrong:** User imports the same CSV twice. The second attempt silently skips all rows due to dedup hash matches. The user sees "0 imported, 500 skipped" and thinks the import is broken.
+**What goes wrong:**
+Categories are derived from all valid rows (import-service.ts line 254). If a skipped account has unique category names (e.g., investment-specific categories like "Dividends & Capital Gains"), those categories still appear in the category mapping UI even though they will never be imported.
 
-**Prevention:** Make skip reasons explicit in the result: "500 transactions skipped (already exist in database)". Distinguish from "skipped due to unmapped category." The UI should explain that this means the data was already imported successfully.
+**Why it happens:**
+The server preview does not know which accounts will be skipped. It returns all unique categories. The client displays all of them.
 
-**Detection:** Unit test: import the same CSV twice. Verify second import returns `{ imported: 0, skipped: 500, errors: [] }` with a clear "already exists" reason.
+**How to avoid:**
+Client-side: filter displayed categories based on which accounts are not skipped. If a category name only appears in rows from skipped accounts, hide it from the mapping UI. This requires the client to know which categories belong to which accounts, which means either: (1) filtering the sample/all rows by account and deriving category lists from non-skipped rows, or (2) having the server return per-account category breakdowns. Option 1 is simpler but the client only has sample rows, not all rows. A reasonable approach: do not filter categories in the first version -- extra category mappings are harmless (unused). Polish this in a future iteration.
+
+**Warning signs:**
+Category mapping section shows categories that will never be used.
+
+**Phase to address:**
+Client-side stats filtering phase -- lower priority, acceptable to defer.
 
 ---
 
-### Pitfall 13: Rules Engine Silently Overrides Mapped Categories
+## Technical Debt Patterns
 
-**What goes wrong:** The design doc states: "Rules that match will override the CSV-mapped category." A user carefully maps Monarch's "Groceries" to Minerva's "Groceries" category, but an existing rule matching the merchant `"Trader Joe's"` re-categorizes those transactions to "Food & Dining." The user doesn't understand why some transactions have the wrong category after import.
+| Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
+|----------|-------------------|----------------|-----------------|
+| Using empty string `""` as skip sentinel | No new constant needed | Ambiguous with "not selected" state, causes gate logic bugs | Never -- use explicit sentinel like `"__skip__"` |
+| Filtering only on client, not adjusting server preview | No server code changes for preview | Server preview stats are misleading, client must always re-compute | Acceptable for v2.4 -- server does not know skip state at preview time |
+| Not filtering categories for skipped accounts | Faster to ship, no harm done | Confusing UI showing irrelevant category mappings | Acceptable for v2.4, polish later |
+| Removing the unmapped accounts server validation entirely | Quick fix for the throw error | Loses safety net for genuinely forgotten mappings | Never -- the server should still validate that all accounts in the mappings dict exist as real account IDs |
 
-**Prevention:** This is intentional behavior (documented in the design as "per user preference"). But the import results should surface it: "N transactions re-categorized by rules engine." This is informational, not an error. The user can adjust rules if the behavior is undesired.
+## Integration Gotchas
 
-**Detection:** Import transactions matching existing rules. Verify the rules engine ran and the import results report the re-categorization count.
+| Integration | Common Mistake | Correct Approach |
+|-------------|----------------|------------------|
+| Server execute validation | Removing the unmapped accounts check entirely instead of changing it to allow missing (skipped) accounts | Change from "all accounts must be in mappings" to "all accounts in mappings must have valid account IDs." Accounts not in mappings are skipped |
+| Dedup hash computation | Skipped account rows still generate dedup hashes for stats | Only compute hashes for rows whose account is in accountMappings. Skip rows with no mapping |
+| Post-import hooks (rules, transfers) | Worrying that skipped rows affect rules engine or transfer detection | Not a real risk -- skipped rows never reach INSERT, so `newTransactionIds` naturally excludes them. No code change needed in post-import hooks |
+| tRPC schema validation | Thinking the Zod schema needs changes to accept a skip value | accountMappings is `z.record(z.string(), z.string())` -- if client strips skip entries before sending, no schema change needed |
 
----
+## UX Pitfalls
 
-### Pitfall 14: Line Ending Inconsistency (CRLF vs LF)
+| Pitfall | User Impact | Better Approach |
+|---------|-------------|-----------------|
+| Skip option buried at bottom of account dropdown | User cannot find it among many account options | Put "Skip -- do not import" as the first option after the placeholder, visually distinct with a separator or different styling |
+| No per-account row count shown | User does not understand the impact of skipping an account | Show row count next to each account name (e.g., "Savings (342 rows)") so the user sees the magnitude |
+| No warning when skipping high-row-count account | User accidentally skips their primary checking account | Consider a soft warning if a skipped account has more rows than any non-skipped account |
+| Confirm summary does not list skipped accounts | User forgets which accounts they skipped, confused by lower numbers than expected | Add a "Skipped accounts" line to the confirm summary listing excluded accounts and their row counts |
+| No way to quickly "skip all" or "unskip all" | Tedious when CSV has many accounts and user only wants one or two | Add "Skip all unmatched" button if there are more than 3 unmapped accounts |
 
-**What goes wrong:** Windows-generated CSVs use `\r\n` line endings. If the parser splits on `\n` only, each field in the last column retains a trailing `\r`. This corrupts the last column value (e.g., Tags becomes `"Travel\r"` instead of `"Travel"`). If the last column is used in a hash or comparison, the invisible `\r` causes mismatches.
+## "Looks Done But Isn't" Checklist
 
-**Prevention:** PapaParse handles this automatically. If writing a custom parser, normalize line endings first: `content.replace(/\r\n/g, '\n').replace(/\r/g, '\n')`. Or trim each field value after parsing.
+- [ ] **Skip sentinel flow:** Trace that `"__skip__"` in client state is stripped before sending to server -- it must never appear as an account_id in an INSERT
+- [ ] **Dedup math:** Verify new + duplicate == non-skipped valid rows (the math must add up in preview, confirm, and results)
+- [ ] **Gate logic:** Verify skip enables Continue button, empty string blocks it, and a real account ID enables it
+- [ ] **Sample rows:** Verify sample table filters out skipped account rows dynamically as user changes mappings
+- [ ] **Server validation:** Verify server accepts accountMappings that omit skipped accounts without throwing
+- [ ] **Error filtering:** Verify that validation errors from skipped account rows are excluded from displayed error count
+- [ ] **Results page:** Verify "X transactions imported" plus "Y duplicates skipped" plus "Z rows filtered (skipped accounts)" == total valid rows
+- [ ] **Edge case -- all accounts skipped:** Verify graceful handling when user skips every account (should block import with a clear message, not import 0 rows silently)
+- [ ] **Edge case -- single account:** Verify the skip option is available even when there is only one CSV account (user may want to abort gracefully)
 
-**Detection:** Test with a CSV using `\r\n` line endings. Verify the last column of each row has no trailing `\r`.
+## Recovery Strategies
 
-## Phase-Specific Warnings
+| Pitfall | Recovery Cost | Recovery Steps |
+|---------|---------------|----------------|
+| Skip sentinel leaked to server as account_id | LOW | Foreign key constraint on `account_id` catches this -- INSERT fails, transaction rolls back. No data corruption possible |
+| Dedup stats wrong (cosmetic only) | LOW | Fix counting logic, redeploy. No data impact |
+| Gate logic too permissive (unmapped account imported to wrong place) | HIGH | Wrong account_id on transactions. Must identify affected rows (by import batch or date range) and delete. Re-import after fix |
+| Confirm summary showed wrong numbers | LOW | Cosmetic only. Actual import was correct, just the preview was misleading |
 
-| Phase Topic | Likely Pitfall | Mitigation |
-|-------------|---------------|------------|
-| CSV parser implementation | BOM handling (#4), delimiter detection (#6), quoted fields (#7), line endings (#14) | Use PapaParse; strip BOM as first step; auto-detect delimiter |
-| Amount conversion | Floating-point truncation (#1), sign convention (#3) | Use `toCents()` from `@minerva/shared`; verify Monarch sign convention with real export data |
-| Date parsing | Format ambiguity (#5) | Regex-based parser, not `new Date()`; test with actual Monarch export file |
-| Dedup integration | Hash mismatch between CSV and synced data (#2) | Surface overlap risk in UI; advise importing only pre-sync historical data; show skip counts |
-| Import service | Empty fields (#8), transaction provenance (#11) | Trim and null-check all fields; log import batch with transaction IDs |
-| Mapping UI | Category orphans (#9), account identification (#10) | Show uncategorized count before confirm; show account metadata in dropdowns; auto-suggest fuzzy matches |
-| Post-import UX | Re-import confusion (#12), rules override surprise (#13) | Clear messaging with distinct skip reasons; show re-categorization count |
+## Pitfall-to-Phase Mapping
+
+| Pitfall | Prevention Phase | Verification |
+|---------|------------------|--------------|
+| Dedup stats counting skipped as new | Client-side stats filtering | Filtered new + duplicate counts exclude skipped rows; sum matches non-skipped valid rows |
+| Server throws on unmapped accounts | Server-side execute changes | Import succeeds with skipped accounts; skipped rows absent from DB |
+| Gate logic blocks skip | Client skip dropdown | Continue button enabled with skip selections; disabled with empty/unselected |
+| Sample rows include skipped accounts | Client-side stats filtering | Toggling skip removes/adds rows from sample table dynamically |
+| Confirm summary shows unfiltered stats | Results step updates | Confirm summary numbers match actual import outcome |
+| Category mappings for skipped accounts | Client-side stats filtering (low priority) | Categories unique to skipped accounts hidden; or deferred as acceptable tech debt |
 
 ## Sources
 
-- Existing codebase: `packages/shared/src/types.ts` -- `toCents()` uses `Math.round(dollars * 100)`. HIGH confidence.
-- Existing codebase: `packages/server/src/sync/simplefin-client.ts` -- `generateDedupHash` formula is `sha256(accountId|date|amount|payee)`. HIGH confidence.
-- Existing codebase: `packages/server/migrations/001-initial-schema.sql` -- `dedup_hash` has UNIQUE index with WHERE NOT NULL. HIGH confidence.
-- Design doc: `.planning/designs/2026-03-24-csv-import-monarch-migration-design.md` -- design decisions and integration approach. HIGH confidence.
-- [Monarch Money CSV format](https://blog.tracefunc.com/notes/monarch-money.html) -- columns: Date, Merchant, Category, Account, Original Statement, Notes, Amount, Tags. MEDIUM confidence (third-party source).
-- [Monarch Money import documentation](https://help.monarch.com/hc/en-us/articles/4409682789908-Importing-Transaction-History-Manually) -- CSV import requirements. MEDIUM confidence (could not fetch, 403).
-- [Monarch Money large file import](https://help.monarch.com/hc/en-us/articles/7583213629204-Importing-Large-CSV-Files) -- file size limitations. MEDIUM confidence.
-- IEEE 754 floating-point behavior (`19.99 * 100 !== 1999`) -- well-documented JavaScript behavior. HIGH confidence.
+- Direct code analysis: `packages/server/src/import/import-service.ts` -- dedup stats loop (lines 284-338), unmapped validation (lines 361-366), INSERT logic (lines 369-434)
+- Direct code analysis: `packages/client/src/pages/ImportPage.tsx` -- gate check (lines 105-107), confirm summary (lines 477-527), sample rows display (lines 340-365)
+- Direct code analysis: `packages/server/src/import/import-router.ts` -- Zod schema for execute input (z.record for accountMappings)
+- Project requirements: `.planning/PROJECT.md` (v2.4 milestone definition, lines 42-51)
 
 ---
-*Pitfalls research for: Minerva Money v2.3 CSV Import*
+*Pitfalls research for: CSV import account filtering/skip capability (v2.4)*
 *Researched: 2026-03-24*

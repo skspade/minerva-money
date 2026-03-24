@@ -1,157 +1,161 @@
-# Feature Landscape: CSV Import
+# Feature Research: CSV Import Account Filtering
 
-**Domain:** Personal finance CSV import (Monarch Money migration)
+**Domain:** Personal finance CSV import -- account skip/exclude capability
 **Researched:** 2026-03-24
+**Confidence:** HIGH
 
-## Monarch Money CSV Export Format
+## Context
 
-The source format is a comma-separated CSV with these 8 columns (confirmed via community documentation):
+This research covers ONLY the v2.4 account filtering/skip features. The base CSV import (v2.3) is already built and working: 3-step wizard, auto-suggest mappings, dedup stats, sample rows, account/category dropdowns.
 
-```
-Date, Merchant, Category, Account, Original Statement, Notes, Amount, Tags
-```
+**Current behavior requiring change:**
+- Account dropdown only lists real Minerva accounts -- no skip option
+- `allAccountsMapped` (line 106 of ImportPage.tsx) requires every account be mapped to a real account
+- `executeImport` throws if any account is unmapped (line 364 of import-service.ts)
+- Dedup stats count unmapped accounts as "new" (line 322 of import-service.ts)
+- Sample rows show all accounts indiscriminately
 
-- **Date**: US date format (e.g. `2025-01-15` or `1/15/2025`)
-- **Merchant**: Cleaned merchant name (user-edited in Monarch)
-- **Category**: Monarch category name (will NOT match Minerva categories 1:1)
-- **Account**: Account display name (will NOT match Minerva account names 1:1)
-- **Original Statement**: Raw bank payee string (this maps to Minerva's `payee` field)
-- **Notes**: User notes (maps to `memo`)
-- **Amount**: Decimal with negative for debits (e.g. `-52.43`), needs conversion to integer cents
-- **Tags**: Comma-separated or empty (Minerva has no tags -- ignore)
+## Feature Landscape
 
-## Table Stakes
+### Table Stakes (Users Expect These)
 
-Features users expect. Missing = import feels broken or untrustworthy.
+Features that are essential for a functional account filtering experience. Missing any of these makes the feature feel broken.
 
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| File upload (drag-and-drop + click) | Standard file input UX; dashed-border drop zone is the universal signal | Low | Use native HTML5 drag-and-drop; no library needed |
-| Data preview with sample rows | Users must verify the file parsed correctly before committing | Low | Show first 5-10 rows in a table after parsing |
-| Row count summary | "247 transactions found" gives confidence the whole file was read | Low | Display alongside preview |
-| Account mapping | Monarch account names differ from Minerva accounts; user must map each | Medium | Dropdown per unique Monarch account name -> Minerva account. Pre-match by fuzzy name similarity |
-| Category mapping | Monarch categories differ from Minerva categories; user must map or skip | Medium | Dropdown per unique Monarch category -> Minerva category (or "Uncategorized"). Pre-match exact name matches |
-| Duplicate detection with count | Users will import files overlapping with SimpleFIN-synced transactions; must show "X duplicates will be skipped" | Medium | Reuse existing `generateDedupHash(accountId, date, amount, payee)` -- compute hash for each row using mapped account ID + parsed date + cents amount + Original Statement |
-| Import confirmation screen | User reviews: X new, Y duplicates skipped, Z errors -- then clicks "Import" | Low | Summary stats before final commit |
-| Error reporting per row | Rows with missing date, unparseable amount, or unmapped account must be flagged -- not silently dropped | Medium | Show error rows in a distinct section; allow import of valid rows while skipping errors |
-| Amount conversion to integer cents | Monarch exports decimal dollars; Minerva stores integer cents | Low | `Math.round(parseFloat(amount) * 100)` -- already a pattern in the codebase |
-| Post-import rules engine run | After inserting transactions, run `categorizeNewTransactions()` on new IDs so existing rules auto-apply | Low | Already built -- just call it with the array of new transaction IDs |
+| Feature | Why Expected | Complexity | Dependencies | Notes |
+|---------|--------------|------------|--------------|-------|
+| "Skip" option in account mapping dropdown | Without this, users cannot exclude unwanted accounts at all -- the entire feature hinges on it | LOW | Existing account mapping dropdown | Add a sentinel value (e.g., `__skip__`) as an `<option>` in the account `<select>`. Treat it as a valid mapping so `allAccountsMapped` passes. |
+| Server accepts skip sentinel gracefully | Server currently throws on unmapped accounts. Must skip rows for sentinel-mapped accounts instead of crashing | LOW | Skip option in dropdown | Filter `validTransformed` to exclude rows where `accountMappings[row.accountName]` equals the skip sentinel before inserting. Track skipped-by-filter count separately from dedup skips. |
+| Client-side dedup stats exclude skipped accounts | Stats currently count unmapped accounts as "new". When an account is marked skip, those rows should not inflate the "new" count | MEDIUM | Skip option in dropdown | Client recomputes from server preview data by excluding skipped accounts. Avoids extra server round-trip. The preview response already contains per-row account names for filtering. |
+| Sample rows exclude skipped accounts | Sample rows table shows all rows regardless of account. Rows from skipped accounts should not appear in the preview sample | LOW | Skip option in dropdown | Filter `previewResult.sampleRows` client-side to exclude rows from skipped accounts. Show a note like "X rows from skipped accounts not shown." |
+| Results/confirm step reflects filtered counts | The confirm summary (step 3) must show counts excluding skipped accounts so user knows exactly what will import | LOW | Client-side stats filtering | Reuse the same client-side filtering logic. Show skipped-account row count as a separate line item. |
+| Per-account row count in mapping UI | Users need to see how many rows each account has to make informed skip decisions | LOW | Existing preview data | Cannot compute from `sampleRows` (only 10 rows). Need full count per account from server. Add `rowCount: number` to `AccountMatch` in `previewImport`. |
 
-## Differentiators
+### Differentiators (Competitive Advantage)
 
-Features that improve the experience beyond minimum viable. Not expected, but valued.
+Features that improve the experience beyond basic functionality. Not required, but add polish.
 
 | Feature | Value Proposition | Complexity | Notes |
 |---------|-------------------|------------|-------|
-| Auto-match accounts by name similarity | Saves tedious manual mapping when account names are close (e.g. "Discover Checking" -> "Discover - Checking") | Low | Simple case-insensitive substring/includes matching; no need for Levenshtein |
-| Auto-match categories by exact name | Many Monarch categories have direct Minerva equivalents (Groceries, Gas, etc.) | Low | Exact case-insensitive match against existing Minerva categories |
-| Dry-run preview with dedup stats | Before importing, show exactly how many will be new vs duplicates vs errors | Medium | Requires computing dedup hashes server-side against existing transactions |
-| "Create account" option in mapping | If Monarch file references an account not yet in Minerva, allow inline creation | Medium | Needs a name + institution + type; account won't have SimpleFIN sync but will hold imported history |
-| Import history log | Record that an import happened (timestamp, filename, row counts) for auditability | Low | Simple `import_logs` table or append to sync_log |
-| Transfer detection post-import | After import, run transfer candidate detection on new transactions | Low | Already built -- `detectTransferCandidates()` exists |
+| Visual row count badge per account | Shows "142 rows" next to each account dropdown so user sees the impact of skipping | LOW | Count rows per `accountName` in `previewImport` and include in `AccountMatch`. Trivial server change, high UX value. |
+| Skipped account visual styling | Dim/grey-out skipped account mapping cards so it is visually obvious which accounts are excluded | LOW | CSS-only change: add a muted/opacity style when dropdown value equals skip sentinel. |
+| "Skip All Unmatched" bulk action | One button to set all accounts without auto-suggested matches to "Skip" | LOW | Useful when CSV has many accounts but user only wants a few. Iterate `previewResult.accounts` where `suggestedId` is null and set to skip sentinel. |
+| Filtered summary banner | Persistent banner showing "Importing from 3 of 5 accounts (2 skipped)" | LOW | Client-side count of skip vs non-skip in `accountMappings`. Clear communication of filter state. |
 
-## Anti-Features
+### Anti-Features (Commonly Requested, Often Problematic)
 
-Features to explicitly NOT build.
-
-| Anti-Feature | Why Avoid | What to Do Instead |
-|--------------|-----------|-------------------|
-| Generic CSV column mapping UI | Minerva is single-user migrating from Monarch -- building a flexible "map any column to any field" wizard adds complexity for a one-time migration | Hard-code Monarch format. If a second format is needed later, add a format selector with a second parser |
-| Tag import | Minerva has no tagging system; building one for import is scope creep | Silently ignore the Tags column |
-| Balance history import | Monarch exports balance snapshots separately; Minerva calculates balances from transactions + daily snapshots from SimpleFIN | Skip -- daily balance snapshots will be incomplete for historical data anyway. Note this in UI |
-| Streaming/chunked upload for large files | Monarch exports are typically < 10K rows (a few years of personal transactions); standard file upload handles this fine | Use standard multipart upload. If file exceeds ~50K rows, show a warning |
-| Undo/rollback import | Complex to implement (would need to track which transactions came from which import) | Instead, provide clear preview/confirmation so users don't import wrong data. If needed, user can filter by date range and delete manually |
-| Category creation during import | Adding categories requires group assignment and sort ordering -- complex inline UI | Map to existing categories or leave uncategorized. User can create categories beforehand |
-| OFX/QFX/QIF format support | YAGNI -- the user is migrating from Monarch which exports CSV | Add later if needed; keep parser modular enough to swap |
+| Feature | Why Requested | Why Problematic | Alternative |
+|---------|---------------|-----------------|-------------|
+| Per-row skip/include checkboxes | Granular control over individual transactions | Massive UI complexity for 10,000+ row Monarch exports. Nobody will review individually. Wrong abstraction level. | Account-level skip covers the real use case (excluding entire account types). Individual transactions handled by dedup. |
+| Re-fetch preview on each mapping change | Keep dedup stats perfectly accurate as mappings change | Expensive: full CSV re-parse + dedup hash generation on every dropdown change. Preview is a server mutation, not cheap. | Client-side filtering of the initial preview result. Dedup stats for already-mapped accounts are correct from initial preview. |
+| Auto-skip by account type detection | Automatically identify and skip investment/loan accounts | CSV has no account type metadata. Monarch exports use plain account names only. Would require fragile name guessing. | Let users manually skip. Per-account row counts help them decide quickly. |
+| Persistent skip preferences across imports | Remember which accounts to skip for next import | Single-user doing a one-time Monarch migration. This is not a recurring workflow. YAGNI. | Each import starts fresh. Auto-suggest handles the common case. |
+| Server-side filtering in preview endpoint | Send skip list to server, get filtered preview back | Adds API complexity and round-trips for no benefit. Client already has all data needed to filter locally. | Client-side filtering of existing preview response. |
 
 ## Feature Dependencies
 
 ```
-File Upload -> CSV Parsing -> Data Preview
-Data Preview -> Account Mapping (needs list of unique Monarch accounts)
-Data Preview -> Category Mapping (needs list of unique Monarch categories)
-Account Mapping -> Dedup Hash Computation (needs Minerva account IDs)
-Account Mapping + Category Mapping -> Import Confirmation Screen
-Import Confirmation -> Transaction Insert -> Rules Engine Run
-Transaction Insert -> Transfer Detection Run
+Skip option in account dropdown (FOUNDATION)
+    |
+    +---> Client-side stats filtering (sample rows, dedup stats)
+    |         |
+    |         +---> Results step filtered counts
+    |
+    +---> Server-side execute changes (skip rows for sentinel accounts)
+    |
+    +---> Per-account row count (server-side, enhances skip decisions)
+
+Skipped account visual styling --enhances--> Skip option in dropdown
+"Skip All Unmatched" button --enhances--> Skip option in dropdown
+Filtered summary banner --enhances--> Client-side stats filtering
 ```
 
-Key dependency: Account mapping MUST happen before dedup detection, because `generateDedupHash` requires the Minerva `accountId`. The Monarch CSV has account names, not IDs.
+### Dependency Notes
 
-## MVP Recommendation
+- **All features require the skip dropdown option:** This is the atomic foundation. Nothing works without a way to mark an account as skipped.
+- **Client-side stats filtering requires skip option:** Once skip is selectable, stats must update to reflect the filter -- otherwise counts are misleading.
+- **Server execute changes require skip option but are independent of client stats:** Can be built in parallel with stats filtering.
+- **Results step depends on stats filtering:** Uses the same filtering logic, just in a different wizard step.
+- **Per-account row count is independent:** A server-side change to `previewImport` that can ship alongside or before the skip option.
 
-### Must Have (Minimum Viable Import)
+## MVP Definition
 
-1. **File upload** with drag-and-drop zone
-2. **Monarch CSV parser** -- hard-coded 8-column format, date normalization, cents conversion
-3. **Data preview** -- first 10 rows + total count
-4. **Account mapping** -- dropdown per unique Monarch account -> existing Minerva account, with auto-match by name
-5. **Category mapping** -- dropdown per unique Monarch category -> existing Minerva category (or Uncategorized), with auto-match by exact name
-6. **Dedup detection** -- compute hashes, show "X new, Y duplicates" summary
-7. **Error reporting** -- list rows with parse errors, allow importing valid rows
-8. **Import execution** -- INSERT OR IGNORE with dedup hash, then `categorizeNewTransactions()` + `detectTransferCandidates()`
-9. **Success summary** -- "Imported X transactions, skipped Y duplicates, Z errors"
+### Must Have (v2.4)
 
-### Defer
+- [x] Skip option in account mapping dropdown -- the core capability
+- [x] Server-side execute accepts skip sentinel, excludes those rows gracefully
+- [x] Client-side dedup stats exclude skipped accounts
+- [x] Sample rows exclude skipped accounts
+- [x] Results/confirm step reflects filtered counts
+- [x] Per-account row count displayed in mapping UI
 
-- **Import history log**: Nice but not needed for a one-time migration. Add if import becomes recurring.
-- **"Create account" inline**: User can create accounts beforehand via the existing Accounts page.
-- **Multiple format support**: Only needed if a second CSV source appears.
+### Should Have (v2.4 stretch)
 
-## Wizard Flow (Recommended UX)
+- [ ] Skipped account visual styling (dimmed mapping card)
+- [ ] "Skip All Unmatched" bulk action button
+- [ ] Filtered summary banner ("Importing 3 of 5 accounts")
 
-Based on established CSV import UX patterns (Smashing Magazine, industry standard):
+### Not Building
 
-### Step 1: Upload
-- Full-page drop zone with dashed border
-- "Drop your Monarch Money CSV here" + browse button
-- Accept `.csv` files only
-- Parse immediately on upload, show loading spinner
+- [ ] Per-row checkboxes -- wrong abstraction level
+- [ ] Server-side preview filtering -- unnecessary complexity
+- [ ] Auto-skip by account type -- no type metadata available
+- [ ] Persistent skip preferences -- one-time migration workflow
 
-### Step 2: Preview + Mapping
-- Show parsed row count and first 5 sample rows in a table
-- Show any parse errors (invalid dates, bad amounts) highlighted in red
-- Account mapping section: each unique Monarch account name -> dropdown of Minerva accounts (auto-matched where possible)
-- Category mapping section: each unique Monarch category -> dropdown of Minerva categories (auto-matched where possible, with "Uncategorized" default)
-- "Analyze" button to compute dedup stats with mapped account IDs
+## Feature Prioritization Matrix
 
-### Step 3: Confirm + Import
-- Summary: "Ready to import X transactions (Y duplicates will be skipped, Z rows have errors)"
-- Show error rows if any, with option to proceed without them
-- "Import" button (primary action)
-- Progress indication (for large files: "Importing... X of Y")
-- On completion: success banner with counts, link to Transactions page
+| Feature | User Value | Implementation Cost | Priority |
+|---------|------------|---------------------|----------|
+| Skip dropdown option | HIGH | LOW | P1 |
+| Server skip handling | HIGH | LOW | P1 |
+| Per-account row count | HIGH | LOW | P1 |
+| Client-side stats filtering | HIGH | MEDIUM | P1 |
+| Results step filtered counts | MEDIUM | LOW | P1 |
+| Sample rows filtering | MEDIUM | LOW | P1 |
+| Skipped account styling | MEDIUM | LOW | P2 |
+| "Skip All Unmatched" button | LOW | LOW | P2 |
+| Filtered summary banner | LOW | LOW | P3 |
 
-### Why 3 Steps, Not More
-The import is a one-time Monarch migration for a single user. Three steps (upload -> map -> confirm) match the standard wizard pattern without over-engineering. Each step has a clear purpose and the user never sees more than one decision at a time.
+## Implementation Guidance
 
-## Existing System Integration Points
+### Sentinel Value
 
-### Dedup Hash Reuse
-The existing `generateDedupHash(accountId, date, amount, payee)` in `simplefin-client.ts` produces a SHA-256 hash from `${accountId}|${date}|${amount}|${payee}`. For CSV import, the same function must be used with:
-- `accountId` = the Minerva account ID from the mapping (not the Monarch account name)
-- `date` = normalized to `YYYY-MM-DD` format
-- `amount` = integer cents (converted from Monarch's decimal dollars)
-- `payee` = the "Original Statement" column (raw bank string), NOT the "Merchant" column (user-edited in Monarch)
+Use `__skip__` as the account mapping value for skipped accounts. This avoids collision with real UUIDs and is trivial to check on both client and server.
 
-Using "Original Statement" as the payee ensures dedup hashes match transactions already synced via SimpleFIN (which uses the raw bank payee string).
+### Specific Code Touch Points
 
-### Rules Engine
-`categorizeNewTransactions(db, transactionIds)` accepts an array of new transaction IDs and applies the most-specific matching rule. Imported transactions with a Monarch category mapping should be inserted with `category_id` set (from the mapping) but `rule_id` as NULL -- this makes them "manually categorized" and the rules engine will skip them. Transactions mapped to "Uncategorized" (NULL category_id) will be picked up by the rules engine.
+**import-service.ts `executeImport` (lines 362-366):**
+- Remove the unmapped accounts throw
+- Add `const SKIP_SENTINEL = '__skip__';`
+- Filter: `const rowsToImport = validTransformed.filter(r => accountMappings[r.accountName] !== SKIP_SENTINEL);`
+- Track `filteredCount` for rows excluded by account skip
+- Update `ExecuteResult` to include `filteredCount`
 
-### Transfer Detection
-`detectTransferCandidates()` looks for offsetting transactions across accounts within a date window. After importing, calling this will catch transfers that span imported + synced transactions.
+**import-service.ts `PreviewResult` / `AccountMatch`:**
+- Add `rowCount: number` to `AccountMatch` interface
+- Compute in `previewImport`: count rows per unique `accountName`
 
-### Transaction ID Generation
-SimpleFIN provides transaction IDs as the primary key. CSV imports have no natural ID. Generate UUIDs (e.g. `crypto.randomUUID()`) prefixed with `csv-` to distinguish imported transactions from synced ones.
+**ImportPage.tsx account dropdown:**
+- Add `<option value="__skip__">Skip -- do not import</option>` to account `<select>`
+- Update `allAccountsMapped`: skip sentinel counts as mapped (value is not empty string)
+- Add client-side filter functions for stats/sample rows based on `accountMappings`
+- Update results step to show filtered count as separate line item
+
+**import-router.ts:**
+- No schema changes needed. `accountMappings` is `Record<string, string>` -- `__skip__` is a valid string.
+
+### What NOT to Change
+
+- `previewImport` server function does not need skip awareness. Returns all data; client filters.
+- `parseCsv`, `validateRow`, `transformRow` are untouched.
+- Category mappings are unaffected (categories for skipped accounts are simply ignored during execute).
 
 ## Sources
 
-- [Monarch Money CSV Import Help](https://help.monarch.com/hc/en-us/articles/4409682789908-Importing-Transaction-History-Manually) -- required columns, format flexibility
-- [Monarch Money CSV Export Help](https://help.monarch.com/hc/en-us/articles/15526600975764-Downloading-Transaction-or-Account-History) -- export format reference
-- [Monarch Money CSV format blog](https://blog.tracefunc.com/notes/monarch-money.html) -- confirmed 8 columns: Date, Merchant, Category, Account, Original Statement, Notes, Amount, Tags
-- [Smashing Magazine: Designing Data Importers](https://www.smashingmagazine.com/2020/12/designing-attractive-usable-data-importer-app/) -- wizard UX patterns, error handling, column mapping
-- [Smart Interface Design Patterns: Bulk Import UX](https://smart-interface-design-patterns.com/articles/bulk-ux/) -- step-by-step wizard flow
-- [ImportCSV: Data Import UX](https://www.importcsv.com/blog/data-import-ux) -- preview, validation, deduplication patterns
-- [YNAB File-Based Import Guide](https://support.ynab.com/en_us/file-based-import-a-guide-Bkj4Sszyo) -- account selection, duplicate detection in finance apps
-- [Beyond Budget CSV Import](https://www.beyondbudgetapp.com/import-transactions/csv) -- finance-specific CSV import reference
+- Direct code analysis: `packages/server/src/import/import-service.ts` (current server implementation)
+- Direct code analysis: `packages/client/src/pages/ImportPage.tsx` (current UI with 3-step wizard)
+- Direct code analysis: `packages/server/src/import/import-router.ts` (current tRPC API)
+- PROJECT.md v2.4 milestone requirements
+
+---
+*Feature research for: CSV Import Account Filtering*
+*Researched: 2026-03-24*

@@ -1,174 +1,155 @@
 # Project Research Summary
 
-**Project:** Minerva Money v2.3 CSV Import (Monarch Money Migration)
-**Domain:** Personal finance CSV import with deduplication and account/category mapping
+**Project:** Minerva Money v2.4 — CSV Import Account Filtering
+**Domain:** Personal finance CSV import — account skip/exclude capability
 **Researched:** 2026-03-24
 **Confidence:** HIGH
 
 ## Executive Summary
 
-Minerva Money v2.3 adds a one-time migration path from Monarch Money by importing its CSV export format. This is a well-bounded problem: Monarch exports a fixed 8-column CSV (Date, Merchant, Category, Account, Original Statement, Notes, Amount, Tags), and the existing Minerva architecture already provides every building block needed — dedup hash generation, transaction insertion, rules engine invocation, and transfer detection. The entire feature requires exactly one new server dependency (`csv-parse`) and three new files (`import-service.ts`, `import-router.ts`, `ImportPage.tsx`).
+Minerva Money v2.4 is a tightly scoped behavioral refinement of the v2.3 CSV import feature. The change adds a "skip" option to account mapping dropdowns so users can exclude specific accounts (e.g., investment or loan accounts) from a Monarch Money migration CSV without those accounts blocking the import. All four research streams converge on the same conclusion: this is a small, low-risk change to approximately 3 existing files with zero new dependencies.
 
-The recommended approach is a stateless 3-step wizard: upload the file on the client, send CSV text via a tRPC mutation, present a preview with account and category mapping dropdowns, then execute the import with confirmed mappings. No server-side session state, no multipart upload, no new client dependencies. The server re-parses the CSV on execute — a sub-millisecond cost that eliminates state management complexity. Post-insert, the existing rules engine runs first, then CSV-mapped categories apply as fallback for unmatched transactions.
+The recommended approach is a sentinel-value pattern: the client tracks skip state using the string `"__skip__"` in the existing `accountMappings: Record<string, string>` state, strips skip entries before sending to the server, and the server interprets any account absent from the mappings record as "skip this account's rows." This single-source-of-truth design avoids new state, new API parameters, new component structure, or new files. The server replaces a throw with a filter loop. The client adds one `<option>` element, updates one validation function, and filters display stats with `useMemo`.
 
-The primary risk is cross-source deduplication: Monarch normalizes merchant names ("Amazon") while SimpleFIN provides raw bank strings ("AMAZON.COM AMZN.COM/BILL WA"). The `dedup_hash` mechanism will NOT deduplicate these as the same transaction. The mitigation is UX guidance, not code — the import UI must warn users to import only historical transactions predating their SimpleFIN connection start date. Secondary risks (floating-point cents truncation, UTF-8 BOM corruption, delimiter ambiguity) all have clear, tested solutions documented in research.
+The key risks are cosmetic rather than data-integrity risks. The only high-severity risk is a permissive gate check that allows an import with a genuinely forgotten (unresolved) account — prevented by distinguishing three distinct states per account: `""` (undecided, blocks Continue), `"__skip__"` (resolved skip, allows Continue), and a real UUID (mapped, allows Continue). The SQLite foreign-key constraint on `account_id` acts as a hard backstop against any sentinel value leaking to the server as a real account ID.
 
 ## Key Findings
 
 ### Recommended Stack
 
-The core stack is unchanged. v2.3 adds exactly one new server dependency: `csv-parse@^5.6.0` for RFC-4180-compliant CSV parsing with a synchronous API suited to the tRPC request/response model. The client reads files using the native `File.text()` browser API, eliminating any need for upload libraries. All validation remains with the existing Zod 4 installation.
+No new dependencies are needed. This milestone modifies behavior within the existing React/tRPC/Vitest stack. The only technologies touched are React (UI logic and `useMemo` filtering), TypeScript (type additions to two existing interfaces), and Vitest (new test cases for skip scenarios).
 
-**Core technologies:**
-- `csv-parse` (^5.6.0): Server-side CSV/TSV parsing — mature library (2840+ npm dependents), zero external dependencies, sync API handles sub-10MB files cleanly; `bom: true` option strips UTF-8 BOM automatically
-- `File.text()` (browser built-in): Client-side file reading — modern Promise-based API replacing FileReader callbacks, no library needed, all current browsers supported
-- Zod 4 (already installed at ^4.3.6): tRPC input validation — no additional schema library justified
+**Core technologies (relevant changes only):**
+- React: Add `<option value="__skip__">` to dropdown; filter sample rows and stats with `useMemo` — UI logic only
+- TypeScript: Add `skippedByAccountFilter: number` to `ExecuteResult`; add `rowCountByAccount: Record<string, number>` to `PreviewResult` — type modifications only
+- Vitest: New test cases for partial-mapping execute behavior — test additions only
+- Zod 4: No change — `z.record(z.string(), z.string())` already accepts any string values including the sentinel
 
 Full details: `.planning/research/STACK.md`
 
 ### Expected Features
 
-The import wizard follows established finance app patterns (YNAB, Beyond Budget) with a 3-step flow: upload, map, confirm.
+**Must have (table stakes for v2.4):**
+- Skip option in account mapping dropdown — core capability; entire feature depends on it
+- Server execute accepts absent mappings gracefully — currently throws at line 362 of import-service.ts; must filter instead
+- Per-account row count in mapping UI — users need to see impact magnitude before deciding to skip
+- Client-side dedup stats exclude skipped accounts — prevents inflated "new transactions" count in preview
+- Sample rows exclude skipped accounts — prevents irrelevant rows dominating preview table
+- Results step reflects filtered counts — confirm summary must match actual import outcome
 
-**Must have (table stakes):**
-- File upload with drag-and-drop zone — universal UX signal for file inputs in data import flows
-- Data preview with first 10 rows and total row count — users need visual confirmation before committing
-- Account mapping UI with auto-suggest — Monarch account names never match Minerva account names exactly
-- Category mapping UI with auto-suggest — same mismatch problem; default unmapped to "Uncategorized"
-- Duplicate detection with count shown before import — user will likely have overlap with SimpleFIN-synced data
-- Error reporting per row with option to import valid rows — missing date/amount must not silently drop rows
-- Import confirmation screen (X new, Y skipped, Z errors) — final review before write operation
-- Post-import rules engine run — existing rules apply to imported transactions identically to synced ones
-- Post-import transfer detection — catches transfers spanning historical imports and live sync data
+**Should have (v2.4 stretch goals):**
+- Skipped account visual styling (dimmed mapping card) — CSS-only, high polish value
+- "Skip All Unmatched" bulk action button — one-click skip for accounts without auto-suggested matches
+- Filtered summary banner ("Importing 3 of 5 accounts") — persistent communication of filter state
 
-**Should have (differentiators):**
-- Auto-match accounts by name similarity (case-insensitive substring match)
-- Auto-match categories by exact name
-- Dry-run dedup stats before confirming (show exact new vs. duplicate vs. error counts)
-- Import history log (timestamp, filename, row counts) for auditability
-- Clear messaging on re-import: "500 skipped — already exist" vs. silent zero count
-
-**Defer to v2+:**
-- Generic CSV column mapping UI — only Monarch format needed; add format selector if a second source appears
-- Tag import — Minerva has no tag system; ignore Tags column silently
-- Balance history import — Minerva calculates balances from transactions; historical snapshots will be incomplete
-- Undo/rollback — provide clear preview instead; manual deletion via date-range filter is sufficient
-- Inline account creation during import — user creates accounts beforehand via Accounts page
+**Not building (explicitly deferred):**
+- Per-row checkboxes — wrong abstraction level; account-level skip covers the real use case
+- Server-side preview recomputation on skip changes — unnecessary round-trip; client has all data needed
+- Auto-skip by account type — no account type metadata in Monarch CSV exports
+- Persistent skip preferences — one-time migration workflow; YAGNI
 
 Full details: `.planning/research/FEATURES.md`
 
 ### Architecture Approach
 
-The import feature is a thin vertical slice through the existing architecture: a new `import/` module under `packages/server/src/` (matching the `sync/`, `categories/`, `rules/` pattern), a new tRPC router added to `appRouter` as the 14th nested router, and a new `ImportPage.tsx` in the client. The import service reuses `generateDedupHash()`, `categorizeNewTransactions()`, `detectTransferCandidates()`, and `toCents()` directly — no modifications to those modules. Only 5 existing files need changes, totaling approximately 15 lines.
+The cleanest integration treats "skip" as a mapping value rather than a separate concept. The existing `accountMappings` record gains a tri-state per account: `""` (undecided), `"__skip__"` (skip), or a UUID (mapped). The client strips skip entries before sending to server; the server treats absence from the mappings record as the skip signal. No new files, no new components, no new API endpoints, no schema changes. Changes touch exactly 3 files: `import-service.ts`, `ImportPage.tsx`, and `import-service.test.ts`.
 
-**Major components:**
-1. `import-service.ts` — Parse CSV, validate rows, transform to transaction rows, bulk insert with `INSERT OR IGNORE`, invoke rules + transfer detection, apply CSV category fallback for unmatched transactions
-2. `import-router.ts` — tRPC router with two mutations: `preview` (parse + extract unique accounts/categories + dedup stats) and `execute` (re-parse + insert with confirmed mappings)
-3. `ImportPage.tsx` — 3-step wizard UI: file upload -> preview + mapping -> confirm + result summary
+**Major components and changes:**
+1. `import-service.ts` — Add `rowCountByAccount` to `PreviewResult`; replace unmapped-accounts throw with filter loop in `executeImport`; add `skippedByAccountFilter` to `ExecuteResult`
+2. `ImportPage.tsx` — Add skip `<option>`; update `allAccountsMapped` gate to tri-state; filter stats/sample rows via `useMemo`; update ResultsStep to show filtered counts
+3. `import-service.test.ts` — New tests for partial-mapping execute (no throw, correct counts, mixed skip+dedup scenario)
 
-**Category handling priority (key architectural decision — order matters):**
-1. Rules engine runs first via `categorizeNewTransactions()` — identical to sync behavior; sets `category_id` AND `rule_id`
-2. CSV-mapped categories apply as fallback via `applyCsvCategoryFallback()` — only for transactions still uncategorized after rules; sets `category_id`, leaves `rule_id` NULL
-3. Users can override later via TransactionsPage
-
-**Express body limit must be raised** from the default 100KB to 10MB to accommodate CSV file content sent as a JSON string in the tRPC mutation body.
+**Build order (each step independently testable):**
+1. Server: Add `rowCountByAccount` to `previewImport` (additive, non-breaking)
+2. Server: Replace throw with filter in `executeImport`, add `skippedByAccountFilter` to result
+3. Client: Add skip `<option>` and update gate validation logic (tri-state)
+4. Client: Filtered stats display in PreviewStep using `rowCountByAccount`
+5. Client: ResultsStep updates showing `skippedByAccountFilter` stat card
+6. Tests: Update existing + add skip-specific test cases
 
 Full details: `.planning/research/ARCHITECTURE.md`
 
 ### Critical Pitfalls
 
-1. **Floating-point cents truncation** — `19.99 * 100` produces `1998.999...` in JavaScript; `Math.floor()` silently drops a cent. Use `toCents()` from `@minerva/shared` exclusively — it uses `Math.round()`. Unit test with known values: `19.99 -> 1999`, `-18.32 -> -1832`.
+1. **Dedup stats count skipped accounts as "new"** — The server computes dedup stats before any skip decisions exist. Client must recompute stats by filtering out skipped-account rows. Use `rowCountByAccount` from server for arithmetic rather than attempting to recalculate exact per-account dedup numbers (client does not have per-row dedup hashes). Display a note: "Excluding N rows from M skipped accounts."
 
-2. **Dedup hash mismatch across sources** — Monarch stores "Amazon"; SimpleFIN stores "AMAZON.COM AMZN.COM/BILL WA". The `INSERT OR IGNORE` + `dedup_hash` mechanism will NOT catch these as the same transaction. Mitigation is UX only: prominently warn users to import data predating their SimpleFIN connection. Do not attempt payee normalization — false positives are worse than duplicates.
+2. **Server throws on unmapped accounts (import-service.ts lines 362-365)** — The existing throw fires immediately if the client omits skipped accounts from mappings. Must be replaced with a filter step before the row loop. This server change must land before or simultaneously with client UI changes.
 
-3. **Amount sign convention** — Monarch (negative = expense) should match SimpleFIN and Minerva conventions, but this MUST be verified against a real Monarch export before first implementation. A sign flip after a full import requires complete re-import.
+3. **Gate logic blocks import when skip sentinel is selected** — Current `allAccountsMapped` check (ImportPage.tsx lines 105-107) treats any non-UUID value as unmapped. Must be updated to accept `"__skip__"` as a valid resolved state. Critically: the sentinel must be stripped from the server payload — it must never arrive as an account ID in an INSERT statement.
 
-4. **UTF-8 BOM corrupts first column header** — Files re-saved from Excel prepend `\uFEFF`. The parser sees `"\uFEFFDate"` instead of `"Date"` and fails with a confusing "missing required column" error. Use `csv-parse` with `bom: true` option — it strips BOM automatically.
+4. **Sample rows and confirm summary show unfiltered stats** — Both the PreviewStep sample table and the ResultsStep confirm summary read raw server data. Both must apply the same client-side filter based on current `accountMappings` state. A shared filtering utility function prevents the two views from diverging.
 
-5. **Delimiter ambiguity** — PROJECT.md says "tab-delimited" but Monarch documentation indicates standard comma CSV. A hard-coded tab delimiter treats the entire first row as one column. Auto-detect with: `headerLine.includes('\t') ? '\t' : ','` before calling `csv-parse`.
+5. **All-accounts-skipped edge case** — If the user skips every account, the import should block with a clear message rather than silently importing 0 rows. Require at least one account to be mapped (not skipped) before enabling the execute button.
 
 Full details: `.planning/research/PITFALLS.md`
 
 ## Implications for Roadmap
 
-Based on research, the build order follows natural dependency flow: service logic must exist before the API, and the API must exist before the UI. Two phases is the right split.
+Based on combined research, a 3-phase implementation structure is recommended, following the natural server-then-client dependency order and grouping by blast radius.
 
-### Phase 1: Import Service and API
+### Phase 1: Server Foundation
+**Rationale:** Server changes are non-breaking and must land before client changes can be tested. The throw at line 362 of import-service.ts is a hard blocker for any client that omits skipped accounts. Starting server-first means client work in Phase 2 can be tested against a working API from day one.
+**Delivers:** Safe server that accepts partial `accountMappings` without throwing; correct `skippedByAccountFilter` count in execute results; `rowCountByAccount` available to the client for filtered stats.
+**Addresses:** Per-account row count (must have), server execute grace (must have)
+**Avoids:** Pitfall 2 (server throw on unmapped accounts)
 
-**Rationale:** Service logic and tRPC API can be built and fully tested independently of UI. The import service encapsulates all the tricky logic — parsing, dedup, cents conversion, date normalization, category fallback. Getting this right with unit tests before building UI prevents UI-driven debugging of backend issues. All integration points are directly observable in the existing codebase.
+### Phase 2: Client Skip Dropdown and Gate Logic
+**Rationale:** This is the atomic foundation that all client features depend on. No other client feature is buildable until the skip option exists and the tri-state gate validation is correct. Keeping this phase tight — just the dropdown addition, gate update, and sentinel-stripping before server payload — reduces risk and creates a clean integration point.
+**Delivers:** User can select "Skip" for any account; Continue button correctly enables/disables (undecided blocks, skip or UUID allows); skip sentinel is stripped before the server payload is sent; all-accounts-skipped edge case blocks import with clear message.
+**Addresses:** Skip option (must have), gate logic correctness
+**Avoids:** Pitfall 3 (gate blocks skip), sentinel leak to server
 
-**Delivers:** Working `import-service.ts` with full test coverage, `import-router.ts` wired into `appRouter`, Express body limit raised to 10MB. The API is callable before any UI exists.
-
-**Addresses features:** CSV parsing, dedup detection, rules engine integration, transfer detection, amount conversion, error reporting per row, post-import categorization
-
-**Avoids pitfalls:** Floating-point truncation (use `toCents()`), BOM handling (`bom: true`), delimiter auto-detection, dedup hash alignment with `generateDedupHash()`, sign convention validation via unit tests
-
-**Research flag:** No additional research needed — all patterns directly derived from existing codebase inspection (HIGH confidence). Validate Monarch CSV format (delimiter, date format, sign convention) with a real export file at the start of this phase before finalizing the parser.
-
-### Phase 2: Import UI (3-Step Wizard)
-
-**Rationale:** Depends on Phase 1 API. The UI calls `preview` and `execute` mutations. Account and category mapping logic is entirely presentational once the API returns unique names and auto-suggestions. Standard React form/wizard pattern with Tailwind styling matching existing app conventions.
-
-**Delivers:** `ImportPage.tsx` with 3-step wizard (upload -> preview + mapping -> confirm + result), navigation entries in Layout and MoreSheet, route in App.tsx.
-
-**Addresses features:** File upload with drag-and-drop, data preview table, account/category mapping dropdowns with auto-suggest, duplicate count warning, date range overlap warning (key UX mitigation for cross-source dedup), success summary with categorization breakdown
-
-**Avoids pitfalls:** Cross-source dedup (overlap date range warning in UI), category orphans (show uncategorized count before confirm), account misidentification (show institution/account type in mapping dropdowns), re-import confusion (explicit "already exists" skip reason in result)
-
-**Research flag:** Standard React wizard pattern — no additional research needed. Mobile layout follows existing mobile card patterns from v2.2.
+### Phase 3: Client Stats Filtering and Results
+**Rationale:** With the skip option working and `rowCountByAccount` available from Phase 1, all remaining features are display refinements using client-side filtering. Grouping them together allows a single shared filtering utility to serve the sample rows, preview stats, and confirm summary — avoiding duplicated logic that would otherwise diverge.
+**Delivers:** Sample rows filtered dynamically as user changes mappings; dedup stats recalculated excluding skipped accounts; per-account row count badges in mapping UI; confirm summary reflecting filtered counts; results page with `skippedByAccountFilter` stat card. Stretch: skipped account visual styling, "Skip All Unmatched" button, summary banner.
+**Addresses:** All remaining must-haves and stretch goals
+**Avoids:** Pitfalls 1, 4, 5 (inflated stats, unfiltered sample rows, unfiltered confirm summary)
 
 ### Phase Ordering Rationale
 
-- Service-first order mirrors the existing codebase pattern — every feature has a service layer tested independently before UI
-- The stateless preview/execute design cleanly decouples phases: Phase 1 can be verified via tRPC mutation before Phase 2 starts
-- Critical pitfall mitigations are concentrated in Phase 1 where unit tests can catch them; Phase 2 is primarily UX work with lower risk
-- The `applyCsvCategoryFallback()` function must be implemented in Phase 1 alongside `executeImport()` — the category priority logic is a service concern, not a UI concern
+- Server before client is a hard dependency: the throw at line 362 must be removed before any end-to-end integration test can pass.
+- Phase 2 (dropdown + gate) before Phase 3 (stats) is a data dependency: filtering stats requires skip state to be settable in the UI.
+- Grouping all display filtering in Phase 3 allows a single shared utility function for sample rows, preview stats, and confirm summary — one source of truth for filtering logic.
+- The all-accounts-skipped edge case guard belongs in Phase 2 alongside the gate logic, not Phase 3.
+- The stretch goals (visual styling, bulk skip, summary banner) all belong in Phase 3 since they build on the same skip state established in Phase 2.
 
 ### Research Flags
 
-Phases with well-documented patterns (skip additional research):
-- **Phase 1 (Import Service):** All integration points directly observed in codebase. `generateDedupHash`, `categorizeNewTransactions`, `detectTransferCandidates`, `toCents`, and `INSERT OR IGNORE` pattern are confirmed from source. HIGH confidence.
-- **Phase 2 (Import UI):** Standard React wizard, existing Tailwind/React patterns throughout codebase. No novel technology.
+All phases have well-documented patterns with exact code identified — no phases require a `research-phase` step:
 
-One validation item that requires real data (not resolvable from research alone):
-- **Actual Monarch CSV format:** Research is MEDIUM confidence on delimiter (comma vs. tab), date format (`YYYY-MM-DD` vs. `MM/DD/YYYY`), and sign convention. Auto-detection handles delimiter at runtime. Regex-based date parser handles both formats. But sign convention MUST be verified with a real export file before the Phase 1 parser is finalized.
+- **Phase 1:** Server changes are direct modifications to lines identified in ARCHITECTURE.md and PITFALLS.md with exact line numbers and code snippets.
+- **Phase 2:** Standard sentinel/tri-state dropdown pattern. Exact `<option>` HTML, gate validation code, and sentinel-stripping logic are all specified in ARCHITECTURE.md.
+- **Phase 3:** Client-side filtering with `useMemo` on existing `previewResult` data. All data structures, filter expressions, and arithmetic are defined in ARCHITECTURE.md.
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | One new dependency (`csv-parse`), everything else is existing validated technology. Direct codebase inspection. |
-| Features | HIGH | Established wizard patterns from YNAB, Beyond Budget, Smashing Magazine. Monarch column format confirmed across multiple community sources. |
-| Architecture | HIGH | All integration points directly observed in existing codebase. Component boundaries mirror existing modules exactly. Only 5 files modified, ~15 lines. |
-| Pitfalls | HIGH | Floating-point and BOM issues are well-documented JavaScript behavior. Dedup hash formula confirmed from codebase source. Only MEDIUM items are Monarch-specific format details requiring real data. |
+| Stack | HIGH | Direct codebase analysis; no external sources needed; zero new dependencies |
+| Features | HIGH | Requirements from PROJECT.md v2.4 + direct inspection of existing import code; scope tightly bounded |
+| Architecture | HIGH | All integration points identified with exact line numbers, interface definitions, and code diffs |
+| Pitfalls | HIGH | All pitfalls traced to specific lines in existing source code; recovery costs assessed; edge cases documented |
 
 **Overall confidence:** HIGH
 
 ### Gaps to Address
 
-- **Monarch CSV delimiter:** PROJECT.md says tab-delimited; Monarch documentation says comma CSV. Auto-detection resolves this at runtime, but the parser should be validated against a real Monarch export file before Phase 1 closes.
-- **Monarch date format:** May be `YYYY-MM-DD` or `MM/DD/YYYY`. Implement regex-based parser supporting both, then verify against real data. Output must always be `YYYY-MM-DD` to match the `transactions.date` column.
-- **Amount sign convention:** Assumed to match (Monarch negative = expense = Minerva DB convention), but must be verified with a real export. A unit test with a known transaction is sufficient before writing the parser.
-- **Express body size limit location:** The current Express setup file was not inspected to confirm the exact location of `express.json()`. This is a 1-line change but must be located before Phase 1 is complete.
+- **Dedup stats precision for skipped accounts:** Research recommends displaying "excluding N rows from M skipped accounts" alongside server-provided dedup numbers rather than recalculating exact per-account dedup counts. Confirm this level of approximation is acceptable before Phase 3 execution. If exact filtered dedup counts are required, the server would need to return per-row dedup hashes — a larger change.
+
+- **Category mapping UI for skipped accounts:** Research explicitly defers filtering of category mappings (categories unique to skipped accounts still appear in the mapping UI) as acceptable tech debt for v2.4. These extra mappings are harmless — they are simply ignored during execute. Confirm this deferral is acceptable before Phase 3.
+
+- **Stretch goal scope for v2.4:** The three stretch goals (skipped account styling, "Skip All Unmatched" button, summary banner) are all LOW complexity but should be explicitly scoped in or out before Phase 3 to avoid scope creep during execution.
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- Existing codebase (direct inspection): `sync-service.ts`, `simplefin-client.ts`, `rules-service.ts`, `transfer-service.ts`, `001-initial-schema.sql`, `trpc-router.ts`, `Layout.tsx`, `MoreSheet.tsx`, `App.tsx`
-- `packages/shared/src/types.ts` — `toCents()` confirmed uses `Math.round(dollars * 100)`
-- [csv-parse official documentation](https://csv.js.org/parse/) — sync API, options reference, `bom` option
-- [csv-parse npm](https://www.npmjs.com/package/csv-parse) — version 5.6.0, 2840+ dependents, zero external deps
+- `packages/server/src/import/import-service.ts` (438 lines, direct analysis) — dedup stats loop (lines 284-338), unmapped throw (lines 362-365), INSERT logic (lines 369-434), `PreviewResult` and `ExecuteResult` interfaces
+- `packages/client/src/pages/ImportPage.tsx` (572 lines, direct analysis) — gate check (lines 105-107), account dropdown (lines 396-409), confirm summary (lines 477-527), sample rows display (lines 340-365)
+- `packages/server/src/import/import-router.ts` (21 lines, direct analysis) — Zod schema confirming `z.record(z.string(), z.string())` requires no changes
+- `.planning/PROJECT.md` — v2.4 milestone requirements (lines 42-51)
 
 ### Secondary (MEDIUM confidence)
-- [Monarch Money CSV format blog](https://blog.tracefunc.com/notes/monarch-money.html) — confirmed 8 columns: Date, Merchant, Category, Account, Original Statement, Notes, Amount, Tags
-- [Monarch Money export help](https://help.monarch.com/hc/en-us/articles/15526600975764-Downloading-Transaction-or-Account-History) — CSV export documentation
-- [Smashing Magazine: Designing Data Importers](https://www.smashingmagazine.com/2020/12/designing-attractive-usable-data-importer-app/) — wizard UX patterns, error handling
-- [YNAB File-Based Import Guide](https://support.ynab.com/en_us/file-based-import-a-guide-Bkj4Sszyo) — duplicate detection and account selection patterns in finance apps
-
-### Tertiary (LOW confidence — needs validation with real Monarch export)
-- Monarch CSV delimiter (comma vs. tab) — conflicting between PROJECT.md and official docs; auto-detection mitigates at runtime
-- Monarch date format — assumed `YYYY-MM-DD` based on community docs; needs verification
-- Amount sign convention — assumed negative = expense based on Monarch documentation; needs verification before first import
+- `packages/server/src/import/import-service.test.ts` — Existing test patterns for new test case design
 
 ---
 *Research completed: 2026-03-24*
