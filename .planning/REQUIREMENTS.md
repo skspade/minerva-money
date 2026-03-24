@@ -3,84 +3,137 @@
 **Defined:** 2026-03-23
 **Core Value:** Accurate, auto-synced financial data with envelope budgeting that lets you see where every dollar goes and how spending trends over time.
 
-## v2.1 Requirements
+## v2.2 Requirements
 
-Requirements for deployment hardening milestone. Each maps to roadmap phases.
+Requirements for mobile-friendly UI milestone. Each maps to roadmap phases.
+
+### Navigation
+
+- [ ] **NAV-01**: User sees a fixed bottom tab bar with 5 tabs (Dashboard, Transactions, Budget, Chat, More) on screens below 768px
+- [ ] **NAV-02**: User can tap the "More" tab to open a bottom sheet listing Accounts, Categories, Rules, Transfers, and Reports
+- [ ] **NAV-03**: Desktop horizontal navbar remains unchanged and hidden on mobile; bottom tab bar hidden on desktop
+- [ ] **NAV-04**: Active tab is visually highlighted and updates on navigation
+- [ ] **NAV-05**: "More" sheet auto-closes when user navigates to a page
+
+### Transactions
+
+- [ ] **TXN-01**: User sees transactions as stacked cards (not a table) on mobile, showing merchant, amount, date, account, and category
+- [ ] **TXN-02**: User can tap a transaction card's category badge to change the category via CategoryPicker
+- [ ] **TXN-03**: User can tap a transaction card to expand and view details (memo, splits, notes)
+- [ ] **TXN-04**: Transaction filters collapse into a "Filter" button on mobile with active filter count badge
+- [ ] **TXN-05**: Desktop transaction table remains unchanged on screens above 768px
+
+### Budget
+
+- [ ] **BUD-01**: User sees budget categories as stacked cards grouped by category group on mobile, replacing the grid layout
+- [ ] **BUD-02**: Each budget card shows category name, progress bar (color-coded: green/yellow/red), spent/budgeted amounts, and remaining
+- [ ] **BUD-03**: User can tap a budget category card to expand inline editing for allocation amount
+- [ ] **BUD-04**: Month selector displays full-width with left/right navigation arrows on mobile
+- [ ] **BUD-05**: Desktop budget grid layout remains unchanged on screens above 768px
+
+### Layout & Viewport
+
+- [ ] **LAYOUT-01**: Viewport meta tag includes `viewport-fit=cover` to enable safe area insets
+- [ ] **LAYOUT-02**: Bottom tab bar and Chat input bar respect iPhone safe area insets via `env(safe-area-inset-bottom)`
+- [ ] **LAYOUT-03**: Main content area has bottom padding to clear the fixed bottom tab bar on mobile
+- [ ] **LAYOUT-04**: Layout uses `min-h-dvh` instead of `min-h-screen` to handle iOS Safari viewport correctly
+- [ ] **LAYOUT-05**: No horizontal scroll occurs on any page at 375px viewport width
+
+### Touch & Interaction
+
+- [ ] **TOUCH-01**: All interactive elements (buttons, links, form inputs, tab bar items) have a minimum 44x44px tap target on mobile
+- [ ] **TOUCH-02**: Form inputs use `text-base` (16px) minimum font size on mobile to prevent iOS auto-zoom
+- [ ] **TOUCH-03**: Form layouts stack vertically on mobile with full-width inputs
+
+### Modals & Sheets
+
+- [ ] **MODAL-01**: SplitModal renders as a full-screen bottom sheet on mobile and a centered modal on desktop
+- [ ] **MODAL-02**: ManualTransactionForm renders as a full-screen bottom sheet on mobile and a centered modal on desktop
+- [ ] **MODAL-03**: Bottom sheets support drag-to-dismiss and backdrop tap to close
+- [ ] **MODAL-04**: RuleForm renders as a full-screen sheet on mobile
+- [ ] **MODAL-05**: ManualLinkModal renders as a full-screen sheet on mobile
+
+### Remaining Pages
+
+- [ ] **PAGE-01**: Dashboard page displays correctly at 375px (single-column cards, no overflow)
+- [ ] **PAGE-02**: Accounts page stacks account cards vertically with no horizontal overflow on mobile
+- [ ] **PAGE-03**: Reports page charts render readable at 375px width with simplified axis labels if needed
+- [ ] **PAGE-04**: Chat page input bar is fixed above the bottom tab bar on mobile with safe area inset
+- [ ] **PAGE-05**: Categories page drag handles meet 44px tap target on mobile
+- [ ] **PAGE-06**: Rules page displays rules as cards instead of table rows on mobile
+
+## v2.1 Requirements (Shipped)
+
+<details>
+<summary>Deployment Hardening — 16 requirements</summary>
 
 ### Production Build
 
-- [ ] **BUILD-01**: Server runs from compiled JavaScript (tsc output), not TypeScript source
-- [ ] **BUILD-02**: Client static files are served by Express in production (single process, no nginx)
-- [ ] **BUILD-03**: SPA catch-all route serves index.html for all client-side routes
-- [ ] **BUILD-04**: Environment variables load via Node 20 native `--env-file` flag (no dotenv)
+- [x] **BUILD-01**: Server runs from compiled JavaScript (tsc output), not TypeScript source
+- [x] **BUILD-02**: Client static files are served by Express in production (single process, no nginx)
+- [x] **BUILD-03**: SPA catch-all route serves index.html for all client-side routes
+- [x] **BUILD-04**: Environment variables load via Node 20 native `--env-file` flag (no dotenv)
 
 ### Process Management
 
-- [ ] **PROC-01**: Server auto-restarts on crash via launchd KeepAlive (dict form: only on non-zero exit)
-- [ ] **PROC-02**: Server starts automatically on user login via launchd RunAtLoad
-- [ ] **PROC-03**: Restart throttle prevents rapid restart loops (ThrottleInterval: 10)
-- [ ] **PROC-04**: Server plist uses correct node binary path for the target machine
-- [ ] **PROC-05**: Backup plist runs compiled JS instead of tsx source
+- [x] **PROC-01**: Server auto-restarts on crash via launchd KeepAlive (dict form: only on non-zero exit)
+- [x] **PROC-02**: Server starts automatically on user login via launchd RunAtLoad
+- [x] **PROC-03**: Restart throttle prevents rapid restart loops (ThrottleInterval: 10)
+- [x] **PROC-04**: Server plist uses correct node binary path for the target machine
+- [x] **PROC-05**: Backup plist runs compiled JS instead of tsx source
 
 ### Deploy Scripts
 
-- [ ] **DEPLOY-01**: `setup.sh` performs first-time install (build, copy plists, load services, health check)
-- [ ] **DEPLOY-02**: `setup.sh` uses modern `launchctl bootstrap` instead of deprecated `launchctl load`
-- [ ] **DEPLOY-03**: `deploy.sh` performs one-command update (git pull, install, build, restart)
-- [ ] **DEPLOY-04**: Deploy scripts validate the node binary path before installing plists
-- [ ] **DEPLOY-05**: `.env` existence is verified before starting the server
+- [x] **DEPLOY-01**: `setup.sh` performs first-time install (build, copy plists, load services, health check)
+- [x] **DEPLOY-02**: `setup.sh` uses modern `launchctl bootstrap` instead of deprecated `launchctl load`
+- [x] **DEPLOY-03**: `deploy.sh` performs one-command update (git pull, install, build, restart)
+- [x] **DEPLOY-04**: Deploy scripts validate the node binary path before installing plists
+- [x] **DEPLOY-05**: `.env` existence is verified before starting the server
 
 ### Directory Layout
 
-- [ ] **DIR-01**: All deployment config co-located in `deploy/` directory
-- [ ] **DIR-02**: Server and backup plists both live in `deploy/` (backup plist moved from repo root)
+- [x] **DIR-01**: All deployment config co-located in `deploy/` directory
+- [x] **DIR-02**: Server and backup plists both live in `deploy/` (backup plist moved from repo root)
+
+</details>
 
 ## Future Requirements
 
-### Log Management
+### Progressive Web App
 
-- **LOG-01**: Log rotation for `~/Library/Logs/minerva-server.log` via newsyslog
+- **PWA-01**: App can be installed to home screen via manifest
+- **PWA-02**: App works offline with cached data
 
-### Remote Access
+### Advanced Mobile UX
 
-- **REMOTE-01**: SSL/TLS termination for external network access
+- **UX-01**: Swipe-to-reveal actions on transaction cards
+- **UX-02**: Virtualized transaction list for large datasets
+- **UX-03**: Sync status badge on Dashboard tab icon
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| PM2 process manager | Redundant with launchd; adds dependency and competing restart system |
-| nginx reverse proxy | Unnecessary for single-user home server; Express serves static files |
-| Docker containerization | Overengineered for single-user home app; complicates iCloud backup access |
-| Git hooks for auto-deploy | Hidden complexity; explicit deploy script is safer for single dev |
-| Automated health alerts | External notification service out of scope per PROJECT.md |
+| PWA / offline mode | Service worker caching incompatible with live financial data on LAN server |
+| Swipe navigation between pages | Gesture conflicts with scroll; complex state coordination |
+| Pull-to-refresh | Conflicts with iOS Safari native pull-to-refresh |
+| Pinch-to-zoom on charts | Recharts doesn't support it; date range selector is sufficient |
+| Infinite scroll | Not needed at this data scale (~hundreds of transactions) |
+| Native mobile app | Web-only, accessed via Safari on private network |
 
 ## Traceability
 
+Which phases cover which requirements. Updated during roadmap creation.
+
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| BUILD-01 | Phase 18 | Pending |
-| BUILD-02 | Phase 18 | Pending |
-| BUILD-03 | Phase 18 | Pending |
-| BUILD-04 | Phase 18 | Pending |
-| PROC-01 | Phase 19 | Pending |
-| PROC-02 | Phase 19 | Pending |
-| PROC-03 | Phase 19 | Pending |
-| PROC-04 | Phase 19 | Pending |
-| PROC-05 | Phase 19 | Pending |
-| DEPLOY-01 | Phase 20 | Pending |
-| DEPLOY-02 | Phase 20 | Pending |
-| DEPLOY-03 | Phase 20 | Pending |
-| DEPLOY-04 | Phase 20 | Pending |
-| DEPLOY-05 | Phase 20 | Pending |
-| DIR-01 | Phase 18 | Pending |
-| DIR-02 | Phase 18 | Pending |
+| — | — | — |
 
 **Coverage:**
-- v2.1 requirements: 16 total
-- Mapped to phases: 16
-- Unmapped: 0
+- v2.2 requirements: 28 total
+- Mapped to phases: 0
+- Unmapped: 28
 
 ---
 *Requirements defined: 2026-03-23*
-*Last updated: 2026-03-23 after roadmap creation*
+*Last updated: 2026-03-23 after initial definition*
