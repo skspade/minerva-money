@@ -127,7 +127,9 @@ Full details: see Phase Details below
   3. Reports page charts are readable at 375px width with simplified axis labels
   4. Chat page input bar is fixed above the bottom tab bar with safe area inset on mobile
   5. Categories page drag handles meet 44px tap target and Rules page shows rules as cards on mobile
-**Plans**: TBD
+**Plans**: 2 plans
+  - [ ] 25-01-PLAN.md — ReportsPage, ChatPage, CategoriesPage mobile fixes (date filter stacking, dvh height, safe area inset, drag handle tap targets)
+  - [ ] 25-02-PLAN.md — RulesPage mobile card layout + DashboardPage/AccountsPage 375px audit
 
 ### Phase 18: Production Build and Directory Layout
 **Goal**: Server and client produce correct compiled output, Express serves the SPA in production, and all deployment artifacts live in one place
