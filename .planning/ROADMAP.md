@@ -7,7 +7,7 @@
 - ✅ **v2.1 Deployment Hardening** — Phases 18-20 (shipped 2026-03-24)
 - ✅ **v2.2 Mobile-Friendly UI** — Phases 21-25 (shipped 2026-03-24)
 - ✅ **v2.3 CSV Import** — Phases 26-28 (shipped 2026-03-24)
-- 📋 **v2.4 CSV Import Account Filtering** — Phases 29-31 (in progress)
+- ✅ **v2.4 CSV Import Account Filtering** — Phases 29-32 (shipped 2026-03-24)
 
 ## Phases
 
@@ -77,12 +77,12 @@ Full details: [milestones/v2.3-ROADMAP.md](milestones/v2.3-ROADMAP.md)
 
 </details>
 
-### v2.4 CSV Import Account Filtering (In Progress)
+### v2.4 CSV Import Account Filtering (Complete)
 
 - [x] **Phase 29: Server Skip Support** - Server accepts partial account mappings and provides per-account row counts (completed 2026-03-24)
 - [x] **Phase 30: Client Skip UI** - Skip option in account mapping dropdown with visual styling and row count badges (completed 2026-03-24)
 - [x] **Phase 31: Stats Filtering and Polish** - Preview stats, sample rows, and results reflect skip decisions; bulk skip and summary banner (completed 2026-03-24)
-- [ ] **Phase 32: Phase 31 Verification** - Formal verification of Phase 31 requirements and checkbox fixes [Gap Closure]
+- [x] **Phase 32: Phase 31 Verification** - Formal verification of Phase 31 requirements and checkbox fixes [Gap Closure] (completed 2026-03-24)
 
 ## Phase Details
 
@@ -141,7 +141,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 32-01: Phase 31 verification and requirements checkbox fixes
+- [x] 32-01: Phase 31 verification and requirements checkbox fixes
 
 ## Progress
 
@@ -181,4 +181,4 @@ Phases execute in numeric order: 29 → 30 → 31
 | 29. Server Skip Support | 1/1 | Complete    | 2026-03-24 | - |
 | 30. Client Skip UI | 1/1 | Complete    | 2026-03-24 | - |
 | 31. Stats Filtering and Polish | 1/1 | Complete    | 2026-03-24 | - |
-| 32. Phase 31 Verification | v2.4 | 0/1 | Planned | - |
+| 32. Phase 31 Verification | v2.4 | 1/1 | Complete | 2026-03-24 |
