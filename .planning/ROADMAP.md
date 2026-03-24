@@ -71,6 +71,7 @@ Full details: see Phase Details below
 
 - [x] **Phase 26: Import Service and API** - CSV parsing, validation, dedup, account/category auto-matching, atomic import execution with rules engine and transfer detection (completed 2026-03-24)
 - [x] **Phase 27: Import UI and Navigation** - 3-step wizard (upload, preview/map, confirm/import), navigation entries, mobile-responsive layout (2 plans) (completed 2026-03-24)
+- [ ] **Phase 28: Phase 26 Verification** - Write missing VERIFICATION.md for Phase 26, closing 12 unverified requirements [Gap Closure]
 
 ## Phase Details
 
@@ -101,6 +102,17 @@ Full details: see Phase Details below
 **Plans**: 2 plans
   - [ ] 27-01-PLAN.md — ImportPage.tsx: 3-step wizard (upload, preview/map, confirm/results)
   - [ ] 27-02-PLAN.md — Navigation wiring: route, desktop NavLink, mobile MoreSheet entry
+
+### Phase 28: Phase 26 Verification
+**Goal**: Write VERIFICATION.md for Phase 26, verifying all 12 requirements that were implemented but never formally verified
+**Depends on**: Phase 26 (verifies Phase 26's implementation)
+**Requirements**: CSV-02, CSV-03, CSV-04, CSV-05, MAP-02, MAP-04, MAP-05, IMP-01, IMP-02, IMP-03, IMP-04, IMP-05
+**Gap Closure:** Closes gaps from audit — Phase 26 code confirmed functional, VERIFICATION.md never written
+**Success Criteria** (what must be TRUE):
+  1. VERIFICATION.md exists in `.planning/phases/28-phase-26-verification/` confirming each of the 12 requirements against actual code and test evidence
+  2. All 12 requirements pass verification (tests run, code inspected, behavior confirmed)
+**Plans**: 1 plan
+  - [ ] 28-01-PLAN.md — Verify Phase 26 requirements and write VERIFICATION.md
 
 ### Phase 18: Production Build and Directory Layout
 **Goal**: Server and client produce correct compiled output, Express serves the SPA in production, and all deployment artifacts live in one place
@@ -170,3 +182,4 @@ Full details: see Phase Details below
 | 25. Remaining Pages | v2.2 | 2/2 | Complete | 2026-03-24 |
 | 26. Import Service and API | 2/2 | Complete    | 2026-03-24 | - |
 | 27. Import UI and Navigation | 2/2 | Complete    | 2026-03-24 | - |
+| 28. Phase 26 Verification | v2.3 | 0/1 | Pending | - |

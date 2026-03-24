@@ -73,20 +73,20 @@ Deferred to later release. Tracked but not in current roadmap.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | CSV-01 | Phase 27 | Done |
-| CSV-02 | Phase 26 | Done |
-| CSV-03 | Phase 26 | Done |
-| CSV-04 | Phase 26 | Done |
-| CSV-05 | Phase 26 | Done |
+| CSV-02 | Phase 28 | Pending |
+| CSV-03 | Phase 28 | Pending |
+| CSV-04 | Phase 28 | Pending |
+| CSV-05 | Phase 28 | Pending |
 | MAP-01 | Phase 27 | Done |
-| MAP-02 | Phase 26 | Done |
+| MAP-02 | Phase 28 | Pending |
 | MAP-03 | Phase 27 | Done |
-| MAP-04 | Phase 26 | Done |
-| MAP-05 | Phase 26 | Done |
-| IMP-01 | Phase 26 | Done |
-| IMP-02 | Phase 26 | Done |
-| IMP-03 | Phase 26 | Done |
-| IMP-04 | Phase 26 | Done |
-| IMP-05 | Phase 26 | Done |
+| MAP-04 | Phase 28 | Pending |
+| MAP-05 | Phase 28 | Pending |
+| IMP-01 | Phase 28 | Pending |
+| IMP-02 | Phase 28 | Pending |
+| IMP-03 | Phase 28 | Pending |
+| IMP-04 | Phase 28 | Pending |
+| IMP-05 | Phase 28 | Pending |
 | UI-01 | Phase 27 | Done |
 | UI-02 | Phase 27 | Done |
 | UI-03 | Phase 27 | Done |
