@@ -25,11 +25,11 @@ Requirements for mobile-friendly UI milestone. Each maps to roadmap phases.
 
 ### Budget
 
-- [ ] **BUD-01**: User sees budget categories as stacked cards grouped by category group on mobile, replacing the grid layout
-- [ ] **BUD-02**: Each budget card shows category name, progress bar (color-coded: green/yellow/red), spent/budgeted amounts, and remaining
-- [ ] **BUD-03**: User can tap a budget category card to expand inline editing for allocation amount
-- [ ] **BUD-04**: Month selector displays full-width with left/right navigation arrows on mobile
-- [ ] **BUD-05**: Desktop budget grid layout remains unchanged on screens above 768px
+- [x] **BUD-01**: User sees budget categories as stacked cards grouped by category group on mobile, replacing the grid layout
+- [x] **BUD-02**: Each budget card shows category name, progress bar (color-coded: green/yellow/red), spent/budgeted amounts, and remaining
+- [x] **BUD-03**: User can tap a budget category card to expand inline editing for allocation amount
+- [x] **BUD-04**: Month selector displays full-width with left/right navigation arrows on mobile
+- [x] **BUD-05**: Desktop budget grid layout remains unchanged on screens above 768px
 
 ### Layout & Viewport
 
@@ -144,11 +144,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TXN-04 | Phase 22 | Not Started |
 | TXN-05 | Phase 22 | Not Started |
 | TOUCH-02 | Phase 22 | Not Started |
-| BUD-01 | Phase 23 | Not Started |
-| BUD-02 | Phase 23 | Not Started |
-| BUD-03 | Phase 23 | Not Started |
-| BUD-04 | Phase 23 | Not Started |
-| BUD-05 | Phase 23 | Not Started |
+| BUD-01 | Phase 23 | Complete |
+| BUD-02 | Phase 23 | Complete |
+| BUD-03 | Phase 23 | Complete |
+| BUD-04 | Phase 23 | Complete |
+| BUD-05 | Phase 23 | Complete |
 | MODAL-01 | Phase 24 | Not Started |
 | MODAL-02 | Phase 24 | Not Started |
 | MODAL-03 | Phase 24 | Not Started |
