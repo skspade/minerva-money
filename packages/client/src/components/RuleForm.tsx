@@ -174,14 +174,14 @@ export default function RuleForm({ initialRule, onSaved, onCancel }: RuleFormPro
         <button
           type="submit"
           disabled={createMut.isPending || updateMut.isPending}
-          className="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50"
+          className="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50 min-h-[44px]"
         >
           {isEdit ? 'Update Rule' : 'Create Rule'}
         </button>
         <button
           type="button"
           onClick={onCancel}
-          className="px-4 py-2 bg-gray-200 text-gray-700 text-sm rounded hover:bg-gray-300"
+          className="px-4 py-2 bg-gray-200 text-gray-700 text-sm rounded hover:bg-gray-300 min-h-[44px]"
         >
           Cancel
         </button>

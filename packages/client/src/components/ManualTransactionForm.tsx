@@ -66,7 +66,7 @@ export default function ManualTransactionForm({ onClose }: ManualTransactionForm
   return (
     <div className="bg-gray-100 border border-gray-200 rounded-lg p-4 mb-4">
       <h3 className="text-sm font-semibold text-gray-700 mb-3">Add Transaction</h3>
-      <div className="flex flex-wrap gap-3 items-start">
+      <div className="flex flex-wrap gap-3 items-start max-md:flex-col">
         <div className="flex flex-col">
           <input
             type="date"
@@ -76,18 +76,18 @@ export default function ManualTransactionForm({ onClose }: ManualTransactionForm
           />
         </div>
 
-        <div className="flex flex-col flex-1 min-w-32">
+        <div className="flex flex-col flex-1 min-w-32 max-md:w-full">
           <input
             type="text"
             value={payee}
             onChange={e => { setPayee(e.target.value); setErrors(prev => ({ ...prev, payee: '' })); }}
             placeholder="Payee name"
-            className={`px-2 py-1.5 border rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 ${errors.payee ? 'border-red-400' : 'border-gray-300'}`}
+            className={`px-2 py-1.5 border rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 max-md:w-full ${errors.payee ? 'border-red-400' : 'border-gray-300'}`}
           />
           {errors.payee && <span className="text-xs text-red-600 mt-0.5">{errors.payee}</span>}
         </div>
 
-        <div className="flex flex-col w-28">
+        <div className="flex flex-col w-28 max-md:w-full">
           <div className="relative">
             <span className="absolute left-2 top-1/2 -translate-y-1/2 text-sm text-gray-400">$</span>
             <input
@@ -101,7 +101,7 @@ export default function ManualTransactionForm({ onClose }: ManualTransactionForm
           {errors.amount && <span className="text-xs text-red-600 mt-0.5">{errors.amount}</span>}
         </div>
 
-        <div className="flex flex-col">
+        <div className="flex flex-col max-md:w-full">
           <select
             value={accountId}
             onChange={e => { setAccountId(e.target.value); setErrors(prev => ({ ...prev, account: '' })); }}
@@ -115,17 +115,17 @@ export default function ManualTransactionForm({ onClose }: ManualTransactionForm
           {errors.account && <span className="text-xs text-red-600 mt-0.5">{errors.account}</span>}
         </div>
 
-        <div className="flex flex-col">
+        <div className="flex flex-col max-md:w-full">
           <CategoryPicker value={categoryId} onChange={setCategoryId} />
         </div>
 
-        <div className="flex flex-col flex-1 min-w-32">
+        <div className="flex flex-col flex-1 min-w-32 max-md:w-full">
           <input
             type="text"
             value={memo}
             onChange={e => setMemo(e.target.value)}
             placeholder="Memo (optional)"
-            className="px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 max-md:w-full"
           />
         </div>
 

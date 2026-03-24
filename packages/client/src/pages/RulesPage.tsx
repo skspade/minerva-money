@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Drawer } from 'vaul';
 import { useTRPC } from '../trpc';
 import { formatCurrency } from '../lib/format';
 import RuleForm from '../components/RuleForm';
@@ -61,23 +62,51 @@ export default function RulesPage() {
         )}
       </div>
 
-      {(showForm || editingRule) && (
-        <RuleForm
-          initialRule={editingRule ?? undefined}
-          onSaved={(ruleId) => {
-            setShowForm(false);
-            setEditingRule(null);
-            if (!editingRule) {
-              setPreviewRuleId(ruleId);
-            }
-            queryClient.invalidateQueries({ queryKey: trpc.rules.list.queryKey() });
-          }}
-          onCancel={() => {
-            setShowForm(false);
-            setEditingRule(null);
-          }}
-        />
-      )}
+      <div className="hidden md:block">
+        {(showForm || editingRule) && (
+          <RuleForm
+            initialRule={editingRule ?? undefined}
+            onSaved={(ruleId) => {
+              setShowForm(false);
+              setEditingRule(null);
+              if (!editingRule) {
+                setPreviewRuleId(ruleId);
+              }
+              queryClient.invalidateQueries({ queryKey: trpc.rules.list.queryKey() });
+            }}
+            onCancel={() => {
+              setShowForm(false);
+              setEditingRule(null);
+            }}
+          />
+        )}
+      </div>
+
+      <Drawer.Root open={showForm || !!editingRule} onOpenChange={(o) => { if (!o) { setShowForm(false); setEditingRule(null); } }}>
+        <Drawer.Portal>
+          <Drawer.Overlay className="fixed inset-0 bg-black/40 z-50 md:hidden" />
+          <Drawer.Content className="fixed bottom-0 inset-x-0 z-50 bg-white rounded-t-2xl max-h-[90svh] flex flex-col pb-safe md:hidden">
+            <div className="mx-auto w-12 h-1.5 bg-gray-300 rounded-full mt-3 mb-2 flex-shrink-0" />
+            <div className="overflow-y-auto flex-1">
+              <RuleForm
+                initialRule={editingRule ?? undefined}
+                onSaved={(ruleId) => {
+                  setShowForm(false);
+                  setEditingRule(null);
+                  if (!editingRule) {
+                    setPreviewRuleId(ruleId);
+                  }
+                  queryClient.invalidateQueries({ queryKey: trpc.rules.list.queryKey() });
+                }}
+                onCancel={() => {
+                  setShowForm(false);
+                  setEditingRule(null);
+                }}
+              />
+            </div>
+          </Drawer.Content>
+        </Drawer.Portal>
+      </Drawer.Root>
 
       {previewRuleId !== null && (
         <RetroactivePreview

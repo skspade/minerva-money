@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTRPC } from '../trpc';
 import { formatCurrency } from '../lib/format';
 import CategoryPicker from '../components/CategoryPicker';
+import { Drawer } from 'vaul';
 import SplitModal from '../components/SplitModal';
 import ManualTransactionForm from '../components/ManualTransactionForm';
 import TransactionCard from '../components/TransactionCard';
@@ -224,7 +225,21 @@ export default function TransactionsPage() {
         )}
       </div>
 
-      {showAddForm && <ManualTransactionForm onClose={() => setShowAddForm(false)} />}
+      <div className="hidden md:block">
+        {showAddForm && <ManualTransactionForm onClose={() => setShowAddForm(false)} />}
+      </div>
+
+      <Drawer.Root open={showAddForm} onOpenChange={(o) => { if (!o) setShowAddForm(false); }}>
+        <Drawer.Portal>
+          <Drawer.Overlay className="fixed inset-0 bg-black/40 z-50 md:hidden" />
+          <Drawer.Content className="fixed bottom-0 inset-x-0 z-50 bg-white rounded-t-2xl max-h-[90svh] flex flex-col pb-safe md:hidden">
+            <div className="mx-auto w-12 h-1.5 bg-gray-300 rounded-full mt-3 mb-2 flex-shrink-0" />
+            <div className="overflow-y-auto flex-1">
+              <ManualTransactionForm onClose={() => setShowAddForm(false)} />
+            </div>
+          </Drawer.Content>
+        </Drawer.Portal>
+      </Drawer.Root>
 
       {/* Mobile filter toggle */}
       <div className="md:hidden flex items-center justify-between mb-4">
