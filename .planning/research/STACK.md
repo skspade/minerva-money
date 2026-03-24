@@ -1,20 +1,22 @@
-# Stack Research
+# Technology Stack
 
-**Domain:** Mobile-friendly UI — bottom tab navigation, card layouts, touch targets, bottom sheets/modals, responsive breakpoints
-**Researched:** 2026-03-23
+**Project:** Minerva Money v2.3 CSV Import
+**Researched:** 2026-03-24
 **Confidence:** HIGH
+**Scope:** NEW capabilities only -- CSV/TSV parsing, file upload handling, validation
 
 ## Context: Subsequent Milestone
 
-This is a subsequent milestone. The core stack (React 19, React Router v7, Vite 6, Tailwind CSS v4, tRPC, TanStack Query, Recharts, better-sqlite3) is validated and unchanged. This document covers only what v2.2 adds.
+The core stack (React 19, Vite 6, Tailwind CSS v4, tRPC 11, TanStack Query, Express 4, better-sqlite3, Zod 4) is validated and unchanged. This document covers only what v2.3 adds.
 
-**v2.2 goal:** Make the existing desktop web app fully functional on iPhone (375–430px viewport) without introducing a component library or heavy new dependencies.
+**v2.3 goal:** Import transaction history from Monarch Money CSV exports into Minerva Money with deduplication, account/category mapping, and rules engine integration.
 
 **Existing patterns to preserve:**
-- Custom Tailwind utility classes throughout (no shadcn, no MUI, no Radix primitives in use)
-- All modals use `fixed inset-0 bg-black/50 flex items-center justify-center z-50` pattern
-- `Layout.tsx` owns the top nav bar and `<Outlet />` — this is the natural insertion point for a bottom tab bar
-- Tailwind v4 uses CSS-first config (`@import "tailwindcss"` only, no `tailwind.config.js`)
+- tRPC-only API (no Express middleware for uploads)
+- `INSERT OR IGNORE` with `dedup_hash` UNIQUE constraint for deduplication
+- `generateDedupHash(accountId, date, amount, payee)` in `simplefin-client.ts`
+- Rules engine `applyRule()` for post-insertion categorization
+- Zod 4 for all input validation
 
 ---
 
@@ -22,158 +24,175 @@ This is a subsequent milestone. The core stack (React 19, React Router v7, Vite 
 
 ### New Dependencies
 
-| Technology | Version | Purpose | Why Recommended |
-|------------|---------|---------|-----------------|
-| `vaul` | ^1.1.2 | Bottom sheets (mobile modal replacement) | Unstyled drawer built on Radix Dialog. Handles iOS rubber-banding, drag-to-dismiss, snap points. Used in production by Vercel. Explicitly supports React 19 in peerDependencies as of v1.1.1. No default styles — integrates with existing Tailwind classes. |
-| `lucide-react` | ^0.577.0 | Tab bar icons and touch-friendly action icons | Tree-shakeable SVG icons. Zero runtime dependencies. Already the de facto pairing with Tailwind custom-component stacks. Replaces ad-hoc text labels or emoji in the bottom tab bar. |
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| `csv-parse` | ^5.6.0 | Parse CSV/TSV transaction files on the server | Mature library (2840+ npm dependents), zero external dependencies, sync API returns parsed objects immediately, configurable delimiter for both comma and tab formats. Active maintenance (last published March 2026). |
 
-### No New Dev Dependencies
+**One new package. That is all.**
 
-Tailwind v4 handles all responsive utilities natively. No additional PostCSS plugins or build tools are needed.
+### No New Client Dependencies
+
+File reading uses the built-in browser `File.text()` API. No file upload library needed.
+
+### No New Validation Dependencies
+
+Zod 4 (already installed at `^4.3.6`) handles all validation for parsed rows and tRPC input schemas.
 
 ---
 
-## CSS-Only Additions (no packages)
+## CSV Parsing: `csv-parse` Sync API
 
-These capabilities are handled directly in `app.css` or component Tailwind classes — no packages required.
+**Import path:** `csv-parse/sync` -- synchronous, non-streaming parsing.
 
-### 1. Safe Area Insets (iOS notch / home indicator)
+**Why sync over streaming:** Transaction CSV files are small (even 10,000 rows is < 5MB). The entire file content arrives as a string in a tRPC mutation. Streaming adds complexity with zero benefit here. The sync API takes a string and returns an array of objects -- perfect for the request/response model.
 
-Tailwind v4 does not provide `pb-safe` utilities out of the box, but the `@layer utilities` pattern in `app.css` is idiomatic for v4 and requires no plugin:
+**Configuration for this project:**
 
-```css
-/* packages/client/src/styles/app.css */
-@import "tailwindcss";
+```typescript
+import { parse } from 'csv-parse/sync';
 
-@layer utilities {
-  .pb-safe {
-    padding-bottom: env(safe-area-inset-bottom, 0px);
-  }
-  .pt-safe {
-    padding-top: env(safe-area-inset-top, 0px);
-  }
+const records = parse(fileContent, {
+  delimiter: detectedDelimiter, // '\t' or ','
+  columns: true,                // first row becomes object keys
+  skip_empty_lines: true,       // ignore blank lines
+  trim: true,                   // strip whitespace from values
+  relax_column_count: true,     // tolerate rows with fewer columns (e.g., missing Tags)
+  bom: true,                    // strip UTF-8 BOM if present (Excel exports often include this)
+});
+// records: Array<Record<string, string>>
+```
+
+**Delimiter auto-detection:** `csv-parse` does not auto-detect delimiters, but detection is trivial:
+
+```typescript
+function detectDelimiter(content: string): string {
+  const firstLine = content.split('\n')[0];
+  if (firstLine.includes('\t')) return '\t';
+  return ',';
 }
 ```
 
-Requires `viewport-fit=cover` in `index.html`:
-```html
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+This makes the importer work for both comma-CSV and tab-TSV files without user configuration.
+
+---
+
+## Monarch Money Export Format
+
+**Columns (8 total):** Date, Merchant, Category, Account, Original Statement, Notes, Amount, Tags
+
+**Format:** Standard comma-delimited CSV (not tab-delimited). The PROJECT.md reference to "tab-delimited Monarch format" appears inaccurate based on Monarch's documentation and community tooling -- their exports use standard CSV. However, some users may re-export as TSV from spreadsheet software, so supporting both delimiters is prudent.
+
+**Amount format:** Positive for income, negative for expenses (as decimal dollars, e.g., `-45.67`). Must be converted to integer cents for storage.
+
+**Confidence:** MEDIUM -- based on third-party documentation (blog.tracefunc.com) consistent with Monarch help articles. Direct verification against an actual export file is recommended before implementation.
+
+---
+
+## File Upload: Client-Side FileReader
+
+**Approach:** Read file as text on the client, send the string content via tRPC mutation.
+
+**Why NOT server-side multipart upload:**
+- Transaction CSVs are small (< 10MB)
+- tRPC mutations accept string payloads natively as JSON fields
+- Avoids adding `multer`, `busboy`, or `formidable` Express middleware
+- Preserves the existing tRPC-only API pattern (no raw Express routes)
+- Simpler error handling -- Zod validates the string content on the server
+
+**Client-side pattern:**
+
+```typescript
+// Modern File API -- cleaner than FileReader event callbacks
+const file = inputRef.current.files[0];
+const text = await file.text(); // Returns Promise<string>
+// Send as string field in tRPC mutation
+const preview = await trpc.import.preview.mutate({ content: text });
 ```
 
-### 2. Bottom Tab Bar
+`File.text()` is supported in Chrome 76+, Firefox 69+, Safari 14+ -- all modern browsers.
 
-Pure Tailwind + React Router `NavLink`. Fixed to bottom of viewport, `z-50`, uses `pb-safe` for iPhone home indicator clearance. No library needed.
+**File input element:**
 
-### 3. Responsive Breakpoints
+```tsx
+<input
+  type="file"
+  accept=".csv,.tsv,.txt"
+  onChange={handleFileSelect}
+  className="..." // Style with Tailwind to match app
+/>
+```
 
-Tailwind v4 ships `sm:` (640px), `md:` (768px), `lg:` (1024px) breakpoints. The mobile-first pattern `class="..." md:hidden` and `class="hidden md:flex"` is sufficient for toggling between card layout (mobile) and table layout (desktop).
+No `react-dropzone` or drag-and-drop library needed. A styled file input is sufficient for a single-user app.
 
-### 4. 44px Touch Targets
+---
 
-Use `min-h-[44px] min-w-[44px]` Tailwind utilities on interactive elements. No library needed — this is a CSS size constraint.
+## What NOT to Add
 
-### 5. Full-Screen Sheet Modals on Mobile
+| Library | Why NOT | Use Instead |
+|---------|---------|-------------|
+| `multer` / `busboy` / `formidable` | Multipart upload is unnecessary. Adds Express middleware that breaks the clean tRPC-only pattern. | Client `file.text()` + tRPC string mutation |
+| `papaparse` | Browser-focused library with auto-detection features we don't need. `csv-parse` is the standard Node.js choice with better TypeScript support and a dedicated sync API. | `csv-parse` |
+| `fast-csv` | Viable but `csv-parse` has more downloads, better docs, and cleaner sync API. | `csv-parse` |
+| `joi` / `yup` / `ajv` | Zod 4 already handles all validation. Adding another library is redundant. | Zod 4 (already installed) |
+| `react-dropzone` | Over-engineered for a simple file input. Single-user app doesn't need drag-and-drop polish. | Native `<input type="file">` styled with Tailwind |
+| Manual `String.split('\t')` | Fails on edge cases: quoted fields containing delimiters, escaped quotes, fields with embedded newlines. `csv-parse` handles all of these correctly. | `csv-parse` |
+| `xlsx` / `exceljs` | Excel format support is out of scope. Users can export CSV from any spreadsheet app. | CSV/TSV only |
 
-`vaul` provides the sheet/drawer primitive. On desktop, the existing centered modal pattern (`fixed inset-0 ... max-w-4xl`) is retained. On mobile, modals are replaced with vaul drawers that slide up from the bottom. A shared wrapper component handles the responsive switch.
+---
+
+## Integration Points
+
+### Existing Code to Reuse
+
+| Component | Location | Integration |
+|-----------|----------|-------------|
+| `generateDedupHash()` | `packages/server/src/sync/simplefin-client.ts` | Same hash formula (account+date+amount+payee) for imported transactions. **Extract to a shared utility** so both sync and import can use it without importing SimpleFIN code. |
+| Transaction INSERT | `packages/server/src/sync/sync-service.ts` | Same `INSERT OR IGNORE INTO transactions` with `dedup_hash` UNIQUE constraint. Imported transactions that match synced ones are silently skipped. |
+| Rules engine | `packages/server/src/rules/rules-service.ts` | Run rules on imported transactions post-import, same as the sync flow does. |
+| Account list | Existing tRPC procedure | Needed for the mapping UI -- user maps CSV "Account" strings to existing Minerva account IDs. |
+| Category list | `packages/server/src/categories/category-service.ts` | Needed for the mapping UI -- user maps CSV "Category" strings to existing Minerva category IDs. |
+
+### New Code to Create
+
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| CSV parse service | `packages/server/src/import/` | Parse content, detect delimiter, validate rows, extract unique accounts/categories for mapping |
+| Import tRPC router | `packages/server/src/import/` | `preview` mutation (parse + return mappings) and `execute` mutation (import with confirmed mappings) |
+| Import page | `packages/client/src/pages/ImportPage.tsx` | File upload, preview table, account/category mapping dropdowns, confirm/import button |
+
+---
+
+## Alternatives Considered
+
+| Category | Recommended | Alternative | Why Not Alternative |
+|----------|-------------|-------------|---------------------|
+| CSV parsing | `csv-parse` (sync) | Manual `split()` | Breaks on quoted fields, escaped characters, embedded newlines |
+| CSV parsing | `csv-parse` (sync) | `papaparse` | Browser-focused, heavier, auto-detection unnecessary |
+| CSV parsing | `csv-parse` (sync) | `csv-parse` (streaming) | Overkill for <10MB files in a request/response model |
+| File upload | Client `file.text()` | Server multipart upload | Adds middleware, breaks tRPC pattern, unnecessary for small files |
+| File upload | `file.text()` | `FileReader` API | `file.text()` is the modern Promise-based replacement |
+| Validation | Zod 4 | Additional library | Already installed and used everywhere |
 
 ---
 
 ## Installation
 
 ```bash
-# New packages (client workspace only)
-npm install vaul lucide-react --workspace=packages/client
+# Single new dependency (server only)
+npm install csv-parse --workspace=packages/server
 ```
-
----
-
-## Alternatives Considered
-
-| Recommended | Alternative | When to Use Alternative |
-|-------------|-------------|-------------------------|
-| `vaul` | `@radix-ui/react-dialog` directly | If you're building a component library with full Radix primitives throughout. vaul wraps Radix Dialog and adds mobile-specific UX (drag handle, snap points, iOS scroll locking) that the raw dialog primitive doesn't provide. |
-| `vaul` | Custom CSS `transform: translateY` sheet | Viable for simple cases but requires hand-rolling gesture detection, spring animations, and backdrop interaction — vaul handles all of this correctly across iOS Safari, Chrome Android, and desktop. |
-| `lucide-react` | `heroicons` | When already using Tailwind UI / Headless UI components. Either works; lucide has a larger icon set and more active release cadence. |
-| `lucide-react` | Inline SVGs | Viable for small fixed icon sets. lucide eliminates manual SVG maintenance and provides consistent stroke widths. |
-| CSS `@layer utilities` for safe area | `tailwindcss-safe-area` npm plugin | The plugin is unnecessary overhead for a two-utility addition. The v4 CSS-first approach makes `@layer utilities` the idiomatic choice. |
-| Tailwind responsive prefixes | CSS media queries | Tailwind breakpoints compile to the same output. The `sm:hidden`/`md:flex` pattern keeps mobile styles co-located with component markup rather than split into separate `.css` files. |
-
----
-
-## What NOT to Add
-
-| Avoid | Why | Use Instead |
-|-------|-----|-------------|
-| `shadcn/ui` | Adds Radix UI primitives, `class-variance-authority`, `clsx`, and `tailwind-merge` dependencies. Conflicts with Tailwind v4 CSS-first config (shadcn targets v3 config format as of early 2026). Replacing existing custom components with shadcn components is out of scope. | Existing custom Tailwind components + vaul for sheets only |
-| `@radix-ui/react-*` primitives (beyond vaul's bundled usage) | No existing Radix primitives in the codebase. Adding them introduces a new patterns layer without solving a concrete problem. | Custom Tailwind components for all non-sheet UI |
-| `framer-motion` | 80KB+ bundle addition for animations that can be handled with Tailwind's `transition` utilities and CSS `transform`. vaul already provides sheet animation. | `transition-transform duration-300` Tailwind utilities |
-| `react-spring` | Same animation concern as framer-motion, with a more complex API. | Tailwind transition utilities |
-| `tailwindcss-safe-area` plugin | Two-line `@layer utilities` addition achieves the same result without a package dependency. | CSS `env(safe-area-inset-*)` in `app.css` |
-| `@ionic/react` or `Capacitor` | Native app shell frameworks — the goal is a mobile-responsive web page, not a hybrid app. | Tailwind responsive breakpoints + vaul |
-| `react-native-web` | Native component abstraction. The app is a standard React web app and must remain one. | — |
-
----
-
-## Integration Notes
-
-### vaul with Existing Modal Pattern
-
-Existing modals (e.g., `ManualLinkModal`, `SplitModal`) use `fixed inset-0 bg-black/50 flex items-center justify-center z-50`. The migration path is:
-
-1. Create a `Sheet` wrapper component that renders a vaul `Drawer.Root` on mobile and the existing centered modal container on desktop.
-2. Detect mobile with a `useMediaQuery` hook checking `max-width: 767px`, or use a CSS-only approach where the same vaul `Drawer` is always rendered but styled differently at `md:` breakpoint.
-3. The pure CSS approach is simpler: render `Drawer.Content` with `class="fixed bottom-0 inset-x-0 rounded-t-xl md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:max-w-2xl md:rounded-xl"`. This makes vaul handle drag-to-dismiss on mobile while appearing centered on desktop.
-
-### lucide-react with Tailwind v4
-
-No configuration required. Import icons directly:
-```tsx
-import { Home, CreditCard, PieChart, MessageSquare, MoreHorizontal } from 'lucide-react';
-```
-Size with `className="w-5 h-5"` or `size={20}` prop. Both work with Tailwind v4.
-
-### Layout.tsx Changes
-
-The bottom tab bar lives inside `Layout.tsx` alongside the existing top nav. Pattern:
-
-```tsx
-{/* Existing top nav — hide on mobile */}
-<nav className="hidden md:block bg-gray-900 ...">...</nav>
-
-{/* Bottom tab bar — show on mobile only */}
-<nav className="fixed bottom-0 inset-x-0 md:hidden bg-white border-t pb-safe z-50">
-  {/* 5 primary tabs + More */}
-</nav>
-
-{/* Main content — add bottom padding on mobile to clear the tab bar */}
-<main className="mx-auto max-w-6xl px-4 py-6 pb-[calc(4rem+env(safe-area-inset-bottom,0px))] md:pb-6">
-  <Outlet />
-</main>
-```
-
----
-
-## Version Compatibility
-
-| Package A | Compatible With | Notes |
-|-----------|-----------------|-------|
-| `vaul@1.1.2` | React 19 | Explicit in peerDependencies: `"react": "^16.8 \|\| ^17.0 \|\| ^18.0 \|\| ^19.0.0"` |
-| `vaul@1.1.2` | Tailwind CSS v4 | vaul is unstyled — all styling is consumer-provided via className. Zero conflict with v4 CSS-first config. |
-| `lucide-react@0.577.0` | React 19 | No peerDependency conflicts. Tree-shaking via named imports works with Vite 6. |
-| `lucide-react@0.577.0` | Tailwind CSS v4 | SVG icon sizing via `w-5 h-5` Tailwind classes works identically in v4. |
-| CSS `env(safe-area-inset-*)` | Safari iOS 11.1+ | All modern iOS Safari versions support `env()`. The fallback `0px` handles desktop. |
 
 ---
 
 ## Sources
 
-- [vaul npm](https://www.npmjs.com/package/vaul) — v1.1.2 current, React 19 peerDependency confirmed
-- [vaul GitHub releases](https://github.com/emilkowalski/vaul/releases/tag/v1.1.2) — React 19 added to peerDeps in v1.1.1
-- [lucide-react npm](https://www.npmjs.com/package/lucide-react) — v0.577.0 current as of March 2026
-- [Tailwind CSS v4 docs — Compatibility](https://tailwindcss.com/docs/compatibility) — CSS-first config, no tailwind.config.js
-- [Tailwind CSS safe-area discussion](https://github.com/tailwindlabs/tailwindcss/discussions/12536) — confirmed `@layer utilities` approach for v4
-- Direct inspection: `packages/client/src/styles/app.css`, `packages/client/package.json`, `packages/client/src/components/Layout.tsx`, `packages/client/src/components/ManualLinkModal.tsx`
+- [csv-parse official documentation](https://csv.js.org/parse/) -- sync API, options reference
+- [csv-parse sync API docs](https://csv.js.org/parse/api/sync/) -- import path, usage examples
+- [csv-parse on npm](https://www.npmjs.com/package/csv-parse) -- version, download stats, dependents
+- [Monarch Money export format](https://blog.tracefunc.com/notes/monarch-money.html) -- column headers: Date, Merchant, Category, Account, Original Statement, Notes, Amount, Tags
+- [Monarch Money import help](https://help.monarch.com/hc/en-us/articles/4409682789908-Importing-Transaction-History-Manually) -- 8-column format, keyword-based mapping
+- [Monarch Money download history](https://help.monarch.com/hc/en-us/articles/15526600975764-Downloading-Transaction-or-Account-History) -- CSV export documentation
 
 ---
-*Stack research for: Minerva Money v2.2 Mobile-Friendly UI*
-*Researched: 2026-03-23*
+*Stack research for: Minerva Money v2.3 CSV Import*
+*Researched: 2026-03-24*

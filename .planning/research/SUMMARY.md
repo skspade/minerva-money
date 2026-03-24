@@ -1,164 +1,175 @@
 # Project Research Summary
 
-**Project:** Minerva Money v2.2 Mobile-Friendly UI
-**Domain:** Mobile-responsive web UI retrofit — React + Tailwind v4 on iPhone (375–430px)
-**Researched:** 2026-03-23
+**Project:** Minerva Money v2.3 CSV Import (Monarch Money Migration)
+**Domain:** Personal finance CSV import with deduplication and account/category mapping
+**Researched:** 2026-03-24
 **Confidence:** HIGH
 
 ## Executive Summary
 
-Minerva Money v2.2 is a targeted mobile retrofit of an existing desktop-first React SPA. The app has 9 complete pages, all built with custom Tailwind components and no component library. The goal is to make every page fully functional on iPhone (375–430px) without introducing heavy new dependencies or rewriting existing components. Research confirms this is a well-understood domain with clear patterns: bottom tab navigation, card layouts for tabular data, safe area insets, and bottom sheets for modals are the established solutions used by Monarch Money, YNAB, and every major mobile budgeting app.
+Minerva Money v2.3 adds a one-time migration path from Monarch Money by importing its CSV export format. This is a well-bounded problem: Monarch exports a fixed 8-column CSV (Date, Merchant, Category, Account, Original Statement, Notes, Amount, Tags), and the existing Minerva architecture already provides every building block needed — dedup hash generation, transaction insertion, rules engine invocation, and transfer detection. The entire feature requires exactly one new server dependency (`csv-parse`) and three new files (`import-service.ts`, `import-router.ts`, `ImportPage.tsx`).
 
-The recommended approach is CSS-first responsiveness using Tailwind v4's `max-md:` variant to add mobile overrides without touching existing desktop classes. Only two new runtime dependencies are needed: `vaul` for bottom sheets (drag-to-dismiss, iOS rubber-banding) and `lucide-react` for tab bar icons. All other mobile behavior — safe area insets, responsive breakpoints, 44px touch targets, scroll lock — is handled with utility classes and a few lines of CSS in `app.css`.
+The recommended approach is a stateless 3-step wizard: upload the file on the client, send CSV text via a tRPC mutation, present a preview with account and category mapping dropdowns, then execute the import with confirmed mappings. No server-side session state, no multipart upload, no new client dependencies. The server re-parses the CSV on execute — a sub-millisecond cost that eliminates state management complexity. Post-insert, the existing rules engine runs first, then CSV-mapped categories apply as fallback for unmatched transactions.
 
-The primary risk is scope: this milestone spans 9 pages, multiple modals, and a complete navigation overhaul. The dependency chain is clear (Layout foundation must come before page conversions), and the most common pitfalls (content hidden behind the fixed tab bar, `100vh` iOS breaks, modal/keyboard interaction) are all preventable with known patterns. Testing on an actual iOS device or Xcode simulator with the software keyboard open is required for ChatPage and all form modals before shipping.
+The primary risk is cross-source deduplication: Monarch normalizes merchant names ("Amazon") while SimpleFIN provides raw bank strings ("AMAZON.COM AMZN.COM/BILL WA"). The `dedup_hash` mechanism will NOT deduplicate these as the same transaction. The mitigation is UX guidance, not code — the import UI must warn users to import only historical transactions predating their SimpleFIN connection start date. Secondary risks (floating-point cents truncation, UTF-8 BOM corruption, delimiter ambiguity) all have clear, tested solutions documented in research.
 
 ## Key Findings
 
 ### Recommended Stack
 
-The core stack (React 19, React Router v7, Vite 6, Tailwind CSS v4, tRPC, TanStack Query, Recharts, better-sqlite3) is unchanged. v2.2 adds exactly two new client packages. See [STACK.md](./STACK.md) for full detail.
+The core stack is unchanged. v2.3 adds exactly one new server dependency: `csv-parse@^5.6.0` for RFC-4180-compliant CSV parsing with a synchronous API suited to the tRPC request/response model. The client reads files using the native `File.text()` browser API, eliminating any need for upload libraries. All validation remains with the existing Zod 4 installation.
 
 **Core technologies:**
-- `vaul@^1.1.2`: Bottom sheet primitive — handles iOS rubber-banding, drag-to-dismiss, snap points. Explicitly supports React 19 in peerDependencies. Unstyled — integrates directly with existing Tailwind classes.
-- `lucide-react@^0.577.0`: Tab bar icons — tree-shakeable SVG icons, zero runtime deps, idiomatic Tailwind pairing.
-- CSS `env(safe-area-inset-*)` via `@layer utilities` in `app.css`: iPhone notch and home indicator clearance — two custom utilities, no plugin package needed. Requires `viewport-fit=cover` in `index.html`.
+- `csv-parse` (^5.6.0): Server-side CSV/TSV parsing — mature library (2840+ npm dependents), zero external dependencies, sync API handles sub-10MB files cleanly; `bom: true` option strips UTF-8 BOM automatically
+- `File.text()` (browser built-in): Client-side file reading — modern Promise-based API replacing FileReader callbacks, no library needed, all current browsers supported
+- Zod 4 (already installed at ^4.3.6): tRPC input validation — no additional schema library justified
+
+Full details: `.planning/research/STACK.md`
 
 ### Expected Features
 
-See [FEATURES.md](./FEATURES.md) for full prioritization matrix and competitor analysis.
+The import wizard follows established finance app patterns (YNAB, Beyond Budget) with a 3-step flow: upload, map, confirm.
 
-**Must have (table stakes — v2.2 launch):**
-- Bottom tab bar (5 primary tabs: Dashboard, Transactions, Budget, Accounts, More) — mobile apps universally use bottom nav; top nav is thumb-hostile on iPhone
-- Transaction card layout replacing the `<table>` — tables require horizontal scroll below 600px; unacceptable at 375px
-- Budget mobile card view replacing `grid-cols-5` — numbers in 5-column grid are unreadable on small screens
-- 44px minimum tap targets on all interactive elements — Apple HIG requirement; current `py-1` buttons are ~24px
-- Safe area insets on bottom tab bar and Chat input bar — without these, content overlaps iPhone home indicator
-- Viewport meta updated to `viewport-fit=cover` — required for `env(safe-area-inset-*)` to have effect
-- Full-screen sheet behavior for SplitModal and ManualTransactionForm on mobile
-- "More" overflow bottom sheet linking to: Categories, Rules, Transfers, Reports, Chat
-- All desktop behavior preserved behind `md:` breakpoint — zero regression on desktop
+**Must have (table stakes):**
+- File upload with drag-and-drop zone — universal UX signal for file inputs in data import flows
+- Data preview with first 10 rows and total row count — users need visual confirmation before committing
+- Account mapping UI with auto-suggest — Monarch account names never match Minerva account names exactly
+- Category mapping UI with auto-suggest — same mismatch problem; default unmapped to "Uncategorized"
+- Duplicate detection with count shown before import — user will likely have overlap with SimpleFIN-synced data
+- Error reporting per row with option to import valid rows — missing date/amount must not silently drop rows
+- Import confirmation screen (X new, Y skipped, Z errors) — final review before write operation
+- Post-import rules engine run — existing rules apply to imported transactions identically to synced ones
+- Post-import transfer detection — catches transfers spanning historical imports and live sync data
 
-**Should have (v2.2+):**
-- Full-screen sheets for RuleForm and ManualLinkModal — lower-frequency actions, not blocking launch
-- Filter controls collapse toggle on Transactions and Reports — quality-of-life improvement
-- Sync status badge on Dashboard tab icon
+**Should have (differentiators):**
+- Auto-match accounts by name similarity (case-insensitive substring match)
+- Auto-match categories by exact name
+- Dry-run dedup stats before confirming (show exact new vs. duplicate vs. error counts)
+- Import history log (timestamp, filename, row counts) for auditability
+- Clear messaging on re-import: "500 skipped — already exist" vs. silent zero count
 
-**Defer (v3+):**
-- PWA / installable — service worker caching is incompatible with live financial data on a LAN server
-- Swipe-to-reveal on transaction cards — high effort, low return vs tap-to-expand
-- Virtualized transaction list — only needed above ~1000 visible rows
+**Defer to v2+:**
+- Generic CSV column mapping UI — only Monarch format needed; add format selector if a second source appears
+- Tag import — Minerva has no tag system; ignore Tags column silently
+- Balance history import — Minerva calculates balances from transactions; historical snapshots will be incomplete
+- Undo/rollback — provide clear preview instead; manual deletion via date-range filter is sufficient
+- Inline account creation during import — user creates accounts beforehand via Accounts page
+
+Full details: `.planning/research/FEATURES.md`
 
 ### Architecture Approach
 
-All mobile changes live in the client package. The server, tRPC API, and data layer are entirely unchanged. The architecture uses CSS-only responsive visibility (no JS breakpoint hooks) to avoid layout shift: both desktop nav and mobile tab bar render in the DOM, with CSS controlling which is visible. New components (`Sheet`, `BottomTabBar`, `TransactionCard`, `BudgetCategoryCard`) are presentation-only and consume existing tRPC data without adding new queries. See [ARCHITECTURE.md](./ARCHITECTURE.md) for the component responsibility table and build order.
+The import feature is a thin vertical slice through the existing architecture: a new `import/` module under `packages/server/src/` (matching the `sync/`, `categories/`, `rules/` pattern), a new tRPC router added to `appRouter` as the 14th nested router, and a new `ImportPage.tsx` in the client. The import service reuses `generateDedupHash()`, `categorizeNewTransactions()`, `detectTransferCandidates()`, and `toCents()` directly — no modifications to those modules. Only 5 existing files need changes, totaling approximately 15 lines.
 
 **Major components:**
-1. `Layout.tsx` (modify) — add `BottomTabBar`, adjust `<main>` padding-bottom, convert `min-h-screen` to `min-h-dvh`
-2. `BottomTabBar.tsx` (new) — 5 primary tabs + "More" trigger, active state via `useLocation`, 44px targets
-3. `Sheet.tsx` (new) — ~20-line generic bottom sheet primitive: backdrop, slide-up panel, body scroll lock, close-on-navigate
-4. `TransactionCard.tsx` (new) — mobile card for a single transaction; primary/secondary info hierarchy
-5. `BudgetCategoryCard.tsx` (new) — stacked card with progress bar, available amount, and tap-to-edit allocation
+1. `import-service.ts` — Parse CSV, validate rows, transform to transaction rows, bulk insert with `INSERT OR IGNORE`, invoke rules + transfer detection, apply CSV category fallback for unmatched transactions
+2. `import-router.ts` — tRPC router with two mutations: `preview` (parse + extract unique accounts/categories + dedup stats) and `execute` (re-parse + insert with confirmed mappings)
+3. `ImportPage.tsx` — 3-step wizard UI: file upload -> preview + mapping -> confirm + result summary
+
+**Category handling priority (key architectural decision — order matters):**
+1. Rules engine runs first via `categorizeNewTransactions()` — identical to sync behavior; sets `category_id` AND `rule_id`
+2. CSV-mapped categories apply as fallback via `applyCsvCategoryFallback()` — only for transactions still uncategorized after rules; sets `category_id`, leaves `rule_id` NULL
+3. Users can override later via TransactionsPage
+
+**Express body limit must be raised** from the default 100KB to 10MB to accommodate CSV file content sent as a JSON string in the tRPC mutation body.
+
+Full details: `.planning/research/ARCHITECTURE.md`
 
 ### Critical Pitfalls
 
-See [PITFALLS.md](./PITFALLS.md) for all 10 pitfalls with warning signs and recovery strategies.
+1. **Floating-point cents truncation** — `19.99 * 100` produces `1998.999...` in JavaScript; `Math.floor()` silently drops a cent. Use `toCents()` from `@minerva/shared` exclusively — it uses `Math.round()`. Unit test with known values: `19.99 -> 1999`, `-18.32 -> -1832`.
 
-1. **Content hidden behind fixed tab bar** — Add `pb-20` (or `pb-safe`) to `Layout.tsx` `<main>` as the very first step, before converting any page. Use `dvh` not `vh` for the main content area so Safari's dynamic toolbar is accounted for.
-2. **iOS `100vh` / `h-screen` viewport breaks** — Replace all `min-h-screen`, `h-screen`, and `100vh` with `min-h-dvh` / `h-dvh` in `Layout.tsx` and `ChatPage.tsx` before shipping. Test ChatPage specifically with iOS simulator keyboard open.
-3. **Desktop navbar and bottom tab bar both visible on mobile** — Apply `max-md:hidden` to the entire top `<nav>` in the same commit that adds `BottomTabBar`. Do not patch nav links individually.
-4. **Modals clipped or unusable with iOS keyboard open** — Convert modals to `fixed inset-x-0 bottom-0 max-h-[90svh] overflow-y-auto` bottom sheet pattern. Always add body scroll lock (`overflow-hidden` on `document.body`). Use `svh` not `vh` for max-height.
-5. **"More" sheet stays open after navigation** — Use `useLocation()` in a `useEffect` to reset sheet state on every route change. Build this into the initial `Sheet` implementation, not as a later fix.
+2. **Dedup hash mismatch across sources** — Monarch stores "Amazon"; SimpleFIN stores "AMAZON.COM AMZN.COM/BILL WA". The `INSERT OR IGNORE` + `dedup_hash` mechanism will NOT catch these as the same transaction. Mitigation is UX only: prominently warn users to import data predating their SimpleFIN connection. Do not attempt payee normalization — false positives are worse than duplicates.
+
+3. **Amount sign convention** — Monarch (negative = expense) should match SimpleFIN and Minerva conventions, but this MUST be verified against a real Monarch export before first implementation. A sign flip after a full import requires complete re-import.
+
+4. **UTF-8 BOM corrupts first column header** — Files re-saved from Excel prepend `\uFEFF`. The parser sees `"\uFEFFDate"` instead of `"Date"` and fails with a confusing "missing required column" error. Use `csv-parse` with `bom: true` option — it strips BOM automatically.
+
+5. **Delimiter ambiguity** — PROJECT.md says "tab-delimited" but Monarch documentation indicates standard comma CSV. A hard-coded tab delimiter treats the entire first row as one column. Auto-detect with: `headerLine.includes('\t') ? '\t' : ','` before calling `csv-parse`.
+
+Full details: `.planning/research/PITFALLS.md`
 
 ## Implications for Roadmap
 
-Based on the dependency chain in ARCHITECTURE.md and pitfall prevention order from PITFALLS.md:
+Based on research, the build order follows natural dependency flow: service logic must exist before the API, and the API must exist before the UI. Two phases is the right split.
 
-### Phase 1: Layout Foundation
-**Rationale:** All subsequent page work depends on a correct navigation shell and safe viewport behavior. Fixing `dvh`, safe area insets, and tab bar padding here prevents regression across every page in later phases.
-**Delivers:** Working bottom tab bar on mobile, desktop nav preserved, no content clipped, no iOS viewport breaks.
-**Addresses:** Bottom tab bar, "More" sheet, safe area insets, viewport meta tag (`viewport-fit=cover`).
-**Avoids:** Pitfall 1 (content behind tab bar), Pitfall 5 (iOS `vh` breaks), Pitfall 8 (More sheet close-on-navigate), Pitfall 9 (dual navbars).
+### Phase 1: Import Service and API
 
-### Phase 2: Transaction Card Layout
-**Rationale:** Transactions is the most-used page. Converting the table to cards is the highest-value mobile change after navigation. The existing filter and sort logic is unchanged — only the render layer differs.
-**Delivers:** Mobile card list for transactions; desktop table unchanged; filter controls accessible on mobile.
-**Uses:** `max-md:hidden` / `md:hidden` pattern; `TransactionCard` component.
-**Implements:** Pattern 3 from ARCHITECTURE.md — conditional layout with Tailwind responsive prefixes.
-**Avoids:** Pitfall 3 (horizontal scroll trap from `overflow-x-auto`), Pitfall 2 (touch targets below 44px).
+**Rationale:** Service logic and tRPC API can be built and fully tested independently of UI. The import service encapsulates all the tricky logic — parsing, dedup, cents conversion, date normalization, category fallback. Getting this right with unit tests before building UI prevents UI-driven debugging of backend issues. All integration points are directly observable in the existing codebase.
 
-### Phase 3: Budget Mobile View
-**Rationale:** Second highest-value page. The `grid-cols-5` row layout is completely unreadable on mobile without this phase.
-**Delivers:** Stacked category cards with progress bars; inline allocation editing via bottom sheet on mobile; desktop grid unchanged.
-**Uses:** `BudgetCategoryCard` component, existing `AllocationCell` logic, existing `groupCategories()` and `availableColor()` helpers.
-**Avoids:** Pitfall 10 (budget inline table editing unusable on mobile — replaced with bottom sheet pattern).
+**Delivers:** Working `import-service.ts` with full test coverage, `import-router.ts` wired into `appRouter`, Express body limit raised to 10MB. The API is callable before any UI exists.
 
-### Phase 4: Modal / Sheet Conversions
-**Rationale:** Modal usability on mobile depends on the `Sheet` primitive from Phase 1. Once Phase 1 is complete, individual modals can be converted in parallel; they are independent of each other.
-**Delivers:** SplitModal, ManualTransactionForm, ManualLinkModal all usable on mobile with keyboard open.
-**Uses:** `vaul` or the custom `Sheet` primitive; `svh` viewport units; body scroll lock pattern.
-**Avoids:** Pitfall 4 (modals not full-screen or broken when iOS keyboard opens).
+**Addresses features:** CSV parsing, dedup detection, rules engine integration, transfer detection, amount conversion, error reporting per row, post-import categorization
 
-### Phase 5: Remaining Pages (Minor Fixes)
-**Rationale:** ChatPage height fix, RulesPage card list, and minor touch target/spacing work on Accounts, Reports, Transfers, and Categories. These are lower-risk and lower-value individually and can be sequenced in any order.
-**Delivers:** All 9 pages fully functional at 375px.
-**Addresses:** ChatPage height fix for bottom tab bar, Recharts mobile props, drag handle tap targets, date control stacking on Reports.
-**Avoids:** Pitfall 6 (Recharts unreadable at 375px — overlapping labels, tiny bars), Pitfall 5 (chat input hidden by keyboard).
+**Avoids pitfalls:** Floating-point truncation (use `toCents()`), BOM handling (`bom: true`), delimiter auto-detection, dedup hash alignment with `generateDedupHash()`, sign convention validation via unit tests
+
+**Research flag:** No additional research needed — all patterns directly derived from existing codebase inspection (HIGH confidence). Validate Monarch CSV format (delimiter, date format, sign convention) with a real export file at the start of this phase before finalizing the parser.
+
+### Phase 2: Import UI (3-Step Wizard)
+
+**Rationale:** Depends on Phase 1 API. The UI calls `preview` and `execute` mutations. Account and category mapping logic is entirely presentational once the API returns unique names and auto-suggestions. Standard React form/wizard pattern with Tailwind styling matching existing app conventions.
+
+**Delivers:** `ImportPage.tsx` with 3-step wizard (upload -> preview + mapping -> confirm + result), navigation entries in Layout and MoreSheet, route in App.tsx.
+
+**Addresses features:** File upload with drag-and-drop, data preview table, account/category mapping dropdowns with auto-suggest, duplicate count warning, date range overlap warning (key UX mitigation for cross-source dedup), success summary with categorization breakdown
+
+**Avoids pitfalls:** Cross-source dedup (overlap date range warning in UI), category orphans (show uncategorized count before confirm), account misidentification (show institution/account type in mapping dropdowns), re-import confusion (explicit "already exists" skip reason in result)
+
+**Research flag:** Standard React wizard pattern — no additional research needed. Mobile layout follows existing mobile card patterns from v2.2.
 
 ### Phase Ordering Rationale
 
-- Phase 1 is the dependency anchor: `Sheet.tsx` and `Layout.tsx` changes must exist before modals or the "More" sheet can be built on any page.
-- Phases 2 and 3 are the highest user-value changes and should be verified on device before moving to modals — they surface any remaining padding or spacing issues in the Layout foundation.
-- Phase 4 modals are independent of each other and can be done in any order once Phase 1 is complete.
-- Phase 5 is low-risk cleanup that can be done in any order and shipped incrementally.
+- Service-first order mirrors the existing codebase pattern — every feature has a service layer tested independently before UI
+- The stateless preview/execute design cleanly decouples phases: Phase 1 can be verified via tRPC mutation before Phase 2 starts
+- Critical pitfall mitigations are concentrated in Phase 1 where unit tests can catch them; Phase 2 is primarily UX work with lower risk
+- The `applyCsvCategoryFallback()` function must be implemented in Phase 1 alongside `executeImport()` — the category priority logic is a service concern, not a UI concern
 
 ### Research Flags
 
-Phases requiring care during implementation:
-- **Phase 1 (ChatPage height):** `h-[calc(100vh-56px)]` in ChatPage must be converted to inherit height from Layout's padding context rather than an explicit viewport calculation. Requires testing with the iOS simulator keyboard open.
-- **Phase 4 (modal + keyboard):** The iOS keyboard + `fixed` positioning interaction needs device testing. Simulator testing is acceptable but real device verification is recommended for SplitModal and ManualTransactionForm before the phase closes.
-- **Phase 5 (Recharts):** Chart mobile props require a `useIsMobile()` hook reading `window.matchMedia` — the only JS breakpoint hook in the project. CSS-only approach is insufficient for passing conditional props to Recharts components.
+Phases with well-documented patterns (skip additional research):
+- **Phase 1 (Import Service):** All integration points directly observed in codebase. `generateDedupHash`, `categorizeNewTransactions`, `detectTransferCandidates`, `toCents`, and `INSERT OR IGNORE` pattern are confirmed from source. HIGH confidence.
+- **Phase 2 (Import UI):** Standard React wizard, existing Tailwind/React patterns throughout codebase. No novel technology.
 
-Phases with standard, mechanical patterns:
-- **Phase 2 (transaction cards):** Well-documented card layout pattern; existing filter logic and tRPC query are completely unchanged.
-- **Phase 3 (budget cards):** `AllocationCell` and `groupCategories()` need no changes; only the wrapping layout differs.
-- **Phase 1 (safe area insets):** Pure CSS — two utilities in `app.css` plus one meta tag attribute change.
+One validation item that requires real data (not resolvable from research alone):
+- **Actual Monarch CSV format:** Research is MEDIUM confidence on delimiter (comma vs. tab), date format (`YYYY-MM-DD` vs. `MM/DD/YYYY`), and sign convention. Auto-detection handles delimiter at runtime. Regex-based date parser handles both formats. But sign convention MUST be verified with a real export file before the Phase 1 parser is finalized.
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | Direct codebase inspection + official package docs; vaul React 19 peerDep confirmed in v1.1.1+ release notes |
-| Features | HIGH | Pattern validated against Monarch Money and YNAB mobile apps; aligned with Apple HIG |
-| Architecture | HIGH | All component files read and analyzed; component responsibilities confirmed against existing code |
-| Pitfalls | HIGH | Each pitfall traced to a specific existing code pattern in the repo; iOS Safari behavior documented in official WebKit blog and MDN |
+| Stack | HIGH | One new dependency (`csv-parse`), everything else is existing validated technology. Direct codebase inspection. |
+| Features | HIGH | Established wizard patterns from YNAB, Beyond Budget, Smashing Magazine. Monarch column format confirmed across multiple community sources. |
+| Architecture | HIGH | All integration points directly observed in existing codebase. Component boundaries mirror existing modules exactly. Only 5 files modified, ~15 lines. |
+| Pitfalls | HIGH | Floating-point and BOM issues are well-documented JavaScript behavior. Dedup hash formula confirmed from codebase source. Only MEDIUM items are Monarch-specific format details requiring real data. |
 
 **Overall confidence:** HIGH
 
 ### Gaps to Address
 
-- **iOS keyboard + modal interaction:** Behavior when the iOS keyboard opens inside a full-screen bottom sheet cannot be fully verified without running on device. Mark SplitModal and ManualTransactionForm for device testing before Phase 4 closes.
-- **Recharts mobile tick density:** The exact `interval` and font-size values for readable mobile charts need tuning against real data. Research identifies the approach (`useIsMobile()` + conditional props); exact values require live testing at 375px.
-- **Tab bar height constant:** 56px is assumed based on typical HIG bottom bar height. Actual rendered height may vary with content. Define as a CSS custom property (`--tab-bar-height`) in `app.css` via Tailwind v4's `@theme` directive during Phase 1 so it is a single-source change if adjustment is needed.
+- **Monarch CSV delimiter:** PROJECT.md says tab-delimited; Monarch documentation says comma CSV. Auto-detection resolves this at runtime, but the parser should be validated against a real Monarch export file before Phase 1 closes.
+- **Monarch date format:** May be `YYYY-MM-DD` or `MM/DD/YYYY`. Implement regex-based parser supporting both, then verify against real data. Output must always be `YYYY-MM-DD` to match the `transactions.date` column.
+- **Amount sign convention:** Assumed to match (Monarch negative = expense = Minerva DB convention), but must be verified with a real export. A unit test with a known transaction is sufficient before writing the parser.
+- **Express body size limit location:** The current Express setup file was not inspected to confirm the exact location of `express.json()`. This is a 1-line change but must be located before Phase 1 is complete.
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- Direct codebase inspection: all `packages/client/src/` files — component structure, Tailwind classes, existing modal patterns, ChatPage height calculation
-- [vaul npm / GitHub](https://github.com/emilkowalski/vaul) — React 19 peerDep confirmed in v1.1.1+ release notes
-- [Tailwind CSS v4 docs](https://tailwindcss.com/docs) — CSS-first config, `@layer utilities`, `max-md:` variants, `min-h-dvh`
-- [Apple Human Interface Guidelines: Layout](https://developer.apple.com/design/human-interface-guidelines/layout) — 44pt minimum tap targets, safe area insets, bottom tab bar patterns
-- [WebKit blog: new viewport units (dvh/svh/lvh)](https://webkit.org/blog/12445/new-webkit-features-in-safari-15-4/) — iOS Safari toolbar behavior and correct viewport unit usage
+- Existing codebase (direct inspection): `sync-service.ts`, `simplefin-client.ts`, `rules-service.ts`, `transfer-service.ts`, `001-initial-schema.sql`, `trpc-router.ts`, `Layout.tsx`, `MoreSheet.tsx`, `App.tsx`
+- `packages/shared/src/types.ts` — `toCents()` confirmed uses `Math.round(dollars * 100)`
+- [csv-parse official documentation](https://csv.js.org/parse/) — sync API, options reference, `bom` option
+- [csv-parse npm](https://www.npmjs.com/package/csv-parse) — version 5.6.0, 2840+ dependents, zero external deps
 
 ### Secondary (MEDIUM confidence)
-- Monarch Money and YNAB mobile app analysis — navigation patterns, card layouts, bottom sheet usage for forms
-- [MDN: env(safe-area-inset-bottom)](https://developer.mozilla.org/en-US/docs/Web/CSS/env) — iOS notch and home indicator inset handling
-- [React Router v7 useLocation](https://reactrouter.com/en/main/hooks/use-location) — close-on-navigate pattern for sheets and drawers
-- [Recharts ResponsiveContainer docs](https://recharts.org/en-US/api/ResponsiveContainer) — confirms container-only responsiveness; chart content props must be set explicitly
+- [Monarch Money CSV format blog](https://blog.tracefunc.com/notes/monarch-money.html) — confirmed 8 columns: Date, Merchant, Category, Account, Original Statement, Notes, Amount, Tags
+- [Monarch Money export help](https://help.monarch.com/hc/en-us/articles/15526600975764-Downloading-Transaction-or-Account-History) — CSV export documentation
+- [Smashing Magazine: Designing Data Importers](https://www.smashingmagazine.com/2020/12/designing-attractive-usable-data-importer-app/) — wizard UX patterns, error handling
+- [YNAB File-Based Import Guide](https://support.ynab.com/en_us/file-based-import-a-guide-Bkj4Sszyo) — duplicate detection and account selection patterns in finance apps
 
-### Tertiary (LOW confidence)
-- Community post-mortems on React + Tailwind mobile retrofits — pitfall patterns around iOS Safari and fixed positioning; anecdotal but consistent across multiple sources
+### Tertiary (LOW confidence — needs validation with real Monarch export)
+- Monarch CSV delimiter (comma vs. tab) — conflicting between PROJECT.md and official docs; auto-detection mitigates at runtime
+- Monarch date format — assumed `YYYY-MM-DD` based on community docs; needs verification
+- Amount sign convention — assumed negative = expense based on Monarch documentation; needs verification before first import
 
 ---
-*Research completed: 2026-03-23*
+*Research completed: 2026-03-24*
 *Ready for roadmap: yes*

@@ -1,365 +1,255 @@
-# Pitfalls Research
+# Domain Pitfalls
 
-**Domain:** Adding mobile-friendly UI to existing desktop-first React + Tailwind personal budgeting app
-**Researched:** 2026-03-23
-**Confidence:** HIGH (patterns verified against existing codebase structure; well-documented in community post-mortems for React + Tailwind mobile retrofits)
+**Domain:** CSV import for personal finance app (adding to existing app with bank sync)
+**Researched:** 2026-03-24
+**Confidence:** HIGH (patterns verified against existing codebase schema, dedup hash implementation, and shared `toCents()` function; amount parsing issues are well-documented JavaScript behavior)
 
 ## Critical Pitfalls
 
-### Pitfall 1: Bottom Tab Bar Overlapping Page Content
+Mistakes that cause data corruption, incorrect balances, or require database cleanup.
 
-**What goes wrong:**
-A `fixed bottom-0` tab bar is added and navigation works, but the bottom 56–64px of every page is permanently obscured. The last transaction card, the last budget row, the submit button on forms — all unreachable. On iPhone Safari, the situation is worse: the browser's own bottom bar appears and disappears as the user scrolls, meaning the overlap amount varies dynamically. The fix of adding `pb-16` to `<main>` is missed or added inconsistently.
+### Pitfall 1: Floating-Point Cents Conversion Truncation
 
-**Why it happens:**
-`fixed` elements are removed from document flow entirely. Developers test scrolling on the dashboard (which has enough content to reveal the problem) but miss short pages (Accounts, Settings) where the fixed bar overlaps the only content on screen. The Safari dynamic toolbar compounds this because the visual viewport height changes on scroll — `100vh` does not account for the toolbar.
+**What goes wrong:** Dollar amounts like `$19.99` parsed as floats and multiplied by 100 produce `1998.9999999999998` instead of `1999`. Using `Math.floor()`, `Math.trunc()`, or `parseInt()` without rounding silently drops a cent. Over thousands of imported transactions, cumulative error can reach dollars.
 
-**How to avoid:**
-- Add `pb-20` (or `pb-safe` with CSS env vars) to the `<main>` element, not individual pages. This is a layout-level concern and belongs in `Layout.tsx`.
-- Use `min-h-[calc(100dvh-56px)]` for the main content area rather than `min-h-screen` — `dvh` (dynamic viewport height) updates as Safari's toolbar appears/disappears.
-- On mobile, hide the top navbar entirely and let the bottom tab bar be the sole navigation; do not stack both.
-- Wrap tab bar in a `<div className="pb-safe">` using `padding-bottom: env(safe-area-inset-bottom)` via a Tailwind v4 custom utility to handle iPhone home indicator.
+**Why it happens:** IEEE 754 floating-point cannot exactly represent most decimal fractions. `19.99 * 100 === 1998.9999999999998` in JavaScript. This is not a rare edge case -- it affects roughly 1 in 3 two-decimal dollar amounts.
 
-**Warning signs:**
-- Submit buttons on forms are clipped at the bottom of the screen.
-- The last row of a table or last card in a list disappears under the tab bar.
-- iOS Safari bottom bar flickers and content jumps as the user scrolls.
+**Consequences:** Budget math is off by pennies. Spending reports don't reconcile with source data. The error is silent and only discovered when totals don't match Monarch's exported totals.
 
-**Phase to address:**
-Bottom tab bar phase — add `pb-safe` padding to `Layout.tsx` `<main>` as the first step, before converting any individual pages.
+**Prevention:** The shared `toCents()` function in `packages/shared/src/types.ts` already uses `Math.round()` -- use it for all CSV amount conversion. The import service must call `toCents(parseFloat(row.amount))`, never `parseInt(parseFloat(row.amount) * 100)` or any truncation variant. The design doc correctly says "converted to cents on import" -- enforce this by importing `toCents` from `@minerva/shared`.
+
+**Detection:** Unit test with known problematic values: `19.99` (expect `1999`), `0.01` (expect `1`), `0.10` (expect `10`), `1.005` (expect `101`), `-18.32` (expect `-1832`). Verify `toCents(parseFloat("19.99")) === 1999`.
+
+**Phase warning:** Must be correct in the very first implementation. Fixing after import means re-importing all data or running manual SQL corrections.
 
 ---
 
-### Pitfall 2: Touch Targets Below 44px Minimum
+### Pitfall 2: Dedup Hash Mismatch Between CSV and Synced Transactions
 
-**What goes wrong:**
-Existing desktop buttons use `px-3 py-1` (approximately 28–32px tall). Category picker dropdowns, inline "Edit" links, the "Split" action column in the transactions table — all render as small text links that are tappable by mouse but miss-tappable on touch. Users repeatedly tap the wrong row or can't trigger the action at all.
+**What goes wrong:** The existing dedup hash is `sha256(accountId|date|amount|payee)` (from `generateDedupHash` in `simplefin-client.ts`). For the same real-world transaction, the payee string from Monarch will almost certainly differ from SimpleFIN's payee string. Example: Monarch shows `"Amazon"` but SimpleFIN provides `"AMAZON.COM AMZN.COM/BILL WA"`. The hashes won't match and the import creates a duplicate of an already-synced transaction.
 
-**Why it happens:**
-`py-1` (`4px` top + `4px` bottom + 16px line height = ~24px) passes visual inspection on desktop. The 44px minimum (Apple HIG) is not enforced by any linter, browser warning, or Tailwind class. The problem is invisible until tested on an actual phone.
+**Why it happens:** SimpleFIN passes raw bank strings directly. Monarch normalizes, truncates, and sometimes re-maps merchant names for display. The same transaction from the same bank will have different payee strings in each system.
 
-**How to avoid:**
-- Audit all interactive elements and apply `min-h-[44px]` as a rule for anything the user taps on mobile.
-- Tab bar icons must be `h-11` (44px) or larger, including the hit area, not just the icon glyph.
-- The existing `CategoryPicker` and inline edit buttons in the transactions table will need `py-3` minimum on mobile — use `max-md:py-3` to avoid breaking desktop.
-- For text-only links used as actions (e.g., "Edit", "Confirm", "Cancel"), wrap in a `<button className="min-h-[44px] px-3 flex items-center">` rather than a bare anchor.
+**Consequences:** Duplicate transactions inflate spending reports and budget consumption. For any date range where Monarch and SimpleFIN overlap, every transaction is doubled. This is catastrophic for budget accuracy.
 
-**Warning signs:**
-- Any `py-1` or `py-0.5` class on a button or interactive element.
-- Icon-only buttons without explicit `h-11 w-11` constraints.
-- Dropdown triggers and select elements without `h-11` on mobile.
+**Prevention:**
+1. **Date range guidance is essential.** The import UI should ask users when they started SimpleFIN sync and warn if the CSV contains transactions after that date. For the Monarch migration use case, users should import only historical transactions that predate their SimpleFIN connection.
+2. The design's `INSERT OR IGNORE` on `dedup_hash` handles exact hash matches (e.g., re-importing the same CSV twice). It will NOT catch cross-source duplicates with different payee strings.
+3. Show separate counts in import results: "N imported, M skipped (already exist), K skipped (unmapped category)" so users can verify dedup is working.
+4. Do NOT try to normalize payee strings for fuzzy matching -- this introduces false positives and complexity. Accept the limitation and mitigate via date range guidance.
 
-**Phase to address:**
-Touch target audit phase — scan all interactive components for `py-1` / `py-0.5` and apply `max-md:py-3` overrides before shipping any mobile page.
+**Detection:** After import, query for transactions with the same account + date + absolute amount but different IDs. If these exist in overlapping date ranges, warn the user.
+
+**Phase warning:** The import UI should surface the overlap risk prominently. The import service itself cannot solve this -- it's a UX/guidance problem.
 
 ---
 
-### Pitfall 3: Table-to-Card Conversion Creates Horizontal Scroll Traps
+### Pitfall 3: Amount Sign Convention Mismatch
 
-**What goes wrong:**
-The existing transactions table has columns: Date, Payee, Amount, Account, Category, Actions. The naive mobile approach is `overflow-x-auto` on the table wrapper. This works but creates a horizontal scroll zone inside the page — users swipe right intending to go back (iOS swipe gesture) and instead scroll the table. Alternatively, the table is hidden on mobile (`hidden md:block`) and a card layout added, but the card layout replicates all the same data in a format too dense for a 375px screen.
+**What goes wrong:** Monarch exports expenses as negative numbers (`-18.32`) and income as positive (`2500.00`). If the import blindly passes these through, the sign must match what Minerva already stores. A sign flip means every expense appears as income and vice versa.
 
-**Why it happens:**
-`overflow-x-auto` is a one-line fix that appears to solve the problem. The horizontal-scroll-trap UX issue only surfaces on actual iPhone hardware when the swipe-back gesture conflicts with table scroll. Dense card layouts happen when developers copy desktop data fields 1:1 into the card without thinking about mobile information hierarchy.
+**Why it happens:** There is no universal standard. Some bank exports use positive for debits (you spent money). Monarch uses the opposite convention (negative = expense = balance decreased). The existing Minerva codebase stores expenses as negative cents (from SimpleFIN, which also uses negative for debits).
 
-**How to avoid:**
-- Never use `overflow-x-auto` on tables that are full-width page content on mobile. Use a card layout instead.
-- Mobile transaction cards should show: Date (small, secondary), Payee (primary bold), Amount (right-aligned, prominent), Category (badge/chip). Account, Memo, and Split details are secondary — show behind a tap/expand or omit.
-- Implement as `hidden md:table` / `block md:hidden` pattern on the table vs. card container — not on every row.
-- Card tap to expand pattern: tapping a transaction card expands it inline to show account, memo, category picker, and actions. This avoids the need to fit all data in the collapsed card view.
+**Consequences:** All imported transactions have inverted amounts. Budget spending shows as zero. Income appears doubled. Requires complete re-import.
 
-**Warning signs:**
-- Any `overflow-x-auto` wrapping a full-width table on mobile.
-- Transaction cards that try to show 5+ data fields in a single collapsed view.
-- Desktop-width columns (`w-32`, `w-48`) not suppressed at `max-md:` breakpoint.
+**Prevention:** The conventions match: Monarch negative = expense, SimpleFIN negative = expense, Minerva DB negative = expense. But this MUST be verified with actual Monarch export data before coding. Add a unit test that imports a Monarch row with amount `-18.32` and verifies it becomes `-1832` cents in the database. If the convention doesn't match, a single `* -1` fixes it, but it must be discovered before the first real import.
 
-**Phase to address:**
-Transaction mobile layout phase — build the card layout component alongside the existing table, gated behind `block md:hidden`.
+**Detection:** Import 5-10 known transactions and verify amounts match expected signs. Check that expenses are negative and income is positive.
+
+**Phase warning:** Validate with real Monarch export data in the first implementation phase. A sign flip after a full import is catastrophic.
 
 ---
 
-### Pitfall 4: Modals Are Not Full-Screen on Mobile (Or Are, But Unusable)
+### Pitfall 4: UTF-8 BOM Corrupts First Column Header
 
-**What goes wrong:**
-**Scenario A:** The existing `SplitModal` and `ManualTransactionForm` modals use `max-w-md mx-auto` centering. On a 375px screen this creates a 375px-wide modal with 0 side margins — it fits but feels cramped and the bottom actions (Save/Cancel) are below the fold with the keyboard open.
+**What goes wrong:** The design sends CSV content as a string via tRPC. The client reads the file with `FileReader.readAsText()` (defaults to UTF-8). If the Monarch CSV contains a UTF-8 BOM (`\uFEFF`), that invisible character becomes the first character of the first column header. The parser sees `"\uFEFFDate"` instead of `"Date"` and fails to find the required `Date` column.
 
-**Scenario B:** The modal is converted to `fixed inset-0` full screen, but the keyboard opens and shifts the viewport — the input being typed into scrolls off-screen because iOS reflows the visual viewport (not the layout viewport) when the software keyboard appears. The modal content above the keyboard is not scrollable because the developer forgot `overflow-y-auto` on the modal body.
+**Why it happens:** Excel and some Windows tools prepend a UTF-8 BOM (byte order mark) to CSV files. Users who open and re-save a Monarch CSV in Excel will have a BOM. `FileReader.readAsText()` does not strip it.
 
-**Why it happens:**
-Modal libraries handle viewport/keyboard interactions automatically. Custom modals (as in this codebase) require manual handling of: keyboard-triggered viewport resize, scroll locking the body behind the modal, and ensuring the modal itself is scrollable when content exceeds the available height.
+**Consequences:** The parser fails with a confusing "missing required column: Date" error. The user sees all their data in the file but the app refuses to parse it. The error message gives no hint about the actual cause (an invisible character).
 
-**How to avoid:**
-- Full-screen sheet pattern: `fixed inset-x-0 bottom-0 max-h-[90vh] rounded-t-2xl overflow-y-auto` — a bottom sheet that slides up, scrollable within, with the header pinned at top.
-- Body scroll lock when modal opens: add `overflow-hidden` to `document.body` on mount, remove on unmount. Without this, background content scrolls while modal is open.
-- Never rely on `vh` units for modal height inside iOS Safari — use `dvh` or `svh` instead: `max-h-[90svh]`.
-- Put the primary action (Save) at the bottom of the sheet and ensure `pb-safe` accounts for the home indicator.
-- For forms: wrap form content in a scrollable `div` with a fixed footer containing Save/Cancel buttons, rather than making the entire sheet scroll.
+**Prevention:** Strip BOM as the very first step of parsing:
+```typescript
+csvContent = csvContent.replace(/^\uFEFF/, '');
+```
+This is a single line of code but easy to forget. If using PapaParse, it handles BOM automatically.
 
-**Warning signs:**
-- Any modal using `transform: translate(-50%, -50%)` absolute centering — these break entirely when the keyboard opens.
-- Modal body without `overflow-y-auto` — content gets clipped on small screens.
-- Missing `overflow-hidden` on `<body>` when modal is open — background scrolls through.
-- Form inputs near the bottom of a modal that scroll off-screen when keyboard opens.
+**Detection:** Test with a CSV string that starts with `\uFEFF`. Verify headers are still parsed correctly.
 
-**Phase to address:**
-Modal/sheet phase — convert modals to bottom sheet pattern before the form usability work, since forms inside modals depend on correct sheet behavior.
+**Phase warning:** Address in the CSV parser implementation. One-line fix, but produces an invisible and confusing bug if missed.
 
----
+## Moderate Pitfalls
 
-### Pitfall 5: iOS Safari Viewport Height Causes Full-Height Layout Breaks
+### Pitfall 5: Date Format Ambiguity
 
-**What goes wrong:**
-The existing `min-h-screen` on the root `div` in `Layout.tsx` uses `100vh`. On iOS Safari, `100vh` equals the viewport height including the browser chrome — but the browser chrome is visible, so the actual usable area is less. The page overflows or the bottom tab bar sits behind the browser bottom bar. The converse: when Safari hides its toolbar on scroll, `100vh` is now too short and content jumps.
+**What goes wrong:** The design assumes Monarch dates are "already ISO-ish" (`2026-03-24`). But Monarch may export dates as `03/24/2026`, `3/24/2026`, or even locale-dependent formats depending on user settings or export version. The string `01/02/2026` is January 2nd in US format but February 1st internationally. Using `new Date("01/02/2026")` gives locale-dependent results.
 
-Additionally, the Chat page (`ChatPage.tsx`) likely uses `h-screen` or similar to create a full-height chat interface. This will break badly on mobile: the keyboard opens, shrinks the visual viewport, and the chat input is hidden behind the keyboard with no way to reach it.
+**Prevention:** Do NOT use `new Date()` or `Date.parse()` for CSV date parsing -- both are locale-dependent and unreliable. Use a deterministic regex-based parser:
 
-**Why it happens:**
-`100vh` is reliable on desktop browsers. The iOS Safari toolbar behavior (`dvh` vs `svh` vs `lvh`) was only standardized in 2023 — many developers still use `vh` from muscle memory. The Chat page full-height pattern is specifically problematic because it requires a fixed-height container with an internal scroll area.
+```typescript
+function parseDate(s: string): string {
+  const trimmed = s.trim();
+  // ISO: 2026-03-24
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+  // US: 03/24/2026 or 3/24/2026
+  const match = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (match) {
+    const [, m, d, y] = match;
+    return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+  }
+  throw new Error(`Unrecognized date format: "${trimmed}"`);
+}
+```
 
-**How to avoid:**
-- Replace `min-h-screen` in `Layout.tsx` with `min-h-dvh` (Tailwind v4 has `min-h-dvh` natively).
-- For the Chat page: use `h-dvh` for the outer container, `flex flex-col`, scrollable message area with `flex-1 overflow-y-auto`, and a fixed input area that stays above the keyboard.
-- Test the Chat page specifically with the iOS simulator keyboard open — it's the single highest-risk page for this pitfall.
-- Do not use `100svh` (smallest viewport height) for full-page layouts — it's too short when Safari's toolbar is hidden.
+Since this is a Monarch-specific parser, test with an actual Monarch export to determine the exact format, then support that format plus ISO as a fallback. The output must always be `YYYY-MM-DD` to match the existing `transactions.date` column format.
 
-**Warning signs:**
-- `h-screen` or `min-h-screen` on any full-height layout component.
-- Chat input disappearing when keyboard opens.
-- Page content jumping when scrolling causes Safari toolbar to hide/show.
-
-**Phase to address:**
-Layout foundation phase (before any page conversions) — replace `min-h-screen` with `min-h-dvh` in `Layout.tsx`, and convert the Chat page full-height layout to use `h-dvh` + flex column.
+**Detection:** Unit tests with `"2026-03-24"`, `"03/24/2026"`, `"3/24/2026"`, and invalid inputs. Validate output is always `YYYY-MM-DD`.
 
 ---
 
-### Pitfall 6: Recharts Charts Are Not Responsive at 375px
+### Pitfall 6: Tab-Delimited vs Comma-Delimited Confusion
 
-**What goes wrong:**
-The `ReportsPage.tsx` uses `<ResponsiveContainer>` with fixed percentage widths. `ResponsiveContainer` works — it resizes — but the content inside does not adapt: the `PieChart` legend shows all category names in a single-column list that extends far below the chart on mobile, the `BarChart` has 12 months of bars that become 25px wide each and unreadable, and the `XAxis` tick labels overlap because they were designed for a 900px-wide axis.
+**What goes wrong:** The PROJECT.md says "tab-delimited Monarch format" but Monarch's official documentation and community resources indicate the export is standard comma-delimited CSV. If the parser is hardcoded for tab separation, it treats each entire row as a single column and either crashes or produces garbage data.
 
-**Why it happens:**
-`ResponsiveContainer` makes the chart container responsive but does not make chart content responsive. Font sizes, tick density, legend position, and bar minimum widths are all static. Developers see the chart resize correctly and assume the job is done.
+**Prevention:** Auto-detect the delimiter by inspecting the header line:
+```typescript
+const delimiter = headerLine.includes('\t') ? '\t' : ',';
+```
+Or better: use PapaParse which auto-detects delimiters. The actual Monarch export format should be verified with a real exported file before finalizing the parser. Support both delimiters to be safe.
 
-**How to avoid:**
-- Pass different `width` calculations or use Tailwind breakpoints in chart rendering — but since JSX doesn't take Tailwind classes directly on Recharts elements, use a `useBreakpoint()` hook that reads `window.matchMedia('(max-width: 768px)')` and pass props conditionally.
-- On mobile: reduce tick count on `XAxis` with `interval="preserveStartEnd"` or a computed interval, reduce font size to 10–11px, move legend to `bottom` position instead of `right`.
-- For the pie chart on mobile: hide the legend or switch to a simpler format; use `cx="50%"` `cy="40%"` to leave room for the legend below.
-- For the bar chart with many months: consider showing only the last 6 months on mobile, or allow horizontal scroll within a constrained chart container (unlike table scroll, a chart-specific scroll zone is less likely to conflict with swipe gestures).
-- Set a `minHeight` on `ResponsiveContainer` to prevent the chart from collapsing to 0px during initial render.
-
-**Warning signs:**
-- X-axis labels overlapping at mobile width.
-- Legend extending vertically below the visible area.
-- Chart container collapsing to 0 height on first render.
-- Bar chart bars thinner than 8px.
-
-**Phase to address:**
-Reports mobile phase — add a `useIsMobile()` hook in a shared lib and use it to pass conditional props to Recharts components.
+**Detection:** Test with both tab-delimited and comma-delimited input. Verify both produce the correct number of columns.
 
 ---
 
-### Pitfall 7: Tailwind v4 `max-md:` Variant Syntax Confusion
+### Pitfall 7: Naive String Split Instead of Proper CSV Parsing
 
-**What goes wrong:**
-Tailwind v4 changes how `max-` breakpoint variants work. In v3, `max-md:hidden` meant "hidden when viewport is less than md". In v4, the same syntax still works but the underlying `@media` query is generated differently, and mixing `md:` (mobile-first) with `max-md:` (desktop-first) in the same component can produce unexpected interactions when the v4 CSS cascade order differs from v3. Developers sometimes add `max-md:` variants expecting v3 behavior and get subtle layout bugs.
+**What goes wrong:** A manual `line.split(',')` parser breaks on:
+- Merchant names with commas: `"Walmart Supercenter, #1234"` splits into two columns
+- Notes with embedded newlines: a quoted field spanning two lines is treated as two rows
+- Fields with escaped quotes: `"He said ""hello"""` is mangled
 
-More concretely: if the existing code uses `md:flex` (show as flex at md+) and the new code adds `max-md:flex-col` (stack vertically below md), the two classes interact correctly only if the cascade order is predictable — which it is in Tailwind v4 with `@layer utilities`, but developers who don't know this assume conflicts.
+This shifts all subsequent columns in the row, causing amount to be parsed from the wrong field (or failing entirely).
 
-**Why it happens:**
-The project is Tailwind v4 (`^4.2.2`). Tailwind v4 uses a CSS-first approach (`@import "tailwindcss"`) and generates utilities via cascade layers. Community tutorials and most StackOverflow answers still reference v3 `tailwind.config.js` patterns. v4's `max-md:` variants are documented but the differences from v3 are subtle and easy to overlook.
+**Prevention:** Use PapaParse (or equivalent RFC 4180-compliant parser). Do not write a manual split-based parser. PapaParse handles: quoted fields, embedded commas, embedded newlines, escaped double-quotes, BOM stripping, delimiter detection, and header row mapping. It's 14KB gzipped and battle-tested.
 
-**How to avoid:**
-- Establish a project convention early: prefer mobile-first (use `md:` to add desktop styles) over desktop-first (use `max-md:` to override desktop). The existing codebase is desktop-first, but new mobile work should prefer `max-md:` overrides rather than rewriting existing classes.
-- Test each breakpoint class in isolation before combining — don't trust that visual inspection at md+ width confirms max-md behavior.
-- Use the browser DevTools "responsive design mode" with precise widths (375px, 390px, 430px for iPhone) rather than just dragging the window.
-- Prefer `max-md:` for structural layout changes (hide/show, stack vs. row) and keep existing desktop classes untouched where possible to minimize regression risk.
+```bash
+npm install papaparse
+npm install -D @types/papaparse
+```
 
-**Warning signs:**
-- A component that looks right at md+ breaks at 375px but looks correct at 500px (suggests a `sm:` breakpoint conflict).
-- Classes added with `max-md:` having no visible effect (check if the same property is set by a later utility in the cascade without a breakpoint qualifier).
+PapaParse can run on the server side (Node.js) for the tRPC endpoint.
 
-**Phase to address:**
-Layout foundation phase — establish the `max-md:` convention and verify it works with a simple test component before applying it to production pages.
+**Detection:** Test with merchant names containing commas, double quotes, and newlines. Verify all columns parse correctly.
 
 ---
 
-### Pitfall 8: "More" Overflow Sheet for Extra Nav Items Is Easy to Get Wrong
+### Pitfall 8: Empty and Whitespace-Only Field Handling
 
-**What goes wrong:**
-The bottom tab bar has 5 primary tabs and a "More" overflow. The overflow sheet (a bottom drawer or popover) is opened by tapping "More". Common failures:
-- The sheet opens but does not close when tapping a nav item inside it, because the click handler triggers navigation but the sheet state remains open.
-- The sheet is not closed when the back/swipe-back gesture is used to navigate away.
-- Body scroll is not locked while the sheet is open, so the background scrolls behind it.
-- The "More" sheet uses the same `fixed` positioning as the tab bar, creating a z-index stacking conflict.
+**What goes wrong:** CSV rows may have empty fields for optional columns (Notes, Tags, Original Statement). The parser produces empty strings `""`, but downstream code may:
+- Insert `"undefined"` or `"null"` as literal strings if checking `if (!value)` and then using a template literal
+- Insert empty strings where `NULL` is expected (the `payee` column in transactions is nullable `TEXT`)
+- Fail validation on rows where optional fields are missing entirely (trailing delimiter absent)
+- Treat whitespace-only strings (` ` or `\t`) as valid data
 
-**Why it happens:**
-The "More" overflow pattern is not native to React Router v7 or any component in this stack. It must be built from scratch. Developers implement the tap-to-open correctly but forget the close-on-navigate and close-on-browser-back cases.
+**Prevention:**
+- Trim all field values immediately after parsing
+- Map empty/whitespace-only strings to `null` for nullable database columns (`payee`, `memo`)
+- Validate only required fields (date, amount, account) for non-empty after trimming
+- Merchant/payee should never be `undefined` -- use `null` or the original statement as fallback
 
-**How to avoid:**
-- Use React Router's `useLocation()` in a `useEffect` to close the sheet whenever the route changes: the sheet closes automatically on navigation without needing explicit close calls in each link.
-- Add a transparent backdrop `div` behind the sheet and above the main content but below the tab bar — tapping the backdrop closes the sheet.
-- Lock body scroll while the sheet is open (same pattern as modals).
-- Give the sheet `z-[60]` and the backdrop `z-[50]` — one level above the tab bar's `z-[40]`.
-
-**Warning signs:**
-- Background content scrolling while the More sheet is open.
-- Navigating via a More sheet link leaves the sheet visible on the new page.
-- Tapping outside the More sheet does not close it.
-
-**Phase to address:**
-Bottom tab bar phase — build the More sheet with close-on-navigate behavior from the start, not as an afterthought.
+**Detection:** Test with rows where: Notes is empty, Tags is missing (no trailing comma), Merchant is whitespace-only, Original Statement contains only spaces.
 
 ---
 
-### Pitfall 9: Forgetting the Desktop Navbar When Adding Mobile Nav
+### Pitfall 9: Category Mapping "Skip" Creates Mass Uncategorized Transactions
 
-**What goes wrong:**
-The bottom tab bar is added and works on mobile. But the existing top navbar in `Layout.tsx` is still rendered on all screen sizes. On desktop it shows correctly. On mobile, both the top navbar and bottom tab bar render simultaneously — the top navbar is either squished (9 links in `flex-wrap` at 375px) or partially hidden behind overflow. The developer hides the nav links on mobile with `max-md:hidden` but forgets the containing `<nav>` element, leaving a dark bar taking 48px of vertical space with just the app title and sync controls.
+**What goes wrong:** The design allows "Skip" for unmapped categories. If Monarch uses different category names than Minerva (likely), a user who doesn't carefully map each one ends up with hundreds of uncategorized transactions. These flood the "Uncategorized" section of the budget page, making it noisy and the budget useless until manually categorized.
 
-**Why it happens:**
-The top navbar has multiple independent elements: the logo, the nav links, and the sync status/button. Hiding `max-md:hidden` on the links wrapper leaves the nav bar visible. A complete solution requires either hiding the entire `<nav>` on mobile or repurposing the top bar as a mobile header (title + sync button only, without nav links).
+**Prevention:**
+1. **Show the impact before confirming:** "47 transactions (23%) will be imported without a category" is much more alarming than a quiet "Skip" default.
+2. **Pre-match by name similarity:** Auto-suggest Minerva categories that fuzzy-match Monarch names (e.g., "Entertainment & Recreation" matches "Entertainment"). Case-insensitive exact match first, then substring match. Don't require the user to manually map 30+ categories when most are obvious matches.
+3. **Rules engine mitigates:** The design correctly runs `categorizeNewTransactions` post-import. Existing rules will catch transactions matching known merchants, even if the category mapping was skipped.
+4. After import, show: "N transactions categorized by rules, M remain uncategorized."
 
-**How to avoid:**
-- On mobile, transform the top navbar into a slimmer header: `<header>` with just the page title and sync icon, no nav links. The nav links move entirely to the bottom tab bar.
-- Apply `max-md:hidden` to the nav links `<div className="flex gap-4">` AND restructure the nav bar to show a mobile header instead: `max-md:py-2` (slimmer), hide sync status text (show icon only).
-- Do this in `Layout.tsx` in one pass — don't patch individual nav links one at a time.
-
-**Warning signs:**
-- Both a horizontal navbar and a bottom tab bar visible simultaneously on mobile.
-- The top nav area taking up 48px+ on mobile with only the app title visible.
-- Sync button and sync status overflowing on 375px width.
-
-**Phase to address:**
-Bottom tab bar phase — the first step should be conditionally hiding the top navbar links on mobile in the same commit that adds the bottom tab bar.
+**Detection:** Import a CSV with Monarch category names that don't exactly match Minerva categories. Verify the mapping UI surfaces this clearly and the post-import summary shows uncategorized count.
 
 ---
 
-### Pitfall 10: Budget Page Inline Editing Breaks on Mobile
+### Pitfall 10: Account Mapping Without Sufficient Context
 
-**What goes wrong:**
-The Budget page uses inline editing — clicking an allocation amount triggers an input field in the table cell. On mobile, tapping a cell to edit triggers the software keyboard, which shrinks the visual viewport and may scroll the cell off-screen. If the inline input is positioned with `absolute` (a common pattern for "edit in place"), it can be clipped by the table's `overflow-hidden` ancestor. The input's hit area is often smaller than 44px.
+**What goes wrong:** Monarch account names like `"CASHBACK DEBIT (...4271)"` don't obviously correspond to Minerva account names like `"Discover Checking"`. The user must mentally match accounts, and a wrong mapping puts transactions under the wrong account, skewing all account-level reports and net worth calculations.
 
-**Why it happens:**
-Inline editing in table cells is a desktop-native pattern (double-click to edit). On mobile it conflicts with tap-to-scroll, the keyboard viewport shift, and the smaller touch targets of dense table rows. The pattern works on desktop but requires fundamental restructuring for mobile.
+**Prevention:**
+- Show institution name and account type alongside both Monarch and Minerva account names in the mapping dropdown
+- If Monarch names include last-4 digits of account numbers, surface those prominently
+- Consider showing a sample transaction from each CSV account to help identification
+- There's no automated solution -- this is a UX problem. Make the mapping UI as informative as possible.
 
-**How to avoid:**
-- On mobile, don't use inline table editing. Instead: tapping a category row opens a bottom sheet with the category name, current allocation, and a prominent number input. The sheet has Save/Cancel at the bottom.
-- The bottom sheet approach sidesteps all inline editing issues because the input is in a predictable, full-width, keyboard-aware context.
-- For the desktop table, keep the existing inline edit pattern untouched — the mobile sheet is an addition, not a replacement.
+**Detection:** Post-import, the user should verify a few known transactions appear under the correct account.
 
-**Warning signs:**
-- `absolute`-positioned inputs inside table cells.
-- Input fields narrower than the full card width on mobile.
-- `td` elements with `overflow-hidden` containing edit controls.
+## Minor Pitfalls
 
-**Phase to address:**
-Budget mobile phase — the inline edit table pattern should be entirely replaced with a bottom sheet pattern on mobile, gated behind `max-md:`.
+### Pitfall 11: Transaction ID Generation Without Source Tracking
+
+**What goes wrong:** The design uses `crypto.randomUUID()` for imported transaction IDs. This works but provides no way to distinguish imported transactions from synced or manual ones. If a bug is later discovered in the import (e.g., sign was flipped), there's no easy way to find and delete/fix only the imported transactions.
+
+**Prevention:** Use a consistent UUID prefix or add an `import_source` column (or tag) to track provenance. A simpler approach: log the import batch with a timestamp and the set of created transaction IDs, so a rollback query can target them. Even just storing the import results (list of IDs) in the import log is sufficient.
+
+**Detection:** After a test import, verify you can identify which transactions came from the import vs. sync.
 
 ---
 
-## Technical Debt Patterns
+### Pitfall 12: Re-Import Produces Confusing "0 Imported" Result
 
-| Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
-|----------|-------------------|----------------|-----------------|
-| `overflow-x-auto` on tables instead of card layout | One line to "fix" table overflow | Horizontal scroll trap conflicts with iOS swipe-back gesture | Never for full-page tables — use card layout |
-| `hidden md:block` on desktop table + no mobile replacement | Easy to hide the problem | Page shows no transactions on mobile | Never — always build the mobile alternative in the same phase |
-| `100vh` / `h-screen` for full-height layouts | Works on desktop/Chrome | Broken on iOS Safari (toolbar overlap, keyboard shrink) | Never — use `dvh` or `svh` |
-| Skipping touch target audit until QA | Saves time during implementation | Widespread tappability failures across all pages | Never — do the audit before shipping each page |
-| Adding mobile nav without hiding desktop nav | Quick implementation | Both navbars visible simultaneously on mobile | Never — handle both in the same commit |
-| Using Recharts without mobile-specific prop customization | Chart renders without extra code | Unreadable at 375px (overlapping labels, tiny bars) | Never — add mobile props when adding chart pages |
-| Inline table editing on mobile | Reuses existing desktop logic | Keyboard covers the cell being edited; < 44px targets | Never — use bottom sheet pattern on mobile |
+**What goes wrong:** User imports the same CSV twice. The second attempt silently skips all rows due to dedup hash matches. The user sees "0 imported, 500 skipped" and thinks the import is broken.
 
-## Integration Gotchas
+**Prevention:** Make skip reasons explicit in the result: "500 transactions skipped (already exist in database)". Distinguish from "skipped due to unmapped category." The UI should explain that this means the data was already imported successfully.
 
-| Integration | Common Mistake | Correct Approach |
-|-------------|----------------|------------------|
-| Tailwind v4 + `max-md:` | Expecting v3 `tailwind.config.js` `screens` customization behavior | Use Tailwind v4 `@custom-variant` in the CSS file for custom breakpoints; standard `max-md:` works but cascade order must be verified |
-| Recharts + ResponsiveContainer | Assuming `ResponsiveContainer` makes chart content responsive | `ResponsiveContainer` only resizes the container; add explicit mobile props for tick count, font sizes, and legend position |
-| React Router v7 + bottom sheet | Sheet stays open after navigation | Use `useLocation()` in `useEffect` to close sheet on route change |
-| iOS Safari + `fixed` positioning | Fixed elements jump when toolbar hides/shows | Use `env(safe-area-inset-bottom)` for bottom padding; test with actual device or precise iOS simulator |
-| iOS keyboard + `vh` units | Keyboard shrinks visual viewport, `100vh` element no longer fits | Use `dvh` (dynamic viewport height) which updates when keyboard opens/closes |
-| `@dnd-kit` + touch screens | Drag handles that are too small to trigger drag without accidentally scrolling | Ensure drag handles meet 44px minimum; test on touch device — dnd-kit has `activationConstraint` for distance/delay to prevent accidental activation |
+**Detection:** Unit test: import the same CSV twice. Verify second import returns `{ imported: 0, skipped: 500, errors: [] }` with a clear "already exists" reason.
 
-## Performance Traps
+---
 
-| Trap | Symptoms | Prevention | When It Breaks |
-|------|----------|------------|----------------|
-| Rendering all transactions as cards (no virtualization) | Scroll jank on Transactions page with 500+ transactions | For card lists exceeding ~100 items, use `react-window` or pagination; the existing table has no virtualization either — cards make this worse because they are taller | At ~200+ transactions with complex card markup |
-| Recharts re-rendering on every scroll event | CPU usage spikes while scrolling past charts on the Reports page | Wrap chart sections in `React.memo`; ensure data props are stable references (don't recreate arrays inline) | On devices with limited GPU compositing (older iPhones) |
-| Full-screen sheet animation on low-end devices | Sheet open/close stutters | Use `transform: translateY` (GPU-accelerated) not `height` animation for sheet open/close; prefer `transition-transform` over `transition-all` | On iPhone SE (A13) or older — still in use |
+### Pitfall 13: Rules Engine Silently Overrides Mapped Categories
 
-## Security Mistakes
+**What goes wrong:** The design doc states: "Rules that match will override the CSV-mapped category." A user carefully maps Monarch's "Groceries" to Minerva's "Groceries" category, but an existing rule matching the merchant `"Trader Joe's"` re-categorizes those transactions to "Food & Dining." The user doesn't understand why some transactions have the wrong category after import.
 
-No new security concerns introduced by mobile UI work. Existing security posture (no auth, private home network, API keys server-side) is unchanged. The mobile UI is purely client-side presentation.
+**Prevention:** This is intentional behavior (documented in the design as "per user preference"). But the import results should surface it: "N transactions re-categorized by rules engine." This is informational, not an error. The user can adjust rules if the behavior is undesired.
 
-## UX Pitfalls
+**Detection:** Import transactions matching existing rules. Verify the rules engine ran and the import results report the re-categorization count.
 
-| Pitfall | User Impact | Better Approach |
-|---------|-------------|-----------------|
-| Bottom tab bar without active state indicator | User loses sense of current location | Use `useLocation()` or React Router `NavLink` isActive to apply distinct active styling (filled icon vs. outline, or indicator dot) |
-| Card tap target ambiguity | User taps a transaction card expecting expand behavior but accidentally triggers category picker | Distinguish tap zones: the body of the card expands/navigates, explicit action buttons (Category, Split) are clearly demarcated with icons and 44px targets |
-| No empty state on mobile card views | Filtered views show blank space with no explanation | Add explicit empty state messages ("No transactions in this period") — desktop tables show empty rows; card views show nothing |
-| Sheet forms without keyboard accessory | User can't dismiss keyboard from form without tapping outside | Consider a keyboard dismiss button in the header of form sheets; iOS does not always show a "Done" key for text inputs |
-| Budget progress bars too thin to read on mobile | User cannot see remaining budget at a glance | Progress bars should be `h-2` minimum on mobile, with percentage or remaining amount shown as text beside or below the bar |
-| Sync controls buried after navbar collapse | User can't find "Sync Now" on mobile | SyncButton must be accessible from the mobile header or from a prominent location on the Dashboard — not hidden in a desktop-only nav area |
+---
 
-## "Looks Done But Isn't" Checklist
+### Pitfall 14: Line Ending Inconsistency (CRLF vs LF)
 
-- [ ] **Bottom tab bar:** All page content is visible above the tab bar — test on a short-content page (Accounts) with a real device viewport
-- [ ] **Safe area inset:** Tab bar has `padding-bottom: env(safe-area-inset-bottom)` — verify on iPhone with home indicator (iPhone X and later)
-- [ ] **Desktop navbar hidden on mobile:** No nav links or double navigation bars visible at 375px
-- [ ] **Sync controls on mobile:** SyncButton and SyncStatus are accessible on mobile — not hidden inside a desktop-only nav element
-- [ ] **Touch targets:** Every tappable element is at least 44px tall — verify by inspecting computed height in DevTools at mobile width
-- [ ] **Modal body scroll:** Full-screen sheets have `overflow-y-auto` on the content area — verify by opening a form with many fields on a 375px viewport
-- [ ] **Body scroll lock:** Background content does not scroll when a modal or sheet is open
-- [ ] **Chat page keyboard:** Chat input remains visible and usable when iOS keyboard is open — test with iPhone simulator keyboard
-- [ ] **Viewport height:** No `h-screen` or `min-h-screen` or `100vh` remains on any full-height layout element — all converted to `dvh`
-- [ ] **Charts at 375px:** No overlapping axis labels, no legend overflow below chart container, no bars thinner than 8px
-- [ ] **More sheet close-on-navigate:** Tapping a link in the More sheet navigates AND closes the sheet
-- [ ] **Table hidden on mobile:** The transactions table has `hidden md:table` and the card list has `block md:hidden` — not both visible at 375px
+**What goes wrong:** Windows-generated CSVs use `\r\n` line endings. If the parser splits on `\n` only, each field in the last column retains a trailing `\r`. This corrupts the last column value (e.g., Tags becomes `"Travel\r"` instead of `"Travel"`). If the last column is used in a hash or comparison, the invisible `\r` causes mismatches.
 
-## Recovery Strategies
+**Prevention:** PapaParse handles this automatically. If writing a custom parser, normalize line endings first: `content.replace(/\r\n/g, '\n').replace(/\r/g, '\n')`. Or trim each field value after parsing.
 
-| Pitfall | Recovery Cost | Recovery Steps |
-|---------|---------------|----------------|
-| Content hidden behind tab bar | LOW | Add `pb-20` to `Layout.tsx` `<main>` — one-line fix, test all pages after |
-| iOS Safari toolbar overlap on full-height layout | MEDIUM | Replace `h-screen`/`vh` with `dvh` across Layout and ChatPage; verify in iOS simulator |
-| Horizontal scroll trap from `overflow-x-auto` table | MEDIUM | Build card layout for the affected page; hide table with `hidden md:table` |
-| Touch targets too small | MEDIUM | Audit all interactive elements; add `min-h-[44px]` via `max-md:min-h-[44px]` — time-consuming but mechanical |
-| Modal keyboard visibility on iOS | HIGH | Refactor to bottom sheet pattern with scrollable content area and fixed footer — requires component rewrite |
-| Chart unreadable at 375px | MEDIUM | Add `useIsMobile()` hook and conditional Recharts props — one pass per chart component |
-| More sheet not closing on navigate | LOW | Add `useEffect` on `useLocation()` to reset sheet state — single hook call |
-| Both navbars visible simultaneously | LOW | Add `max-md:hidden` to the nav links wrapper in `Layout.tsx`; restructure mobile header in the same commit |
+**Detection:** Test with a CSV using `\r\n` line endings. Verify the last column of each row has no trailing `\r`.
 
-## Pitfall-to-Phase Mapping
+## Phase-Specific Warnings
 
-| Pitfall | Prevention Phase | Verification |
-|---------|------------------|--------------|
-| Content hidden behind fixed tab bar | Bottom tab bar phase | Scroll to bottom of Accounts page on 375px — no content clipped |
-| Tab bar + iOS home indicator overlap | Bottom tab bar phase | Test on iPhone 14 simulator — tab bar above home indicator |
-| Desktop navbar + mobile tab bar both visible | Bottom tab bar phase | At 375px: no nav links visible at top, 5 tabs visible at bottom |
-| Sync controls inaccessible on mobile | Bottom tab bar phase | SyncButton reachable without desktop navbar |
-| Touch targets below 44px | Touch target audit phase (before any page ships) | DevTools computed height on all buttons ≥ 44px at 375px |
-| Table horizontal scroll trap | Transaction card layout phase | At 375px: no horizontal scrollbar on Transactions page |
-| Modal content clipped on keyboard open | Modal/sheet phase | Open SplitModal on 375px with keyboard open — Save button visible |
-| Body not scroll-locked behind modals | Modal/sheet phase | Background content does not scroll while sheet is open |
-| iOS `100vh` viewport break | Layout foundation phase | No layout jump when Safari toolbar hides/shows on scroll |
-| Chat input hidden by keyboard | Layout foundation phase | Chat input visible and usable with iOS keyboard open |
-| Recharts unreadable at 375px | Reports mobile phase | No overlapping labels; chart readable at 375px without zooming |
-| More sheet not closing on navigate | Bottom tab bar phase | Navigate via More sheet — sheet is closed on arrival at new page |
-| Budget inline editing unusable on mobile | Budget mobile phase | Tapping a budget allocation on 375px opens a bottom sheet — not an inline input |
+| Phase Topic | Likely Pitfall | Mitigation |
+|-------------|---------------|------------|
+| CSV parser implementation | BOM handling (#4), delimiter detection (#6), quoted fields (#7), line endings (#14) | Use PapaParse; strip BOM as first step; auto-detect delimiter |
+| Amount conversion | Floating-point truncation (#1), sign convention (#3) | Use `toCents()` from `@minerva/shared`; verify Monarch sign convention with real export data |
+| Date parsing | Format ambiguity (#5) | Regex-based parser, not `new Date()`; test with actual Monarch export file |
+| Dedup integration | Hash mismatch between CSV and synced data (#2) | Surface overlap risk in UI; advise importing only pre-sync historical data; show skip counts |
+| Import service | Empty fields (#8), transaction provenance (#11) | Trim and null-check all fields; log import batch with transaction IDs |
+| Mapping UI | Category orphans (#9), account identification (#10) | Show uncategorized count before confirm; show account metadata in dropdowns; auto-suggest fuzzy matches |
+| Post-import UX | Re-import confusion (#12), rules override surprise (#13) | Clear messaging with distinct skip reasons; show re-categorization count |
 
 ## Sources
 
-- [Apple Human Interface Guidelines: Layout](https://developer.apple.com/design/human-interface-guidelines/layout) — 44pt minimum touch target, safe area insets. HIGH confidence.
-- [Apple HIG: Adaptivity and Layout](https://developer.apple.com/design/human-interface-guidelines/foundations/layout/) — mobile-first design principles. HIGH confidence.
-- [iOS Safari viewport height behavior (dvh/svh/lvh)](https://webkit.org/blog/12445/new-webkit-features-in-safari-15-4/) — WebKit blog on new viewport units. HIGH confidence.
-- [MDN: env() — safe-area-inset-bottom](https://developer.mozilla.org/en-US/docs/Web/CSS/env) — iOS notch/home indicator insets. HIGH confidence.
-- [Tailwind v4 upgrade guide](https://tailwindcss.com/docs/upgrade-guide) — changes to max-breakpoint variants and cascade layer behavior. HIGH confidence.
-- [Recharts ResponsiveContainer docs](https://recharts.org/en-US/api/ResponsiveContainer) — container-only responsiveness, does not adapt chart content. HIGH confidence.
-- [React Router v7 useLocation](https://reactrouter.com/en/main/hooks/use-location) — for close-on-navigate patterns. HIGH confidence.
-- Codebase inspection: `packages/client/src/components/Layout.tsx`, `TransactionsPage.tsx`, `BudgetPage.tsx`, `ReportsPage.tsx`, `SplitModal.tsx`, `app.tsx`, `client/package.json` — React 19, Tailwind v4, React Router v7, Recharts v3, @dnd-kit. HIGH confidence.
+- Existing codebase: `packages/shared/src/types.ts` -- `toCents()` uses `Math.round(dollars * 100)`. HIGH confidence.
+- Existing codebase: `packages/server/src/sync/simplefin-client.ts` -- `generateDedupHash` formula is `sha256(accountId|date|amount|payee)`. HIGH confidence.
+- Existing codebase: `packages/server/migrations/001-initial-schema.sql` -- `dedup_hash` has UNIQUE index with WHERE NOT NULL. HIGH confidence.
+- Design doc: `.planning/designs/2026-03-24-csv-import-monarch-migration-design.md` -- design decisions and integration approach. HIGH confidence.
+- [Monarch Money CSV format](https://blog.tracefunc.com/notes/monarch-money.html) -- columns: Date, Merchant, Category, Account, Original Statement, Notes, Amount, Tags. MEDIUM confidence (third-party source).
+- [Monarch Money import documentation](https://help.monarch.com/hc/en-us/articles/4409682789908-Importing-Transaction-History-Manually) -- CSV import requirements. MEDIUM confidence (could not fetch, 403).
+- [Monarch Money large file import](https://help.monarch.com/hc/en-us/articles/7583213629204-Importing-Large-CSV-Files) -- file size limitations. MEDIUM confidence.
+- IEEE 754 floating-point behavior (`19.99 * 100 !== 1999`) -- well-documented JavaScript behavior. HIGH confidence.
 
 ---
-*Pitfalls research for: Minerva Money v2.2 mobile-friendly UI retrofit*
-*Researched: 2026-03-23*
+*Pitfalls research for: Minerva Money v2.3 CSV Import*
+*Researched: 2026-03-24*
