@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTRPC } from '../trpc';
 import { formatCurrency } from '../lib/format';
 import { Link } from 'react-router';
@@ -24,9 +24,17 @@ function formatMonth(): string {
 
 export default function DashboardPage() {
   const trpc = useTRPC();
+  const queryClient = useQueryClient();
   const period = getCurrentPeriod();
   const startDate = getMonthStart();
   const endDate = getToday();
+
+  const syncMut = useMutation(trpc.sync.trigger.mutationOptions({
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: trpc.sync.status.queryKey() });
+      queryClient.invalidateQueries({ queryKey: trpc.accounts.list.queryKey() });
+    },
+  }));
 
   const { data: accounts, isLoading: accountsLoading } = useQuery(
     trpc.accounts.list.queryOptions(),
@@ -161,12 +169,28 @@ export default function DashboardPage() {
 
         {/* Sync Status */}
         <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <h3 className="text-sm text-gray-500 uppercase tracking-wide font-medium mb-3">Sync Status</h3>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm text-gray-500 uppercase tracking-wide font-medium">Sync Status</h3>
+            <button
+              onClick={() => syncMut.mutate()}
+              disabled={syncMut.isPending}
+              className="text-sm text-blue-600 hover:text-blue-800 disabled:text-gray-400 disabled:cursor-not-allowed"
+            >
+              {syncMut.isPending ? 'Syncing...' : 'Sync Now'}
+            </button>
+          </div>
 
           {syncLoading ? (
             <p className="text-gray-500 text-sm">Loading...</p>
           ) : !syncStatus?.lastSync ? (
-            <p className="text-gray-500 text-sm">No syncs recorded</p>
+            <div>
+              <p className="text-gray-500 text-sm">No syncs recorded</p>
+              {syncMut.isError && (
+                <div className="mt-2 p-2 bg-red-50 rounded text-sm text-red-600">
+                  {syncMut.error.message}
+                </div>
+              )}
+            </div>
           ) : (
             <div className="space-y-2">
               <div className="flex justify-between">
@@ -192,6 +216,11 @@ export default function DashboardPage() {
               {syncStatus.lastSync.errorMessage && (
                 <div className="mt-2 p-2 bg-red-50 rounded text-sm text-red-600">
                   {syncStatus.lastSync.errorMessage}
+                </div>
+              )}
+              {syncMut.isError && (
+                <div className="mt-2 p-2 bg-red-50 rounded text-sm text-red-600">
+                  {syncMut.error.message}
                 </div>
               )}
             </div>
