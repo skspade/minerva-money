@@ -112,10 +112,10 @@ Full details: [milestones/v2.4-ROADMAP.md](milestones/v2.4-ROADMAP.md)
   2. Sending a chat message with a model parameter uses that model instead of the hardcoded default
   3. Sending a chat message without a model parameter defaults to Sonnet
   4. Chat requests to Opus allow up to 60 seconds before timing out; Haiku allows 15 seconds
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 33-01: TBD
+- [ ] 33-01-PLAN.md — Model definitions, service model parameter, router models query and chat model input
 
 ### Phase 34: Category Creation Tools
 **Goal**: Agent can create categories and category groups during conversation with safety validation
