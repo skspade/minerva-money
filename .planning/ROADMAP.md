@@ -47,7 +47,7 @@ Full details: [milestones/v2.0-ROADMAP.md](milestones/v2.0-ROADMAP.md)
 
 - [x] **Phase 18: Production Build and Directory Layout** - Compiled server/client output, Express static serving, env loading, deploy directory organization (completed 2026-03-23)
 - [x] **Phase 19: Service Configuration** - launchd plists with correct paths, crash recovery, boot startup, restart throttling (completed 2026-03-24)
-- [ ] **Phase 20: Deploy Scripts** - First-install setup, one-command updates, pre-flight validation
+- [x] **Phase 20: Deploy Scripts** - First-install setup, one-command updates, pre-flight validation (completed 2026-03-24)
 
 ## Phase Details
 
@@ -111,4 +111,4 @@ Full details: [milestones/v2.0-ROADMAP.md](milestones/v2.0-ROADMAP.md)
 | 17. Audit Gap Closure | v2.0 | 1/1 | Complete | 2026-03-23 |
 | 18. Production Build and Directory Layout | 2/2 | Complete    | 2026-03-23 | - |
 | 19. Service Configuration | 1/1 | Complete    | 2026-03-24 | - |
-| 20. Deploy Scripts | v2.1 | 0/0 | Not started | - |
+| 20. Deploy Scripts | 2/2 | Complete    | 2026-03-24 | - |
