@@ -46,22 +46,22 @@ None — this is a focused enhancement milestone.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SKIP-01 | Pending | Pending |
-| SKIP-02 | Pending | Pending |
-| SKIP-03 | Pending | Pending |
-| STAT-01 | Pending | Pending |
-| STAT-02 | Pending | Pending |
-| STAT-03 | Pending | Pending |
-| EXEC-01 | Pending | Pending |
-| EXEC-02 | Pending | Pending |
-| PLSH-01 | Pending | Pending |
-| PLSH-02 | Pending | Pending |
+| SKIP-01 | Phase 30 | Pending |
+| SKIP-02 | Phase 30 | Pending |
+| SKIP-03 | Phase 30 | Pending |
+| STAT-01 | Phase 31 | Pending |
+| STAT-02 | Phase 31 | Pending |
+| STAT-03 | Phase 31 | Pending |
+| EXEC-01 | Phase 29 | Pending |
+| EXEC-02 | Phase 31 | Pending |
+| PLSH-01 | Phase 31 | Pending |
+| PLSH-02 | Phase 31 | Pending |
 
 **Coverage:**
 - v2.4 requirements: 10 total
-- Mapped to phases: 0
-- Unmapped: 10 ⚠️
+- Mapped to phases: 10
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-24*
-*Last updated: 2026-03-24 after initial definition*
+*Last updated: 2026-03-24 after roadmap creation*

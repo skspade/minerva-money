@@ -7,6 +7,7 @@
 - ✅ **v2.1 Deployment Hardening** — Phases 18-20 (shipped 2026-03-24)
 - ✅ **v2.2 Mobile-Friendly UI** — Phases 21-25 (shipped 2026-03-24)
 - ✅ **v2.3 CSV Import** — Phases 26-28 (shipped 2026-03-24)
+- 📋 **v2.4 CSV Import Account Filtering** — Phases 29-31 (in progress)
 
 ## Phases
 
@@ -76,7 +77,62 @@ Full details: [milestones/v2.3-ROADMAP.md](milestones/v2.3-ROADMAP.md)
 
 </details>
 
+### v2.4 CSV Import Account Filtering (In Progress)
+
+- [ ] **Phase 29: Server Skip Support** - Server accepts partial account mappings and provides per-account row counts
+- [ ] **Phase 30: Client Skip UI** - Skip option in account mapping dropdown with visual styling and row count badges
+- [ ] **Phase 31: Stats Filtering and Polish** - Preview stats, sample rows, and results reflect skip decisions; bulk skip and summary banner
+
+## Phase Details
+
+### Phase 29: Server Skip Support
+**Goal**: Server gracefully handles partial account mappings, enabling clients to omit skipped accounts without errors
+**Depends on**: Nothing (first phase in v2.4)
+**Requirements**: EXEC-01
+**Success Criteria** (what must be TRUE):
+  1. Server execute endpoint accepts an accountMappings record that omits some CSV accounts and imports only the mapped accounts without throwing
+  2. Execute result includes a count of rows skipped due to unmapped accounts (skippedByAccountFilter)
+  3. Preview result includes per-account row counts (rowCountByAccount) so the client can display how many rows each account contains
+**Plans**: TBD
+
+Plans:
+- [ ] 29-01: TBD
+
+### Phase 30: Client Skip UI
+**Goal**: Users can mark CSV accounts as "skip" in the import wizard and see which accounts they are skipping with clear visual treatment
+**Depends on**: Phase 29
+**Requirements**: SKIP-01, SKIP-02, SKIP-03
+**Success Criteria** (what must be TRUE):
+  1. User can select "Skip — do not import" for any CSV account in the account mapping dropdown
+  2. User can see how many rows each CSV account contains (row count badge) to make informed skip decisions
+  3. Skipped accounts appear with visually distinct styling (dimmed/amber) in the mapping UI
+  4. Continue button correctly requires every account to be either mapped or skipped (undecided blocks, all-skipped blocks with clear message)
+  5. Skip sentinel value is stripped from the payload before sending to server
+**Plans**: TBD
+
+Plans:
+- [ ] 30-01: TBD
+
+### Phase 31: Stats Filtering and Polish
+**Goal**: All preview stats, sample rows, and import results accurately reflect skip decisions, with convenience features for bulk operations
+**Depends on**: Phase 30
+**Requirements**: STAT-01, STAT-02, STAT-03, EXEC-02, PLSH-01, PLSH-02
+**Success Criteria** (what must be TRUE):
+  1. Preview stats (total rows, valid rows) dynamically exclude rows from skipped accounts as the user changes mappings
+  2. Sample rows table dynamically excludes rows from skipped accounts
+  3. Dedup stats (new/duplicate counts) exclude rows from skipped accounts, with a note about excluded rows
+  4. Confirm summary (step 3) and results page reflect filtered counts including a skippedByAccountFilter stat
+  5. "Skip All Unmatched" button sets all accounts without auto-suggested matches to skip in one click
+  6. Summary banner shows "Importing from X of Y accounts (Z skipped)" when any accounts are skipped
+**Plans**: TBD
+
+Plans:
+- [ ] 31-01: TBD
+
 ## Progress
+
+**Execution Order:**
+Phases execute in numeric order: 29 → 30 → 31
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -108,3 +164,6 @@ Full details: [milestones/v2.3-ROADMAP.md](milestones/v2.3-ROADMAP.md)
 | 26. Import Service and API | v2.3 | 2/2 | Complete | 2026-03-24 |
 | 27. Import UI and Navigation | v2.3 | 2/2 | Complete | 2026-03-24 |
 | 28. Phase 26 Verification | v2.3 | 1/1 | Complete | 2026-03-24 |
+| 29. Server Skip Support | v2.4 | 0/? | Not started | - |
+| 30. Client Skip UI | v2.4 | 0/? | Not started | - |
+| 31. Stats Filtering and Polish | v2.4 | 0/? | Not started | - |
