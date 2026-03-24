@@ -187,7 +187,7 @@ Full details: see Phase Details below
 | 18. Production Build and Directory Layout | v2.1 | 2/2 | Complete | 2026-03-23 |
 | 19. Service Configuration | v2.1 | 1/1 | Complete | 2026-03-24 |
 | 20. Deploy Scripts | v2.1 | 2/2 | Complete | 2026-03-24 |
-| 21. Layout Foundation | 2/2 | Complete   | 2026-03-24 | — |
+| 21. Layout Foundation | 2/2 | Complete    | 2026-03-24 | — |
 | 22. Transaction Cards | v2.2 | 0/? | Not Started | — |
 | 23. Budget Cards | v2.2 | 0/? | Not Started | — |
 | 24. Modal Conversions | v2.2 | 0/? | Not Started | — |
