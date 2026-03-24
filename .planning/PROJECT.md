@@ -33,16 +33,16 @@ Accurate, auto-synced financial data with envelope budgeting that lets you see w
 
 ### Active
 
-## Current Milestone: v2.2 Mobile-Friendly UI
+## Current Milestone: v2.3 CSV Import
 
-**Goal:** Make Minerva Money fully functional on iPhone (375-430px) by adding targeted mobile breakpoint overrides to the existing desktop layout.
+**Goal:** Add a reusable CSV import feature for migrating transaction history from Monarch Money (and potentially other sources) into Minerva Money.
 
 **Target features:**
-- Bottom tab bar navigation with 5 primary tabs and "More" overflow sheet
-- Transaction card layout replacing table on mobile
-- Budget page with stacked category cards, progress bars, and inline editing
-- Touch-friendly forms, modals as full-screen sheets, 44px minimum tap targets
-- Responsive adaptations for Dashboard, Accounts, Reports, Chat, Categories, and Rules pages
+- CSV parsing and validation service (tab-delimited Monarch format)
+- tRPC API endpoints for preview (parse + extract mappings) and execute (import with mappings)
+- Import page UI with file upload, account/category mapping, and confirm/import flow
+- Deduplication via existing hash mechanism, rules engine runs post-import
+- Navigation integration (desktop nav bar + mobile "More" sheet)
 
 ### Out of Scope
 
@@ -109,4 +109,4 @@ Accurate, auto-synced financial data with envelope budgeting that lets you see w
 | Node 20 --env-file over dotenv | No extra dependency, native support | — Pending |
 
 ---
-*Last updated: 2026-03-23 after v2.2 milestone start*
+*Last updated: 2026-03-24 after v2.3 milestone start*
