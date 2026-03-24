@@ -1,5 +1,6 @@
 import { router, publicProcedure } from './trpc.js';
 import { agentRouter } from '../agent/agent-router.js';
+import { importRouter } from '../import/import-router.js';
 import { runSync } from './sync-service.js';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
@@ -450,6 +451,7 @@ export const appRouter = router({
   budget: budgetRouter,
   reports: reportsRouter,
   agent: agentRouter,
+  import: importRouter,
 });
 
 export type AppRouter = typeof appRouter;
