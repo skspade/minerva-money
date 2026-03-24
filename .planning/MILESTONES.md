@@ -1,5 +1,21 @@
 # Milestones
 
+## v2.4 CSV Import Account Filtering (Shipped: 2026-03-24)
+
+**Phases:** 4 | **Plans:** 4 | **Requirements:** 10/10
+**LOC added:** ~2,200 TypeScript | **Total LOC:** 11,854
+**Timeline:** 2026-03-24 (single day)
+**Git range:** feat(29-01) → feat(32-01)
+
+**Key accomplishments:**
+1. Server accepts partial account mappings — skips unmapped rows instead of throwing, returns per-account row counts for UI
+2. Skip option in account mapping dropdown with row count badges and amber/dimmed visual treatment
+3. Client-side stats filtering — preview stats, sample rows, and dedup notes all dynamically reflect skip decisions
+4. "Skip All Unmatched" button and summary banner for bulk operations and at-a-glance import scope
+5. Formal verification of all 10 requirements with file-and-line evidence across 3 implementation phases
+
+---
+
 ## v2.3 CSV Import (Shipped: 2026-03-24)
 
 **Phases:** 3 | **Plans:** 5 | **Requirements:** 23/23

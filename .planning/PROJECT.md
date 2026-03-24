@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A single-user personal budgeting web app replacing Monarch Money. Built with React, Express, tRPC, and SQLite, hosted on a home iMac server. Pulls financial data from SimpleFIN (MX upstream) and uses envelope budgeting to assign every dollar a job. Ships with a full dashboard, spending/net-worth charts, categorization rules engine, transfer detection, twice-monthly auto-funding, a Claude-powered conversational agent, and CSV import for migrating transaction history from Monarch Money.
+A single-user personal budgeting web app replacing Monarch Money. Built with React, Express, tRPC, and SQLite, hosted on a home iMac server. Pulls financial data from SimpleFIN (MX upstream) and uses envelope budgeting to assign every dollar a job. Ships with a full dashboard, spending/net-worth charts, categorization rules engine, transfer detection, twice-monthly auto-funding, a Claude-powered conversational agent, and CSV import with account-level skip filtering for migrating transaction history from Monarch Money.
 
 ## Core Value
 
@@ -37,17 +37,15 @@ Accurate, auto-synced financial data with envelope budgeting that lets you see w
 - ✓ Post-import rules engine categorization and transfer detection — v2.3
 - ✓ Import navigation: /import route, desktop nav bar, mobile More sheet — v2.3
 
+- ✓ Server accepts partial account mappings and skips rows for unmapped accounts — v2.4
+- ✓ Skip option in account mapping dropdown with row count badges and amber styling — v2.4
+- ✓ Preview stats, sample rows, and dedup notes dynamically exclude skipped accounts — v2.4
+- ✓ Confirm summary and results page reflect filtered counts — v2.4
+- ✓ "Skip All Unmatched" button and summary banner for import scope visibility — v2.4
+
 ### Active
 
-## Current Milestone: v2.4 CSV Import Account Filtering
-
-**Goal:** Allow users to selectively skip/exclude CSV accounts during import so they can import only the accounts they want while ignoring unsupported account types.
-
-**Target features:**
-- Skip option in account mapping dropdown ("Skip — do not import")
-- Client-side stats filtering (sample rows, row counts, dedup stats exclude skipped accounts)
-- Server-side execute changes (skip rows for unmapped accounts instead of throwing)
-- Results step updates (confirm summary reflects filtered counts)
+(No active milestone — planning next)
 
 ### Out of Scope
 
@@ -67,9 +65,9 @@ Accurate, auto-synced financial data with envelope budgeting that lets you see w
 
 ## Context
 
-- Shipped v2.3 with 18,461 LOC TypeScript across 28 phases
+- Shipped v2.4 with 11,854 LOC TypeScript across 32 phases (6 milestones)
 - Tech stack: React + Tailwind / Express + tRPC / SQLite via better-sqlite3 / TanStack Query / Claude Agent SDK / csv-parse
-- Replacing Monarch Money with a self-hosted alternative (CSV import enables full data migration)
+- Replacing Monarch Money with a self-hosted alternative (CSV import with account filtering enables selective data migration)
 - SimpleFIN costs $15/year, connects to MX (16,000+ institutions)
 - Three institutions: Discover (banking + HELOC), Fidelity (investments), Consumers Credit Union (banking)
 - Pay schedule: bi-monthly (15th and last day of month), equal split
@@ -116,6 +114,10 @@ Accurate, auto-synced financial data with envelope budgeting that lets you see w
 | csv-parse library for CSV parsing | RFC-4180 compliant, BOM support, sync API — proven library | ✓ Good — handles edge cases reliably |
 | Rules engine priority over CSV categories | Rules run first, CSV categories only as fallback for unmatched | ✓ Good — consistent categorization |
 | Auto-delimiter detection (tab vs comma) | `headerLine.includes('\t')` check before parsing | ✓ Good — handles both Monarch export formats |
+| Sentinel value pattern for skip | `"__skip__"` in accountMappings, stripped before server payload | ✓ Good — clean client/server contract |
+| Server treats absent accounts as skip | No new API parameters — omit from mapping to skip | ✓ Good — backward-compatible, zero migration |
+| Client-side stats filtering via useMemo | No server round-trip for preview updates when toggling skips | ✓ Good — instant UI responsiveness |
+| Pure helper functions for UI logic | Exported testable functions (validation, filtering, stats) | ✓ Good — 22 tests covering skip logic |
 
 ---
-*Last updated: 2026-03-24 after v2.4 milestone started*
+*Last updated: 2026-03-24 after v2.4 milestone*
