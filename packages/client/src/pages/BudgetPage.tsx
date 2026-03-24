@@ -1,7 +1,9 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTRPC } from '../trpc';
 import { formatCurrency } from '../lib/format';
+import { AllocationCell } from '../components/AllocationCell';
+import BudgetCategoryCard from '../components/BudgetCategoryCard';
 
 function getCurrentPeriod(): string {
   const now = new Date();
@@ -79,73 +81,6 @@ function availableColor(amount: number): string {
   if (amount < 0) return 'text-red-600 bg-red-50';
   if (amount > 0) return 'text-green-600';
   return 'text-gray-500';
-}
-
-function AllocationCell({
-  value,
-  onSave,
-}: {
-  value: number;
-  onSave: (cents: number) => void;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [text, setText] = useState('');
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (editing) {
-      inputRef.current?.focus();
-      inputRef.current?.select();
-    }
-  }, [editing]);
-
-  const startEditing = () => {
-    setText((value / 100).toFixed(2));
-    setEditing(true);
-  };
-
-  const save = () => {
-    const parsed = parseFloat(text);
-    if (isNaN(parsed)) {
-      setEditing(false);
-      return;
-    }
-    const cents = Math.round(parsed * 100);
-    onSave(cents);
-    setEditing(false);
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      save();
-    } else if (e.key === 'Escape') {
-      setEditing(false);
-    }
-  };
-
-  if (editing) {
-    return (
-      <input
-        ref={inputRef}
-        type="text"
-        value={text}
-        onChange={e => setText(e.target.value)}
-        onKeyDown={handleKeyDown}
-        onBlur={save}
-        className="w-24 px-2 py-1 border border-blue-400 rounded text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-500"
-      />
-    );
-  }
-
-  return (
-    <span
-      className="cursor-pointer hover:text-blue-600 hover:underline"
-      onClick={startEditing}
-      title="Click to edit allocation"
-    >
-      {formatCurrency(value)}
-    </span>
-  );
 }
 
 function BudgetGroup({
@@ -230,6 +165,7 @@ export default function BudgetPage() {
   const [period, setPeriod] = useState(getCurrentPeriod);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
 
   const { data, isLoading, error } = useQuery(
     trpc.budget.summary.queryOptions({ period }),
@@ -322,7 +258,8 @@ export default function BudgetPage() {
         </div>
       )}
 
-      <div className="flex items-center justify-between mb-6">
+      {/* Desktop header with inline month selector */}
+      <div className="hidden md:flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold">Budget</h2>
         <div className="flex items-center gap-4">
           <button
@@ -337,6 +274,26 @@ export default function BudgetPage() {
           <button
             onClick={() => setPeriod(getNextPeriod(period))}
             className="px-3 py-1 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded"
+          >
+            &rarr;
+          </button>
+        </div>
+      </div>
+
+      {/* Mobile header + full-width month selector */}
+      <div className="md:hidden mb-4">
+        <h2 className="text-2xl font-bold mb-3">Budget</h2>
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => setPeriod(getPreviousPeriod(period))}
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center text-gray-600 hover:text-gray-900 rounded"
+          >
+            &larr;
+          </button>
+          <span className="text-lg font-medium">{formatPeriodDisplay(period)}</span>
+          <button
+            onClick={() => setPeriod(getNextPeriod(period))}
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center text-gray-600 hover:text-gray-900 rounded"
           >
             &rarr;
           </button>
@@ -358,26 +315,52 @@ export default function BudgetPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-5 gap-4 px-4 py-2 text-xs text-gray-500 uppercase tracking-wide font-medium">
-        <div>Category</div>
-        <div className="text-right">Default</div>
-        <div className="text-right">Allocated</div>
-        <div className="text-right">Spent</div>
-        <div className="text-right">Available</div>
+      {/* Desktop grid — hidden on mobile */}
+      <div className="hidden md:block">
+        <div className="grid grid-cols-5 gap-4 px-4 py-2 text-xs text-gray-500 uppercase tracking-wide font-medium">
+          <div>Category</div>
+          <div className="text-right">Default</div>
+          <div className="text-right">Allocated</div>
+          <div className="text-right">Spent</div>
+          <div className="text-right">Available</div>
+        </div>
+
+        <div className="space-y-2">
+          {groups.map(group => (
+            <BudgetGroup
+              key={group.name}
+              group={group}
+              collapsed={collapsedGroups.has(group.name)}
+              onToggle={() => toggleGroup(group.name)}
+              period={period}
+              onSetAllocation={handleSetAllocation}
+              defaultsMap={defaultsMap}
+              onSetDefault={handleSetDefault}
+            />
+          ))}
+        </div>
       </div>
 
-      <div className="space-y-2">
+      {/* Mobile cards — hidden on desktop */}
+      <div className="md:hidden space-y-4">
         {groups.map(group => (
-          <BudgetGroup
-            key={group.name}
-            group={group}
-            collapsed={collapsedGroups.has(group.name)}
-            onToggle={() => toggleGroup(group.name)}
-            period={period}
-            onSetAllocation={handleSetAllocation}
-            defaultsMap={defaultsMap}
-            onSetDefault={handleSetDefault}
-          />
+          <div key={group.name}>
+            <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide px-1 mb-2">
+              {group.name}
+              <span className="ml-1 text-xs font-normal text-gray-400">({group.categories.length})</span>
+            </h3>
+            <div className="space-y-2">
+              {group.categories.map(cat => (
+                <BudgetCategoryCard
+                  key={cat.categoryId}
+                  cat={cat}
+                  isExpanded={expandedId === cat.categoryId}
+                  onToggle={() => setExpandedId(prev => prev === cat.categoryId ? null : cat.categoryId)}
+                  onSave={cents => handleSetAllocation(cat.categoryId, period, cents)}
+                />
+              ))}
+            </div>
+          </div>
         ))}
       </div>
 
