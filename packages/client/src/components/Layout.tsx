@@ -1,6 +1,7 @@
 import { NavLink, Outlet } from 'react-router';
 import SyncStatus from './SyncStatus';
 import SyncButton from './SyncButton';
+import BottomTabBar from './BottomTabBar';
 
 export default function Layout() {
   return (
@@ -94,6 +95,7 @@ export default function Layout() {
       <main className="mx-auto max-w-6xl px-4 py-6 pb-20 md:pb-6">
         <Outlet />
       </main>
+      <BottomTabBar />
     </div>
   );
 }
