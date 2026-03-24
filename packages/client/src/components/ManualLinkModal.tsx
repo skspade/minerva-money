@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
+import { Drawer } from 'vaul';
 import { useTRPC } from '../trpc';
 import { formatCurrency } from '../lib/format';
 
@@ -70,106 +71,108 @@ export default function ManualLinkModal({ onClose, onLinked }: ManualLinkModalPr
     linkMut.mutate({ transactionAId: selectedA, transactionBId: selectedB });
   };
 
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[80vh] overflow-hidden" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-4 border-b">
-          <h3 className="text-lg font-semibold">Link Transactions as Transfer</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
-        </div>
-
-        <div className="p-4 grid grid-cols-2 gap-4">
-          {/* Transaction A */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Transaction A</label>
-            <input
-              type="text"
-              placeholder="Search payee or memo..."
-              value={searchA}
-              onChange={e => handleSearchA(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm mb-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <div className="border rounded-md max-h-60 overflow-y-auto">
-              {filteredA.map(txn => (
-                <button
-                  key={txn.id}
-                  onClick={() => setSelectedA(txn.id)}
-                  className={`w-full text-left px-3 py-2 text-sm border-b last:border-b-0 hover:bg-gray-50 ${
-                    selectedA === txn.id ? 'bg-blue-50 border-blue-200' : ''
-                  }`}
-                >
-                  <div className="flex justify-between">
-                    <span className="font-medium">{txn.payee}</span>
-                    <span className={txn.amount < 0 ? 'text-red-600' : ''}>{formatCurrency(txn.amount)}</span>
-                  </div>
-                  <div className="text-xs text-gray-500">
-                    {new Date(txn.date + 'T00:00:00').toLocaleDateString()} &middot; {txn.accountName}
-                  </div>
-                </button>
-              ))}
-              {filteredA.length === 0 && (
-                <p className="px-3 py-2 text-sm text-gray-500">No transactions found.</p>
-              )}
+  const transactionPanel = (label: string, search: string, onSearch: (v: string) => void, filtered: typeof filteredA, selected: string | null, onSelect: (id: string) => void) => (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+      <input
+        type="text"
+        placeholder="Search payee or memo..."
+        value={search}
+        onChange={e => onSearch(e.target.value)}
+        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm mb-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      />
+      <div className="border rounded-md max-h-60 overflow-y-auto">
+        {filtered.map(txn => (
+          <button
+            key={txn.id}
+            onClick={() => onSelect(txn.id)}
+            className={`w-full text-left px-3 py-2 max-md:py-3 text-sm border-b last:border-b-0 hover:bg-gray-50 ${
+              selected === txn.id ? 'bg-blue-50 border-blue-200' : ''
+            }`}
+          >
+            <div className="flex justify-between">
+              <span className="font-medium">{txn.payee}</span>
+              <span className={txn.amount < 0 ? 'text-red-600' : ''}>{formatCurrency(txn.amount)}</span>
             </div>
-          </div>
-
-          {/* Transaction B */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Transaction B</label>
-            <input
-              type="text"
-              placeholder="Search payee or memo..."
-              value={searchB}
-              onChange={e => handleSearchB(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm mb-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <div className="border rounded-md max-h-60 overflow-y-auto">
-              {filteredB.map(txn => (
-                <button
-                  key={txn.id}
-                  onClick={() => setSelectedB(txn.id)}
-                  className={`w-full text-left px-3 py-2 text-sm border-b last:border-b-0 hover:bg-gray-50 ${
-                    selectedB === txn.id ? 'bg-blue-50 border-blue-200' : ''
-                  }`}
-                >
-                  <div className="flex justify-between">
-                    <span className="font-medium">{txn.payee}</span>
-                    <span className={txn.amount < 0 ? 'text-red-600' : ''}>{formatCurrency(txn.amount)}</span>
-                  </div>
-                  <div className="text-xs text-gray-500">
-                    {new Date(txn.date + 'T00:00:00').toLocaleDateString()} &middot; {txn.accountName}
-                  </div>
-                </button>
-              ))}
-              {filteredB.length === 0 && (
-                <p className="px-3 py-2 text-sm text-gray-500">No transactions found.</p>
-              )}
+            <div className="text-xs text-gray-500">
+              {new Date(txn.date + 'T00:00:00').toLocaleDateString()} &middot; {txn.accountName}
             </div>
-          </div>
-        </div>
-
-        {errorMsg && (
-          <div className="px-4 pb-2">
-            <p className="text-sm text-red-600">{errorMsg}</p>
-          </div>
+          </button>
+        ))}
+        {filtered.length === 0 && (
+          <p className="px-3 py-2 text-sm text-gray-500">No transactions found.</p>
         )}
-
-        <div className="flex justify-end gap-3 p-4 border-t">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm text-gray-700 bg-gray-100 rounded hover:bg-gray-200"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleLink}
-            disabled={!selectedA || !selectedB || selectedA === selectedB || linkMut.isPending}
-            className="px-4 py-2 text-sm text-white bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-50"
-          >
-            Link as Transfer
-          </button>
-        </div>
       </div>
     </div>
+  );
+
+  const header = (
+    <div className="flex items-center justify-between p-4 border-b">
+      <h3 className="text-lg font-semibold">Link Transactions as Transfer</h3>
+      <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl max-md:hidden">&times;</button>
+    </div>
+  );
+
+  const panelGrid = (
+    <div className="p-4 grid grid-cols-2 max-md:grid-cols-1 gap-4">
+      {transactionPanel('Transaction A', searchA, handleSearchA, filteredA, selectedA, setSelectedA)}
+      {transactionPanel('Transaction B', searchB, handleSearchB, filteredB, selectedB, setSelectedB)}
+    </div>
+  );
+
+  const errorDisplay = errorMsg ? (
+    <div className="px-4 pb-2">
+      <p className="text-sm text-red-600">{errorMsg}</p>
+    </div>
+  ) : null;
+
+  const actionButtons = (
+    <div className="flex justify-end gap-3 p-4 border-t">
+      <button
+        onClick={onClose}
+        className="px-4 py-2 text-sm text-gray-700 bg-gray-100 rounded hover:bg-gray-200 min-h-[44px]"
+      >
+        Cancel
+      </button>
+      <button
+        onClick={handleLink}
+        disabled={!selectedA || !selectedB || selectedA === selectedB || linkMut.isPending}
+        className="px-4 py-2 text-sm text-white bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-50 min-h-[44px]"
+      >
+        Link as Transfer
+      </button>
+    </div>
+  );
+
+  return (
+    <>
+      {/* Desktop modal */}
+      <div className="fixed inset-0 bg-black/50 hidden md:flex items-center justify-center z-50" onClick={onClose}>
+        <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[80vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+          {header}
+          {panelGrid}
+          {errorDisplay}
+          {actionButtons}
+        </div>
+      </div>
+
+      {/* Mobile bottom sheet */}
+      <Drawer.Root open={true} onOpenChange={(o) => !o && onClose()}>
+        <Drawer.Portal>
+          <Drawer.Overlay className="fixed inset-0 bg-black/40 z-50 md:hidden" />
+          <Drawer.Content className="fixed bottom-0 inset-x-0 z-50 bg-white rounded-t-2xl max-h-[90svh] flex flex-col pb-safe md:hidden">
+            <div className="mx-auto w-12 h-1.5 bg-gray-300 rounded-full mt-3 mb-2 flex-shrink-0" />
+            <div className="overflow-y-auto flex-1">
+              {header}
+              {panelGrid}
+              {errorDisplay}
+            </div>
+            <div className="flex-shrink-0">
+              {actionButtons}
+            </div>
+          </Drawer.Content>
+        </Drawer.Portal>
+      </Drawer.Root>
+    </>
   );
 }
