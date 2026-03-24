@@ -365,6 +365,25 @@ describe('previewImport', () => {
     expect(result.sampleRows).toHaveLength(10);
   });
 
+  it('returns rowCountByAccount with per-account row counts', () => {
+    const csv = makeCsv(
+      makeCsvRow('2024-01-15', 'Coffee Shop', 'Food & Drink', 'Checking', 'COFFEE SHOP 123', '', '-4.50'),
+      makeCsvRow('2024-01-16', 'Gas Station', 'Auto & Transport', 'Checking', 'GAS STATION 456', '', '-35.00'),
+      makeCsvRow('2024-01-17', 'Grocery', 'Food & Drink', 'Savings', 'GROCERY 789', '', '-25.00'),
+    );
+    const result = previewImport(db, csv);
+    expect(result.rowCountByAccount).toEqual({ Checking: 2, Savings: 1 });
+  });
+
+  it('rowCountByAccount excludes invalid rows', () => {
+    const csv = makeCsv(
+      makeCsvRow('2024-01-15', 'Coffee Shop', 'Food & Drink', 'Checking', 'COFFEE SHOP 123', '', '-4.50'),
+      makeCsvRow('not-a-date', 'Bad Row', 'Food & Drink', 'Checking', 'BAD ROW', '', '-1.00'),
+    );
+    const result = previewImport(db, csv);
+    expect(result.rowCountByAccount).toEqual({ Checking: 1 });
+  });
+
   it('includes validation errors with row numbers', () => {
     const csv = makeCsv(
       makeCsvRow('2024-01-15', 'Coffee Shop', 'Food & Drink', 'Checking', 'COFFEE SHOP', '', '-4.50'),
@@ -427,9 +446,42 @@ describe('executeImport', () => {
     expect(txns).toHaveLength(1);
   });
 
-  it('rejects when account mapping is incomplete', () => {
+  it('skips rows for unmapped accounts instead of throwing', () => {
+    // Add a second account to the DB
+    db.prepare(`INSERT INTO accounts (id, name, institution, type, balance, currency, last_synced) VALUES (?, ?, ?, ?, ?, ?, datetime('now'))`).run('acct-savings', 'Savings Account', 'Bank', 'banking', 0, 'USD');
+
+    const csv = makeCsv(
+      makeCsvRow('2024-01-15', 'Coffee Shop', 'Food & Drink', 'Checking', 'COFFEE SHOP 123', '', '-4.50'),
+      makeCsvRow('2024-01-16', 'Grocery', 'Food & Drink', 'Savings', 'GROCERY 789', '', '-25.00'),
+      makeCsvRow('2024-01-17', 'Gas Station', 'Auto', 'Checking', 'GAS STATION 456', '', '-35.00'),
+    );
+
+    // Only map Checking, omit Savings
+    const result = executeImport(db, csv, { Checking: 'acct-checking' }, {});
+
+    expect(result.importedCount).toBe(2); // Only Checking rows imported
+    expect(result.skippedByAccountFilter).toBe(1); // Savings row skipped
+    expect(result.skippedCount).toBe(0); // No dedup skips
+
+    const txns = db.prepare('SELECT * FROM transactions').all();
+    expect(txns).toHaveLength(2);
+  });
+
+  it('returns skippedByAccountFilter of 0 when all accounts are mapped', () => {
+    const csv = makeCsv(
+      makeCsvRow('2024-01-15', 'Coffee Shop', 'Food & Drink', 'Checking', 'COFFEE SHOP 123', '', '-4.50'),
+    );
+    const result = executeImport(db, csv, { Checking: 'acct-checking' }, {});
+    expect(result.skippedByAccountFilter).toBe(0);
+    expect(result.importedCount).toBe(1);
+  });
+
+  it('skips all rows when no accounts are mapped', () => {
     const csv = makeCsv(makeCsvRow('2024-01-15', 'Coffee Shop', 'Food & Drink', 'Checking', 'COFFEE SHOP', '', '-4.50'));
-    expect(() => executeImport(db, csv, {}, {})).toThrow(/unmapped accounts/i);
+    const result = executeImport(db, csv, {}, {});
+    expect(result.importedCount).toBe(0);
+    expect(result.skippedByAccountFilter).toBe(1);
+    expect(result.skippedCount).toBe(0);
   });
 
   it('sets pending to 0 for all imported transactions', () => {
