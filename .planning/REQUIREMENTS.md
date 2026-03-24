@@ -56,30 +56,30 @@ Requirements for Chat Enhancements milestone. Each maps to roadmap phases.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| MOD-01 | Pending | Pending |
-| MOD-02 | Pending | Pending |
-| MOD-03 | Pending | Pending |
-| MOD-04 | Pending | Pending |
-| MOD-05 | Pending | Pending |
-| MOD-06 | Pending | Pending |
-| MOD-07 | Pending | Pending |
-| CAT-01 | Pending | Pending |
-| CAT-02 | Pending | Pending |
-| CAT-03 | Pending | Pending |
-| CAT-04 | Pending | Pending |
-| CAT-05 | Pending | Pending |
-| CAT-06 | Pending | Pending |
-| CAT-07 | Pending | Pending |
-| SYS-01 | Pending | Pending |
-| SYS-02 | Pending | Pending |
-| SYS-03 | Pending | Pending |
-| SYS-04 | Pending | Pending |
+| MOD-01 | Phase 33 | Pending |
+| MOD-02 | Phase 33 | Pending |
+| MOD-03 | Phase 33 | Pending |
+| MOD-04 | Phase 36 | Pending |
+| MOD-05 | Phase 36 | Pending |
+| MOD-06 | Phase 36 | Pending |
+| MOD-07 | Phase 33 | Pending |
+| CAT-01 | Phase 34 | Pending |
+| CAT-02 | Phase 34 | Pending |
+| CAT-03 | Phase 34 | Pending |
+| CAT-04 | Phase 34 | Pending |
+| CAT-05 | Phase 34 | Pending |
+| CAT-06 | Phase 34 | Pending |
+| CAT-07 | Phase 34 | Pending |
+| SYS-01 | Phase 35 | Pending |
+| SYS-02 | Phase 35 | Pending |
+| SYS-03 | Phase 35 | Pending |
+| SYS-04 | Phase 35 | Pending |
 
 **Coverage:**
 - v2.5 requirements: 18 total
-- Mapped to phases: 0
-- Unmapped: 18 ⚠️
+- Mapped to phases: 18
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-24*
-*Last updated: 2026-03-24 after initial definition*
+*Last updated: 2026-03-24 after roadmap creation*

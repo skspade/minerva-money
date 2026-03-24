@@ -8,6 +8,7 @@
 - ✅ **v2.2 Mobile-Friendly UI** — Phases 21-25 (shipped 2026-03-24)
 - ✅ **v2.3 CSV Import** — Phases 26-28 (shipped 2026-03-24)
 - ✅ **v2.4 CSV Import Account Filtering** — Phases 29-32 (shipped 2026-03-24)
+- 🚧 **v2.5 Chat Enhancements** — Phases 33-36 (in progress)
 
 ## Phases
 
@@ -91,7 +92,76 @@ Full details: [milestones/v2.4-ROADMAP.md](milestones/v2.4-ROADMAP.md)
 
 </details>
 
+### 🚧 v2.5 Chat Enhancements (In Progress)
+
+**Milestone Goal:** Add model selector and category creation to the Claude chat agent
+
+- [ ] **Phase 33: Model Selector Server** - Server-side model list endpoint, chat mutation model parameter, and model-specific timeout scaling
+- [ ] **Phase 34: Category Creation Tools** - Agent tools for creating categories and category groups with duplicate validation and confirmation flow
+- [ ] **Phase 35: System Prompt Updates** - Behavioral guidance for category creation tools and add-only policy
+- [ ] **Phase 36: Model Selector UI** - Client-side model dropdown, session reset on model change, and disabled state during pending requests
+
+## Phase Details
+
+### Phase 33: Model Selector Server
+**Goal**: Server exposes model options and accepts model selection for chat requests
+**Depends on**: Nothing (first phase of v2.5)
+**Requirements**: MOD-01, MOD-02, MOD-03, MOD-07
+**Success Criteria** (what must be TRUE):
+  1. Calling the models tRPC query returns a list of available models with id, label, and description
+  2. Sending a chat message with a model parameter uses that model instead of the hardcoded default
+  3. Sending a chat message without a model parameter defaults to Sonnet
+  4. Chat requests to Opus allow up to 60 seconds before timing out; Haiku allows 15 seconds
+**Plans**: TBD
+
+Plans:
+- [ ] 33-01: TBD
+
+### Phase 34: Category Creation Tools
+**Goal**: Agent can create categories and category groups during conversation with safety validation
+**Depends on**: Nothing (independent of Phase 33)
+**Requirements**: CAT-01, CAT-02, CAT-03, CAT-04, CAT-05, CAT-06, CAT-07
+**Success Criteria** (what must be TRUE):
+  1. User can ask the agent to create a category group and see a confirmation prompt before it is created
+  2. User can ask the agent to create a category in a specific group and see a confirmation prompt before it is created
+  3. Agent rejects creation and suggests the existing item when a duplicate name (case-insensitive) is requested
+  4. Agent rejects category creation when the target group does not exist
+  5. A newly created category can be used by the agent for categorization in the same conversation turn
+**Plans**: TBD
+
+Plans:
+- [ ] 34-01: TBD
+
+### Phase 35: System Prompt Updates
+**Goal**: Agent follows behavioral guidance for category creation and directs users to UI for destructive operations
+**Depends on**: Phase 34
+**Requirements**: SYS-01, SYS-02, SYS-03, SYS-04
+**Success Criteria** (what must be TRUE):
+  1. Agent checks for existing categories before attempting to create a new one
+  2. Agent asks for user confirmation before creating a category or group
+  3. When asked to delete or rename a category, the agent directs the user to the Categories page instead
+**Plans**: TBD
+
+Plans:
+- [ ] 35-01: TBD
+
+### Phase 36: Model Selector UI
+**Goal**: User can choose between Haiku, Sonnet, and Opus from the chat interface
+**Depends on**: Phase 33
+**Requirements**: MOD-04, MOD-05, MOD-06
+**Success Criteria** (what must be TRUE):
+  1. A model dropdown is visible above the chat input bar with Haiku, Sonnet, and Opus options
+  2. Switching models clears the conversation history and starts a fresh session
+  3. The model dropdown is disabled and unclickable while a chat response is loading
+**Plans**: TBD
+
+Plans:
+- [ ] 36-01: TBD
+
 ## Progress
+
+**Execution Order:**
+Phases 33 and 34 are independent and can execute in parallel. Phase 35 depends on 34. Phase 36 depends on 33.
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -101,3 +171,7 @@ Full details: [milestones/v2.4-ROADMAP.md](milestones/v2.4-ROADMAP.md)
 | 21-25 | v2.2 | 7/7 | Complete | 2026-03-24 |
 | 26-28 | v2.3 | 5/5 | Complete | 2026-03-24 |
 | 29-32 | v2.4 | 4/4 | Complete | 2026-03-24 |
+| 33. Model Selector Server | v2.5 | 0/1 | Not started | - |
+| 34. Category Creation Tools | v2.5 | 0/1 | Not started | - |
+| 35. System Prompt Updates | v2.5 | 0/1 | Not started | - |
+| 36. Model Selector UI | v2.5 | 0/1 | Not started | - |
