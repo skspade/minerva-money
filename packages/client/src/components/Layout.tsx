@@ -4,8 +4,8 @@ import SyncButton from './SyncButton';
 
 export default function Layout() {
   return (
-    <div className="min-h-screen bg-gray-50">
-      <nav className="bg-gray-900 text-white">
+    <div className="min-h-dvh bg-gray-50 overflow-x-hidden">
+      <nav className="hidden md:block bg-gray-900 text-white">
         <div className="mx-auto max-w-6xl flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-8">
             <h1 className="text-lg font-bold">Minerva Money</h1>
@@ -91,7 +91,7 @@ export default function Layout() {
           </div>
         </div>
       </nav>
-      <main className="mx-auto max-w-6xl px-4 py-6">
+      <main className="mx-auto max-w-6xl px-4 py-6 pb-20 md:pb-6">
         <Outlet />
       </main>
     </div>
