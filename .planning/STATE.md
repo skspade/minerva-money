@@ -1,14 +1,14 @@
 ---
 gsd_state_version: 1.0
-milestone: v2.1
-milestone_name: Deployment Hardening
-status: unknown
-last_updated: "2026-03-24T00:14:38.878Z"
+milestone: v2.2
+milestone_name: Mobile-Friendly UI
+status: requirements
+last_updated: "2026-03-23"
 progress:
-  total_phases: 4
-  completed_phases: 3
-  total_plans: 5
-  completed_plans: 5
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
 ---
 
 # Project State
@@ -18,22 +18,22 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-23)
 
 **Core value:** Accurate, auto-synced financial data with envelope budgeting that lets you see where every dollar goes and how spending trends over time.
-**Current focus:** Deployment hardening — roadmap complete, ready to plan Phase 18
+**Current focus:** Mobile-friendly UI — defining requirements
 
 ## Current Position
 
-Milestone: v2.1 Deployment Hardening
-Phase: 18 of 20 (Production Build and Directory Layout)
+Milestone: v2.2 Mobile-Friendly UI
+Phase: Not started (defining requirements)
 Plan: —
-Status: Ready to plan
-Last activity: 2026-03-23 — Roadmap created for v2.1
+Status: Defining requirements
+Last activity: 2026-03-23 — Milestone v2.2 started
 
 Progress: [░░░░░░░░░░] 0%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 0 (v2.1)
+- Total plans completed: 0 (v2.2)
 
 ## Accumulated Context
 
@@ -52,11 +52,10 @@ None.
 
 ### Blockers/Concerns
 
-- Node binary path must be verified on iMac before writing plists (nvm path may differ)
-- Node 20 EOL April 2026 — plan upgrade post-v2.1
+None.
 
 ## Session Continuity
 
 Last session: 2026-03-23
-Stopped at: Roadmap created for v2.1 milestone
+Stopped at: Milestone v2.2 started, defining requirements
 Resume file: None

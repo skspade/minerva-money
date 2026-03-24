@@ -33,15 +33,16 @@ Accurate, auto-synced financial data with envelope budgeting that lets you see w
 
 ### Active
 
-## Current Milestone: v2.1 Deployment Hardening
+## Current Milestone: v2.2 Mobile-Friendly UI
 
-**Goal:** Harden Minerva Money for production deployment on a home iMac with auto-restart on crash, boot startup, single-process serving, and one-command deployments.
+**Goal:** Make Minerva Money fully functional on iPhone (375-430px) by adding targeted mobile breakpoint overrides to the existing desktop layout.
 
 **Target features:**
-- Production build with Express serving both API and client static files
-- launchd service for crash recovery and boot startup
-- Deploy script for one-command updates
-- Deployment config co-located in `deploy/` directory
+- Bottom tab bar navigation with 5 primary tabs and "More" overflow sheet
+- Transaction card layout replacing table on mobile
+- Budget page with stacked category cards, progress bars, and inline editing
+- Touch-friendly forms, modals as full-screen sheets, 44px minimum tap targets
+- Responsive adaptations for Dashboard, Accounts, Reports, Chat, Categories, and Rules pages
 
 ### Out of Scope
 
@@ -108,4 +109,4 @@ Accurate, auto-synced financial data with envelope budgeting that lets you see w
 | Node 20 --env-file over dotenv | No extra dependency, native support | — Pending |
 
 ---
-*Last updated: 2026-03-23 after v2.1 milestone start*
+*Last updated: 2026-03-23 after v2.2 milestone start*
