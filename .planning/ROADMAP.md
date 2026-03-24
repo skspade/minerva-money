@@ -108,10 +108,10 @@ Plans:
   3. Skipped accounts appear with visually distinct styling (dimmed/amber) in the mapping UI
   4. Continue button correctly requires every account to be either mapped or skipped (undecided blocks, all-skipped blocks with clear message)
   5. Skip sentinel value is stripped from the payload before sending to server
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 30-01: TBD
+- [ ] 30-01: Skip option, row count badges, visual treatment, validation, and payload stripping
 
 ### Phase 31: Stats Filtering and Polish
 **Goal**: All preview stats, sample rows, and import results accurately reflect skip decisions, with convenience features for bulk operations
