@@ -1,172 +1,108 @@
 # Requirements: Minerva Money
 
-**Defined:** 2026-03-23
+**Defined:** 2026-03-24
 **Core Value:** Accurate, auto-synced financial data with envelope budgeting that lets you see where every dollar goes and how spending trends over time.
 
-## v2.2 Requirements
+## v2.3 Requirements
 
-Requirements for mobile-friendly UI milestone. Each maps to roadmap phases.
+Requirements for CSV Import milestone. Each maps to roadmap phases.
+
+### CSV Parsing
+
+- [ ] **CSV-01**: User can upload a Monarch Money CSV file via drag-and-drop or file picker
+- [ ] **CSV-02**: System parses the 8-column Monarch format (Date, Merchant, Category, Account, Original Statement, Notes, Amount, Tags) with auto-detected delimiter (tab or comma)
+- [ ] **CSV-03**: System validates each row and reports errors (missing date, invalid amount, missing merchant) with row numbers
+- [ ] **CSV-04**: System strips UTF-8 BOM and handles CRLF line endings without errors
+- [ ] **CSV-05**: System converts decimal dollar amounts to integer cents using existing `toCents()` function
+
+### Account & Category Mapping
+
+- [ ] **MAP-01**: User can map each unique CSV account name to an existing Minerva account via dropdown
+- [ ] **MAP-02**: System auto-suggests account matches by case-insensitive substring matching
+- [ ] **MAP-03**: User can map each unique CSV category name to an existing Minerva category or skip it
+- [ ] **MAP-04**: System auto-suggests category matches by exact case-insensitive name matching
+- [ ] **MAP-05**: All CSV accounts must be mapped before import can proceed; unmapped categories default to uncategorized
+
+### Import Execution
+
+- [ ] **IMP-01**: System inserts transactions atomically in a single SQLite transaction (all-or-nothing)
+- [ ] **IMP-02**: System generates dedup hashes using existing `generateDedupHash()` and skips duplicates via `INSERT OR IGNORE`
+- [ ] **IMP-03**: System runs the rules engine (`categorizeNewTransactions()`) on all imported transaction IDs post-insert, overriding CSV-mapped categories where rules match
+- [ ] **IMP-04**: System runs transfer detection (`detectTransferCandidates()`) on imported transactions post-insert
+- [ ] **IMP-05**: System uses "Original Statement" column as payee for dedup hash alignment with SimpleFIN-synced transactions
+
+### Import UI
+
+- [ ] **UI-01**: Import page displays a 3-step wizard: upload → preview/map → confirm/import
+- [ ] **UI-02**: Preview step shows first 10 sample rows, total row count, and any parse errors
+- [ ] **UI-03**: Confirm step shows summary: new transactions count, duplicates to skip, error rows count
+- [ ] **UI-04**: After import, success screen shows imported count, skipped count, and link to Transactions page
+- [ ] **UI-05**: Import page is mobile-responsive with stacked layout on small screens
 
 ### Navigation
 
-- [x] **NAV-01**: User sees a fixed bottom tab bar with 5 tabs (Dashboard, Transactions, Budget, Chat, More) on screens below 768px
-- [x] **NAV-02**: User can tap the "More" tab to open a bottom sheet listing Accounts, Categories, Rules, Transfers, and Reports
-- [x] **NAV-03**: Desktop horizontal navbar remains unchanged and hidden on mobile; bottom tab bar hidden on desktop
-- [x] **NAV-04**: Active tab is visually highlighted and updates on navigation
-- [x] **NAV-05**: "More" sheet auto-closes when user navigates to a page
-
-### Transactions
-
-- [x] **TXN-01**: User sees transactions as stacked cards (not a table) on mobile, showing merchant, amount, date, account, and category
-- [x] **TXN-02**: User can tap a transaction card's category badge to change the category via CategoryPicker
-- [x] **TXN-03**: User can tap a transaction card to expand and view details (memo, splits, notes)
-- [x] **TXN-04**: Transaction filters collapse into a "Filter" button on mobile with active filter count badge
-- [x] **TXN-05**: Desktop transaction table remains unchanged on screens above 768px
-
-### Budget
-
-- [x] **BUD-01**: User sees budget categories as stacked cards grouped by category group on mobile, replacing the grid layout
-- [x] **BUD-02**: Each budget card shows category name, progress bar (color-coded: green/yellow/red), spent/budgeted amounts, and remaining
-- [x] **BUD-03**: User can tap a budget category card to expand inline editing for allocation amount
-- [x] **BUD-04**: Month selector displays full-width with left/right navigation arrows on mobile
-- [x] **BUD-05**: Desktop budget grid layout remains unchanged on screens above 768px
-
-### Layout & Viewport
-
-- [x] **LAYOUT-01**: Viewport meta tag includes `viewport-fit=cover` to enable safe area insets
-- [x] **LAYOUT-02**: Bottom tab bar and Chat input bar respect iPhone safe area insets via `env(safe-area-inset-bottom)`
-- [x] **LAYOUT-03**: Main content area has bottom padding to clear the fixed bottom tab bar on mobile
-- [x] **LAYOUT-04**: Layout uses `min-h-dvh` instead of `min-h-screen` to handle iOS Safari viewport correctly
-- [x] **LAYOUT-05**: No horizontal scroll occurs on any page at 375px viewport width
-
-### Touch & Interaction
-
-- [x] **TOUCH-01**: All interactive elements (buttons, links, form inputs, tab bar items) have a minimum 44x44px tap target on mobile
-- [x] **TOUCH-02**: Form inputs use `text-base` (16px) minimum font size on mobile to prevent iOS auto-zoom
-- [x] **TOUCH-03**: Form layouts stack vertically on mobile with full-width inputs
-
-### Modals & Sheets
-
-- [x] **MODAL-01**: SplitModal renders as a full-screen bottom sheet on mobile and a centered modal on desktop
-- [x] **MODAL-02**: ManualTransactionForm renders as a full-screen bottom sheet on mobile and a centered modal on desktop
-- [x] **MODAL-03**: Bottom sheets support drag-to-dismiss and backdrop tap to close
-- [x] **MODAL-04**: RuleForm renders as a full-screen sheet on mobile
-- [x] **MODAL-05**: ManualLinkModal renders as a full-screen sheet on mobile
-
-### Remaining Pages
-
-- [ ] **PAGE-01**: Dashboard page displays correctly at 375px (single-column cards, no overflow)
-- [ ] **PAGE-02**: Accounts page stacks account cards vertically with no horizontal overflow on mobile
-- [ ] **PAGE-03**: Reports page charts render readable at 375px width with simplified axis labels if needed
-- [ ] **PAGE-04**: Chat page input bar is fixed above the bottom tab bar on mobile with safe area inset
-- [ ] **PAGE-05**: Categories page drag handles meet 44px tap target on mobile
-- [ ] **PAGE-06**: Rules page displays rules as cards instead of table rows on mobile
-
-## v2.1 Requirements (Shipped)
-
-<details>
-<summary>Deployment Hardening — 16 requirements</summary>
-
-### Production Build
-
-- [x] **BUILD-01**: Server runs from compiled JavaScript (tsc output), not TypeScript source
-- [x] **BUILD-02**: Client static files are served by Express in production (single process, no nginx)
-- [x] **BUILD-03**: SPA catch-all route serves index.html for all client-side routes
-- [x] **BUILD-04**: Environment variables load via Node 20 native `--env-file` flag (no dotenv)
-
-### Process Management
-
-- [x] **PROC-01**: Server auto-restarts on crash via launchd KeepAlive (dict form: only on non-zero exit)
-- [x] **PROC-02**: Server starts automatically on user login via launchd RunAtLoad
-- [x] **PROC-03**: Restart throttle prevents rapid restart loops (ThrottleInterval: 10)
-- [x] **PROC-04**: Server plist uses correct node binary path for the target machine
-- [x] **PROC-05**: Backup plist runs compiled JS instead of tsx source
-
-### Deploy Scripts
-
-- [x] **DEPLOY-01**: `setup.sh` performs first-time install (build, copy plists, load services, health check)
-- [x] **DEPLOY-02**: `setup.sh` uses modern `launchctl bootstrap` instead of deprecated `launchctl load`
-- [x] **DEPLOY-03**: `deploy.sh` performs one-command update (git pull, install, build, restart)
-- [x] **DEPLOY-04**: Deploy scripts validate the node binary path before installing plists
-- [x] **DEPLOY-05**: `.env` existence is verified before starting the server
-
-### Directory Layout
-
-- [x] **DIR-01**: All deployment config co-located in `deploy/` directory
-- [x] **DIR-02**: Server and backup plists both live in `deploy/` (backup plist moved from repo root)
-
-</details>
+- [ ] **NAV-01**: Import page is accessible at `/import` route
+- [ ] **NAV-02**: "Import" link appears in desktop navigation bar
+- [ ] **NAV-03**: "Import" appears in mobile "More" bottom sheet
 
 ## Future Requirements
 
-### Progressive Web App
+Deferred to later release. Tracked but not in current roadmap.
 
-- **PWA-01**: App can be installed to home screen via manifest
-- **PWA-02**: App works offline with cached data
+### Extended Import
 
-### Advanced Mobile UX
-
-- **UX-01**: Swipe-to-reveal actions on transaction cards
-- **UX-02**: Virtualized transaction list for large datasets
-- **UX-03**: Sync status badge on Dashboard tab icon
+- **EXTI-01**: Support multiple CSV formats with a format selector dropdown
+- **EXTI-02**: Import history log with timestamp, filename, and row counts
+- **EXTI-03**: Inline account creation during import mapping step
+- **EXTI-04**: CSV export of transaction data
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| PWA / offline mode | Service worker caching incompatible with live financial data on LAN server |
-| Swipe navigation between pages | Gesture conflicts with scroll; complex state coordination |
-| Pull-to-refresh | Conflicts with iOS Safari native pull-to-refresh |
-| Pinch-to-zoom on charts | Recharts doesn't support it; date range selector is sufficient |
-| Infinite scroll | Not needed at this data scale (~hundreds of transactions) |
-| Native mobile app | Web-only, accessed via Safari on private network |
+| Generic column mapping UI | Only Monarch format needed; add format selector if second source appears |
+| Tag import | Minerva has no tag system; Tags column silently ignored |
+| Balance history import | Minerva calculates balances from transactions; historical snapshots would be incomplete |
+| Undo/rollback import | Clear preview/confirmation prevents wrong imports; date-range filter+delete as manual fallback |
+| OFX/QFX/QIF format support | YAGNI — user migrating from Monarch which exports CSV |
+| Streaming/chunked upload | Monarch exports typically < 10K rows; standard file upload sufficient |
+| Category creation during import | Requires group assignment and sort ordering — user creates beforehand via Categories page |
 
 ## Traceability
 
-Which phases cover which requirements. Updated during roadmap creation.
+Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| NAV-01 | Phase 21 | Not Started |
-| NAV-02 | Phase 21 | Not Started |
-| NAV-03 | Phase 21 | Not Started |
-| NAV-04 | Phase 21 | Not Started |
-| NAV-05 | Phase 21 | Not Started |
-| LAYOUT-01 | Phase 21 | Not Started |
-| LAYOUT-02 | Phase 21 | Not Started |
-| LAYOUT-03 | Phase 21 | Not Started |
-| LAYOUT-04 | Phase 21 | Not Started |
-| LAYOUT-05 | Phase 21 | Not Started |
-| TOUCH-01 | Phase 21 | Not Started |
-| TXN-01 | Phase 22 | Not Started |
-| TXN-02 | Phase 22 | Not Started |
-| TXN-03 | Phase 22 | Not Started |
-| TXN-04 | Phase 22 | Not Started |
-| TXN-05 | Phase 22 | Not Started |
-| TOUCH-02 | Phase 22 | Not Started |
-| BUD-01 | Phase 23 | Complete |
-| BUD-02 | Phase 23 | Complete |
-| BUD-03 | Phase 23 | Complete |
-| BUD-04 | Phase 23 | Complete |
-| BUD-05 | Phase 23 | Complete |
-| MODAL-01 | Phase 24 | Complete |
-| MODAL-02 | Phase 24 | Complete |
-| MODAL-03 | Phase 24 | Complete |
-| MODAL-04 | Phase 24 | Complete |
-| MODAL-05 | Phase 24 | Complete |
-| TOUCH-03 | Phase 24 | Complete |
-| PAGE-01 | Phase 25 | Not Started |
-| PAGE-02 | Phase 25 | Not Started |
-| PAGE-03 | Phase 25 | Not Started |
-| PAGE-04 | Phase 25 | Not Started |
-| PAGE-05 | Phase 25 | Not Started |
-| PAGE-06 | Phase 25 | Not Started |
+| CSV-01 | — | Pending |
+| CSV-02 | — | Pending |
+| CSV-03 | — | Pending |
+| CSV-04 | — | Pending |
+| CSV-05 | — | Pending |
+| MAP-01 | — | Pending |
+| MAP-02 | — | Pending |
+| MAP-03 | — | Pending |
+| MAP-04 | — | Pending |
+| MAP-05 | — | Pending |
+| IMP-01 | — | Pending |
+| IMP-02 | — | Pending |
+| IMP-03 | — | Pending |
+| IMP-04 | — | Pending |
+| IMP-05 | — | Pending |
+| UI-01 | — | Pending |
+| UI-02 | — | Pending |
+| UI-03 | — | Pending |
+| UI-04 | — | Pending |
+| UI-05 | — | Pending |
+| NAV-01 | — | Pending |
+| NAV-02 | — | Pending |
+| NAV-03 | — | Pending |
 
 **Coverage:**
-- v2.2 requirements: 34 total
-- Mapped to phases: 34
-- Unmapped: 0
+- v2.3 requirements: 23 total
+- Mapped to phases: 0
+- Unmapped: 23 ⚠️
 
 ---
-*Requirements defined: 2026-03-23*
-*Last updated: 2026-03-23 after initial definition*
+*Requirements defined: 2026-03-24*
+*Last updated: 2026-03-24 after initial definition*
