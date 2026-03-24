@@ -55,7 +55,7 @@ export default function RulesPage() {
         {!showForm && !editingRule && (
           <button
             onClick={() => setShowForm(true)}
-            className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+            className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 max-md:min-h-[44px]"
           >
             Create Rule
           </button>
@@ -118,7 +118,8 @@ export default function RulesPage() {
       {!rules || rules.length === 0 ? (
         <p className="text-gray-500">No rules created yet. Create your first rule to auto-categorize transactions.</p>
       ) : (
-        <div className="overflow-x-auto">
+        <>
+        <div className="overflow-x-auto max-md:hidden">
           <table className="w-full border-collapse">
             <thead>
               <tr className="bg-gray-100 text-left text-sm font-semibold text-gray-700">
@@ -154,6 +155,34 @@ export default function RulesPage() {
             </tbody>
           </table>
         </div>
+
+        {/* Mobile card list */}
+        <div className="md:hidden space-y-3">
+          {rules.map(rule => (
+            <div key={rule.id} className="bg-white rounded-lg border border-gray-200 p-4">
+              <div className="flex items-start justify-between mb-1">
+                <span className="font-medium text-sm">{rule.name}</span>
+                <span className="text-xs bg-gray-100 text-gray-600 rounded px-2 py-0.5 ml-2 flex-shrink-0">
+                  Score: {rule.specificityScore}
+                </span>
+              </div>
+              <p className="text-xs text-gray-600 mb-1">{formatConditions(rule)}</p>
+              <p className="text-xs text-gray-400 mb-3">{'\u2192'} {rule.categoryName}</p>
+              <div className="flex gap-3 border-t border-gray-100 pt-2">
+                <button
+                  onClick={() => setEditingRule(rule)}
+                  className="text-blue-600 text-sm min-h-[44px] px-2"
+                >
+                  Edit
+                </button>
+                <InlineConfirm message={`Delete rule "${rule.name}"?`} onConfirm={() => deleteMut.mutate({ id: rule.id })}>
+                  <button className="text-red-600 text-sm min-h-[44px] px-2">Delete</button>
+                </InlineConfirm>
+              </div>
+            </div>
+          ))}
+        </div>
+        </>
       )}
     </div>
   );
