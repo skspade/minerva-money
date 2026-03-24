@@ -7,6 +7,38 @@ import { formatCurrency } from '../lib/format';
 
 type WizardStep = 'upload' | 'preview' | 'results';
 
+// --- Skip Support Helpers ---
+
+export const SKIP_SENTINEL = '__SKIP__';
+
+export function isAccountResolved(value: string): boolean {
+  return value !== '' && value.length > 0;
+}
+
+export function filterSkippedAccounts(mappings: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(mappings).filter(([, v]) => v !== SKIP_SENTINEL)
+  );
+}
+
+export function getValidationState(
+  accounts: { csvName: string }[],
+  mappings: Record<string, string>
+): { canContinue: boolean; message: string | null } {
+  if (accounts.length === 0) {
+    return { canContinue: false, message: null };
+  }
+  const hasUndecided = accounts.some(a => !isAccountResolved(mappings[a.csvName] ?? ''));
+  if (hasUndecided) {
+    return { canContinue: false, message: 'All accounts must be mapped or skipped before continuing' };
+  }
+  const allSkipped = accounts.every(a => mappings[a.csvName] === SKIP_SENTINEL);
+  if (allSkipped) {
+    return { canContinue: false, message: 'At least one account must be mapped to import' };
+  }
+  return { canContinue: true, message: null };
+}
+
 export default function ImportPage() {
   const trpc = useTRPC();
 
