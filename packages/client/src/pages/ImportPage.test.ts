@@ -4,6 +4,7 @@ import {
   isAccountResolved,
   filterSkippedAccounts,
   getValidationState,
+  computeSkipFilterStats,
 } from './ImportPage';
 
 describe('isAccountResolved', () => {
@@ -92,5 +93,49 @@ describe('getValidationState', () => {
     const mappings = { Checking: 'acct-1', Savings: 'acct-2' };
     const result = getValidationState(accounts, mappings);
     expect(result).toEqual({ canContinue: true, message: null });
+  });
+});
+
+describe('computeSkipFilterStats', () => {
+  it('returns empty set and zero count when no accounts are skipped', () => {
+    const result = computeSkipFilterStats({}, { Checking: 10 });
+    expect(result.skippedAccountNames.size).toBe(0);
+    expect(result.skippedRowCount).toBe(0);
+  });
+
+  it('identifies skipped accounts and sums their row counts', () => {
+    const result = computeSkipFilterStats(
+      { Checking: SKIP_SENTINEL, Savings: 'acct-1' },
+      { Checking: 10, Savings: 5 }
+    );
+    expect(result.skippedAccountNames).toEqual(new Set(['Checking']));
+    expect(result.skippedRowCount).toBe(10);
+  });
+
+  it('sums row counts for multiple skipped accounts', () => {
+    const result = computeSkipFilterStats(
+      { A: SKIP_SENTINEL, B: SKIP_SENTINEL },
+      { A: 3, B: 7 }
+    );
+    expect(result.skippedAccountNames).toEqual(new Set(['A', 'B']));
+    expect(result.skippedRowCount).toBe(10);
+  });
+
+  it('handles missing rowCount gracefully (defaults to 0)', () => {
+    const result = computeSkipFilterStats(
+      { A: SKIP_SENTINEL },
+      {}
+    );
+    expect(result.skippedAccountNames).toEqual(new Set(['A']));
+    expect(result.skippedRowCount).toBe(0);
+  });
+
+  it('does not treat empty string (undecided) as skipped', () => {
+    const result = computeSkipFilterStats(
+      { A: '', B: 'acct-1' },
+      { A: 5, B: 10 }
+    );
+    expect(result.skippedAccountNames.size).toBe(0);
+    expect(result.skippedRowCount).toBe(0);
   });
 });

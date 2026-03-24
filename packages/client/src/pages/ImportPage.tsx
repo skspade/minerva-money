@@ -39,6 +39,20 @@ export function getValidationState(
   return { canContinue: true, message: null };
 }
 
+export function computeSkipFilterStats(
+  accountMappings: Record<string, string>,
+  rowCountByAccount: Record<string, number>
+): { skippedAccountNames: Set<string>; skippedRowCount: number } {
+  const skippedAccountNames = new Set(
+    Object.entries(accountMappings)
+      .filter(([, v]) => v === SKIP_SENTINEL)
+      .map(([k]) => k)
+  );
+  const skippedRowCount = [...skippedAccountNames]
+    .reduce((sum, name) => sum + (rowCountByAccount[name] ?? 0), 0);
+  return { skippedAccountNames, skippedRowCount };
+}
+
 export default function ImportPage() {
   const trpc = useTRPC();
 
