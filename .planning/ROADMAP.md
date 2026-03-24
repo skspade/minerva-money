@@ -59,7 +59,8 @@ Full details: see Phase Details below
 
 - [x] **Phase 21: Layout Foundation** - Bottom tab bar, Sheet component, viewport/safe area fixes, Layout.tsx mobile padding (completed 2026-03-24)
 - [x] **Phase 22: Transaction Cards** - Mobile card layout, filter collapse, CategoryPicker tap-to-change (1 plan) (completed 2026-03-24)
-- [ ] **Phase 23: Budget Cards** - Stacked category cards, progress bars, inline allocation editing
+- [ ] **Phase 23: Budget Cards** - Stacked category cards, progress bars, inline allocation editing (1 plan)
+    - [ ] 23-01-PLAN.md — Extract AllocationCell, create BudgetCategoryCard, add mobile cards + responsive month selector
 - [ ] **Phase 24: Modal Conversions** - SplitModal, ManualTransactionForm, RuleForm, ManualLinkModal as bottom sheets
 - [ ] **Phase 25: Remaining Pages** - Dashboard, Accounts, Reports, Chat, Categories, Rules mobile polish
 
@@ -101,7 +102,8 @@ Full details: see Phase Details below
   2. Each card shows category name, color-coded progress bar (green/yellow/red), spent/budgeted amounts, and remaining
   3. Tapping a budget card expands inline editing for the allocation amount
   4. The month selector is full-width with left/right navigation arrows on mobile
-**Plans**: TBD
+**Plans**: 1 plan
+  - [ ] 23-01-PLAN.md — Extract AllocationCell, create BudgetCategoryCard, mobile card section + responsive month selector
 
 ### Phase 24: Modal Conversions
 **Goal**: Convert desktop-centered modals to full-screen bottom sheets on mobile with drag-to-dismiss and backdrop tap to close
