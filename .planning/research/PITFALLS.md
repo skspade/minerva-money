@@ -1,192 +1,165 @@
-# Pitfalls Research
+# Domain Pitfalls
 
-**Domain:** Adding account skip/filter to existing CSV import system
+**Domain:** Adding model selector and category creation tools to existing Claude Agent SDK chat system
 **Researched:** 2026-03-24
-**Confidence:** HIGH (based on direct code analysis of existing import-service.ts and ImportPage.tsx)
 
 ## Critical Pitfalls
 
-### Pitfall 1: Dedup Stats Counting Skipped Accounts as "New"
+Mistakes that cause rewrites or major issues.
 
-**What goes wrong:**
-The current `previewImport` code (import-service.ts lines 320-328) counts rows with unmapped accounts as "new" (`newCount++`). When a user skips an account, those rows inflate the "new transactions" count shown in preview and confirmation, making the user think they are importing more transactions than they actually will.
+### Pitfall 1: Model Change Breaks Active Session
 
-**Why it happens:**
-The existing logic treats "no mapping" and "skip" identically. The `accountIdMap` will not have an entry for skipped accounts, so they fall through to the `!entry.hasMappedAccount` branch which increments `newCount`. This was correct when unmapped meant "not yet selected" but becomes wrong when unmapped means "deliberately excluded."
+**What goes wrong:** The Claude Agent SDK `query()` function accepts a `model` parameter and the current code stores a `sessionId` for conversation continuity. If the user switches models mid-conversation (e.g., Haiku to Opus), the session was initialized with the previous model. Passing a different model to `resume` with an existing `sessionId` may cause the SDK to either error or silently ignore the model change, leading to confusing behavior where the user thinks they switched but the old model is still responding.
 
-**How to avoid:**
-Distinguish three account states in the client-side stats recalculation: (1) mapped to a real account, (2) explicitly skipped, (3) not yet selected. Only count mapped rows toward newCount/duplicateCount. Skipped rows should be excluded entirely from dedup stats. The client must recompute these counts by filtering `previewResult` data based on current mapping state, since the server preview does not know about skip decisions.
+**Why it happens:** The `agent-service.ts` hardcodes `model: 'claude-sonnet-4-20250514'` in the options object and passes `resume: sessionId` for continuity. Sessions in the Claude Agent SDK are bound to configuration at creation time. The model is part of that configuration.
 
-**Warning signs:**
-Preview summary shows more "new transactions" than expected after skipping an account. The confirmation page numbers do not add up (new + duplicates != non-skipped valid rows).
+**Consequences:** User selects Opus expecting higher quality answers but still gets Sonnet responses. Or the SDK throws an error and the conversation breaks entirely. Either outcome destroys trust in the model selector feature.
 
-**Phase to address:**
-Client-side stats filtering phase.
+**Prevention:** When the model changes, clear the `sessionId` and start a fresh session. The client should detect model changes and reset. Specifically:
+1. Store the `selectedModel` alongside `sessionId` in ChatPage state
+2. When the user changes the model dropdown, call `setSessionId(undefined)` to force a new session
+3. Optionally show a subtle indicator that "switching models starts a new conversation"
 
----
+**Detection:** Test by switching models mid-conversation and verifying the response headers or behavior match the newly selected model. Check if the SDK throws when resuming a session with a different model parameter.
 
-### Pitfall 2: Server executeImport Throws on Unmapped Accounts
+**Phase:** Must be addressed in the model selector phase, not deferred.
 
-**What goes wrong:**
-The current `executeImport` function (import-service.ts lines 362-366) explicitly throws: `throw new Error('Unmapped accounts: ...')`. If the client sends `accountMappings` that excludes skipped accounts, the server rejects the entire import.
+### Pitfall 2: Duplicate Category Names Without Database Constraint
 
-**Why it happens:**
-The original design required all accounts to be mapped as a safety check. Adding a "skip" option to the dropdown without updating server validation causes a hard crash on execute.
+**What goes wrong:** The `categories` and `category_groups` tables have NO UNIQUE constraint on `name` (confirmed in `001-initial-schema.sql`). The existing `createCategory` and `createGroup` service functions perform no duplicate checking -- they just INSERT. If the agent creates a category that already exists, you get two "Groceries" categories with different IDs, causing budget confusion, incorrect spending reports, and rules pointing to the wrong one.
 
-**How to avoid:**
-Change the server validation to check that every CSV account is either mapped to a real account ID OR absent from the mappings (meaning skipped). The key insight: the client should NOT send skipped accounts in accountMappings at all. The server should filter `validTransformed` to only include rows whose `accountName` exists in `accountMappings`, then skip the rest. Replace the unmapped-accounts error with a filter step that counts filtered rows for the result.
+**Why it happens:** The original UI-driven category creation likely relied on the user visually checking for duplicates. The agent has no such visual context. When a user says "create a Groceries category," the agent will blindly call `createCategory` without checking if one already exists. The LLM might sometimes check via `list_categories` first, but system prompt instructions are not reliable enforcement.
 
-**Warning signs:**
-Import button triggers a server error with "Unmapped accounts" message.
+**Consequences:** Duplicate categories corrupt the data model silently. Transactions split across two identically-named categories. Budget allocations on the wrong one. Spending reports show misleading numbers. Cleanup requires manual SQL or careful UI work to merge.
 
-**Phase to address:**
-Server-side execute changes phase -- must be done before or simultaneously with client UI changes.
+**Prevention:** Duplicate validation MUST be in the tool implementation, not in the system prompt. The `create_category` and `create_category_group` tool handlers must:
+1. Query existing categories/groups by name (case-insensitive: `WHERE LOWER(name) = LOWER(?)`)
+2. If a match exists, return an error result like `"Category 'Groceries' already exists (id: 5) in group 'Monthly Bills'"`
+3. Include the existing ID so the agent can suggest using the existing one instead
 
----
+**Detection:** Unit test that calls `create_category` twice with the same name and verifies the second call returns an error, not a new row.
 
-### Pitfall 3: allAccountsMapped Gate Logic Blocks Import When Accounts Are Skipped
+**Phase:** Must be addressed in the category creation tool phase. This is the tool's primary validation concern.
 
-**What goes wrong:**
-The current gate check (ImportPage.tsx lines 105-107) requires every account to have a non-empty mapping: `previewResult.accounts.every((a) => accountMappings[a.csvName] && accountMappings[a.csvName] !== '')`. If the skip approach removes entries from accountMappings, this check blocks the Continue button. If a sentinel value like `"__skip__"` is used, it passes but must not leak to the server as an account ID.
+### Pitfall 3: Agent Creates Category Then Fails to Use It
 
-**Why it happens:**
-The original validation correctly enforced "all must be mapped." Adding skip without updating this gate means it either blocks valid skip scenarios or is removed entirely, losing protection against genuinely forgotten mappings.
+**What goes wrong:** A user says "Create a Pet Supplies category and categorize these three transactions under it." The agent creates the category (getting back a new ID), but then uses the wrong ID for subsequent `categorize_transaction` calls -- either hallucinating an ID or losing track of the returned ID across tool calls.
 
-**How to avoid:**
-Use a sentinel value for skip (e.g., `"__skip__"`) in the client-side accountMappings state. Update the gate to: every account must have a mapping that is either a real account ID or the skip sentinel. An empty string mapping is still "unmapped" and blocks import. Before sending to the server, strip skip-sentinel entries from accountMappings so the server only receives real mappings. This preserves the safety check while allowing skips.
+**Why it happens:** LLMs handle multi-step tool workflows imperfectly. The agent must: (1) create category, (2) read the returned ID from the tool result, (3) use that exact ID in subsequent tool calls. With `maxTurns: 10`, this is within bounds, but the model may confuse IDs if many categories exist.
 
-**Warning signs:**
-Continue button stays disabled after setting an account to "skip." Or: Continue button is enabled when an account has no mapping because the gate was loosened too much.
+**Consequences:** Transactions get categorized under the wrong category. The user asked for a specific workflow and got a silent miscategorization.
 
-**Phase to address:**
-Client skip dropdown phase -- the dropdown and gate logic must be updated together.
+**Prevention:**
+1. The `create_category` tool result must clearly return `{ success: true, id: 42, name: "Pet Supplies", groupId: 3 }` -- all identifying information
+2. System prompt should include guidance: "After creating a category, use the returned ID for any follow-up operations"
+3. Keep the tool result format simple and unambiguous (the current `jsonResult` pattern is fine for this)
+4. Consider returning the full category list after creation so the agent has fresh context
 
----
+**Detection:** Integration test: send a multi-step message like "create a Subscriptions category in Monthly Bills and categorize transaction X under it" and verify the transaction ends up in the correct new category.
 
-### Pitfall 4: Sample Rows and Row Counts Include Skipped Accounts
+**Phase:** Address in system prompt updates phase. The tool implementation naturally handles this if the return value is clear.
 
-**What goes wrong:**
-The `sampleRows` (import-service.ts line 333: `validTransformed.slice(0, 10)`) takes the first 10 rows regardless of account. If a skipped account dominates the first rows of the CSV, the sample table shows irrelevant transactions. Similarly, `totalRows`, `validRows`, and error counts include skipped accounts, making the summary misleading.
+## Moderate Pitfalls
 
-**Why it happens:**
-The server preview computes stats before account skip decisions exist. The preview response includes all data. The client must filter what it displays based on current mapping state.
+### Pitfall 4: Model Selector Leaks API Key Awareness to Client
 
-**How to avoid:**
-Client-side filtering of displayed data. When an account is set to "skip": (1) filter that account's rows out of displayed sample table, (2) subtract that account's row count from displayed totals, (3) exclude validation errors from skipped account rows from the error count. The server response stays unchanged -- the client applies the filter layer.
+**What goes wrong:** The model list endpoint returns model IDs (like `claude-haiku-3-5-20241022`) and the client sends the selected model back. Developers might be tempted to let the client specify arbitrary model strings, which could cause cryptic Anthropic API errors if the model string is malformed.
 
-**Warning signs:**
-Sample table shows only transactions from skipped accounts. Row counts do not match what the user expects to import.
+**Prevention:** Server-driven model list with a fixed allowlist. The tRPC endpoint returns `[{ id: "haiku", label: "Haiku (fast)", model: "claude-haiku-3-5-20241022" }]` and the client sends only the short `id` back. The server maps the `id` to the real model string. Never trust client-provided model identifiers directly.
 
-**Phase to address:**
-Client-side stats filtering phase.
+### Pitfall 5: Confirmation Flow Not Extended to Category Creation
 
----
+**What goes wrong:** The existing confirmation pattern (JSON block in response, parsed by `parseConfirmation` in ChatPage) is used for budget changes. Category creation is a write operation that creates persistent data. If the agent creates categories without confirmation, the user might get unwanted categories from ambiguous requests ("maybe I should add a category for that").
 
-### Pitfall 5: Confirm Summary Does Not Reflect Filtered Counts
+**Prevention:** Category and group creation should follow the same confirmation pattern as budget changes. Update the system prompt to require a confirmation block before calling `create_category` or `create_category_group`. The existing `parseConfirmation` function and confirm/cancel button UI already handle the generic pattern -- just need the system prompt rules and new `action` types like `"create_category"` and `"create_category_group"`.
 
-**What goes wrong:**
-The ResultsStep (ImportPage.tsx lines 477-527) shows `previewResult.dedupStats.newCount`, `previewResult.dedupStats.duplicateCount`, and `previewResult.errors.length` directly from the server response. These include skipped accounts. The user sees inflated numbers on the confirm page, then the actual import result shows fewer transactions.
+### Pitfall 6: Group ID Resolution Ambiguity
 
-**Why it happens:**
-The confirm summary reads from the unfiltered preview response. The server computed dedup stats before any skip decisions. If only the preview step is updated to filter displays but the confirm step still reads raw preview data, the numbers diverge.
+**What goes wrong:** When the user says "create a Coffee category," the agent needs to know which category group to put it in. If the agent guesses wrong (puts "Coffee" in "Income" instead of "Dining & Drinks"), the category ends up in the wrong group. The agent must first call `list_categories` to see the groups, then pick the right one.
 
-**How to avoid:**
-The confirm summary must use the same filtered stats as the preview step. Either: (1) compute filtered stats once and store them in component state when transitioning to confirm, or (2) derive filtered stats in both places from the same filtering function. The key point: `previewResult` is raw server data; display logic must always filter it through current skip state.
+**Prevention:**
+1. The `create_category` tool should require `groupId` as a parameter (not group name -- IDs are unambiguous)
+2. System prompt guidance: "Before creating a category, call list_categories to find the appropriate group. If the user doesn't specify a group, ask which group to use or suggest the most logical one"
+3. If the user says "add Coffee to Dining," the agent should resolve "Dining" to a group ID first
 
-**Warning signs:**
-"50 new transactions" on confirm page but only 30 actually imported. Numbers do not match between preview step and confirm step.
+### Pitfall 7: 30-Second Timeout Too Short for Opus
 
-**Phase to address:**
-Results step updates phase.
+**What goes wrong:** The current `agent-service.ts` has a 30-second timeout via `Promise.race`. Claude Opus is significantly slower than Sonnet, especially on complex multi-tool queries. If the user selects Opus and asks a complex question requiring multiple tool calls, the 30-second timeout fires and the user gets "Agent query timed out."
 
----
+**Why it happens:** The timeout was tuned for Sonnet. Opus can take 2-3x longer per response, and with `maxTurns: 10` allowing multiple sequential tool calls, total wall time can easily exceed 30 seconds.
 
-### Pitfall 6: Category Mappings for Skipped Accounts Clutter the UI
+**Prevention:** Scale the timeout based on the selected model:
+- Haiku: 30 seconds (fast, keep tight)
+- Sonnet: 45 seconds (current model, slight buffer)
+- Opus: 90 seconds (slower but higher quality)
 
-**What goes wrong:**
-Categories are derived from all valid rows (import-service.ts line 254). If a skipped account has unique category names (e.g., investment-specific categories like "Dividends & Capital Gains"), those categories still appear in the category mapping UI even though they will never be imported.
+Alternatively, use a single generous timeout (90s) since this is a single-user app with no resource contention concerns.
 
-**Why it happens:**
-The server preview does not know which accounts will be skipped. It returns all unique categories. The client displays all of them.
+### Pitfall 8: Mobile Dropdown Overlapping Chat Input
 
-**How to avoid:**
-Client-side: filter displayed categories based on which accounts are not skipped. If a category name only appears in rows from skipped accounts, hide it from the mapping UI. This requires the client to know which categories belong to which accounts, which means either: (1) filtering the sample/all rows by account and deriving category lists from non-skipped rows, or (2) having the server return per-account category breakdowns. Option 1 is simpler but the client only has sample rows, not all rows. A reasonable approach: do not filter categories in the first version -- extra category mappings are harmless (unused). Polish this in a future iteration.
+**What goes wrong:** Adding a model selector dropdown above the chat input bar on mobile creates layout issues. The `ChatPage` uses `h-[calc(100dvh-56px)]` for full-height layout with a flex column. Adding another element between the message area and input bar compresses the message area or causes the dropdown to overlap with the keyboard on mobile Safari.
 
-**Warning signs:**
-Category mapping section shows categories that will never be used.
+**Prevention:** Use a native `<select>` element for mobile (not a custom dropdown). Place it in a thin bar above the textarea, within the existing input bar `<div>`. Keep it compact -- just the select element, no labels. The `pb-[max(0.75rem,env(safe-area-inset-bottom))]` safe area handling should still work since the select is inside the existing input container.
 
-**Phase to address:**
-Client-side stats filtering phase -- lower priority, acceptable to defer.
+## Minor Pitfalls
 
----
+### Pitfall 9: System Prompt Bloat from New Tool Guidance
 
-## Technical Debt Patterns
+**What goes wrong:** Adding behavioral guidance for two new tools (create_category, create_category_group) plus model-specific instructions inflates the system prompt. The current prompt is well-structured at ~47 lines. Adding too much text degrades the LLM's ability to follow all instructions consistently.
 
-| Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
-|----------|-------------------|----------------|-----------------|
-| Using empty string `""` as skip sentinel | No new constant needed | Ambiguous with "not selected" state, causes gate logic bugs | Never -- use explicit sentinel like `"__skip__"` |
-| Filtering only on client, not adjusting server preview | No server code changes for preview | Server preview stats are misleading, client must always re-compute | Acceptable for v2.4 -- server does not know skip state at preview time |
-| Not filtering categories for skipped accounts | Faster to ship, no harm done | Confusing UI showing irrelevant category mappings | Acceptable for v2.4, polish later |
-| Removing the unmapped accounts server validation entirely | Quick fix for the throw error | Loses safety net for genuinely forgotten mappings | Never -- the server should still validate that all accounts in the mappings dict exist as real account IDs |
+**Prevention:** Keep new instructions to 3-5 lines maximum. Rely on tool descriptions for usage guidance (the existing pattern -- tool descriptions are already detailed). Only add system prompt rules for behavior that cannot be encoded in the tool itself (like the confirmation requirement).
 
-## Integration Gotchas
+### Pitfall 10: TanStack Query Cache Stale After Category Creation
 
-| Integration | Common Mistake | Correct Approach |
-|-------------|----------------|------------------|
-| Server execute validation | Removing the unmapped accounts check entirely instead of changing it to allow missing (skipped) accounts | Change from "all accounts must be in mappings" to "all accounts in mappings must have valid account IDs." Accounts not in mappings are skipped |
-| Dedup hash computation | Skipped account rows still generate dedup hashes for stats | Only compute hashes for rows whose account is in accountMappings. Skip rows with no mapping |
-| Post-import hooks (rules, transfers) | Worrying that skipped rows affect rules engine or transfer detection | Not a real risk -- skipped rows never reach INSERT, so `newTransactionIds` naturally excludes them. No code change needed in post-import hooks |
-| tRPC schema validation | Thinking the Zod schema needs changes to accept a skip value | accountMappings is `z.record(z.string(), z.string())` -- if client strips skip entries before sending, no schema change needed |
+**What goes wrong:** If the user creates a category via the chat agent, other pages (BudgetPage, CategoriesPage, TransactionsPage) that use TanStack Query to fetch categories will show stale data until manually refreshed. The user creates "Pet Supplies" in chat, navigates to the Budget page, and it is not there.
 
-## UX Pitfalls
+**Prevention:** The chat mutation's `onSuccess` handler should invalidate category-related queries. Simplest approach: invalidate category queries on every chat response (cheap since it is a single-user app with fast SQLite reads). This avoids needing to parse the response to detect whether a category was created.
 
-| Pitfall | User Impact | Better Approach |
-|---------|-------------|-----------------|
-| Skip option buried at bottom of account dropdown | User cannot find it among many account options | Put "Skip -- do not import" as the first option after the placeholder, visually distinct with a separator or different styling |
-| No per-account row count shown | User does not understand the impact of skipping an account | Show row count next to each account name (e.g., "Savings (342 rows)") so the user sees the magnitude |
-| No warning when skipping high-row-count account | User accidentally skips their primary checking account | Consider a soft warning if a skipped account has more rows than any non-skipped account |
-| Confirm summary does not list skipped accounts | User forgets which accounts they skipped, confused by lower numbers than expected | Add a "Skipped accounts" line to the confirm summary listing excluded accounts and their row counts |
-| No way to quickly "skip all" or "unskip all" | Tedious when CSV has many accounts and user only wants one or two | Add "Skip all unmatched" button if there are more than 3 unmapped accounts |
+### Pitfall 11: Model List Endpoint Hardcoded and Stale
+
+**What goes wrong:** Anthropic periodically releases new model versions and deprecates old ones. If the model list is hardcoded in the server, deploying an update is required to add new models.
+
+**Prevention:** This is acceptable for a single-user home server app -- just update the list when deploying. Do not over-engineer with dynamic model discovery from the Anthropic API. A simple array constant in a config file is sufficient and easy to update.
+
+## Phase-Specific Warnings
+
+| Phase Topic | Likely Pitfall | Mitigation |
+|-------------|---------------|------------|
+| Model selector endpoint | Pitfall 4: Client sends raw model string | Server-side allowlist, client sends short ID only |
+| Model selector UI | Pitfall 8: Mobile layout breakage | Native `<select>`, inside existing input bar container |
+| Model switching behavior | Pitfall 1: Session bound to old model | Clear sessionId on model change |
+| Model switching behavior | Pitfall 7: Opus timeout | Scale timeout per model or use generous default |
+| Category creation tool | Pitfall 2: Duplicate names | Validate in tool handler, case-insensitive check |
+| Category creation tool | Pitfall 6: Wrong group assignment | Require groupId parameter, prompt guides agent to look up groups first |
+| Category creation confirmation | Pitfall 5: No confirmation for creates | Extend existing confirmation pattern to new tools |
+| System prompt updates | Pitfall 9: Prompt bloat | Minimal additions, lean on tool descriptions |
+| System prompt updates | Pitfall 3: ID tracking across tool calls | Clear return values, brief prompt guidance |
+| Post-creation UX | Pitfall 10: Stale cache on other pages | Invalidate category queries after chat responses |
 
 ## "Looks Done But Isn't" Checklist
 
-- [ ] **Skip sentinel flow:** Trace that `"__skip__"` in client state is stripped before sending to server -- it must never appear as an account_id in an INSERT
-- [ ] **Dedup math:** Verify new + duplicate == non-skipped valid rows (the math must add up in preview, confirm, and results)
-- [ ] **Gate logic:** Verify skip enables Continue button, empty string blocks it, and a real account ID enables it
-- [ ] **Sample rows:** Verify sample table filters out skipped account rows dynamically as user changes mappings
-- [ ] **Server validation:** Verify server accepts accountMappings that omit skipped accounts without throwing
-- [ ] **Error filtering:** Verify that validation errors from skipped account rows are excluded from displayed error count
-- [ ] **Results page:** Verify "X transactions imported" plus "Y duplicates skipped" plus "Z rows filtered (skipped accounts)" == total valid rows
-- [ ] **Edge case -- all accounts skipped:** Verify graceful handling when user skips every account (should block import with a clear message, not import 0 rows silently)
-- [ ] **Edge case -- single account:** Verify the skip option is available even when there is only one CSV account (user may want to abort gracefully)
-
-## Recovery Strategies
-
-| Pitfall | Recovery Cost | Recovery Steps |
-|---------|---------------|----------------|
-| Skip sentinel leaked to server as account_id | LOW | Foreign key constraint on `account_id` catches this -- INSERT fails, transaction rolls back. No data corruption possible |
-| Dedup stats wrong (cosmetic only) | LOW | Fix counting logic, redeploy. No data impact |
-| Gate logic too permissive (unmapped account imported to wrong place) | HIGH | Wrong account_id on transactions. Must identify affected rows (by import batch or date range) and delete. Re-import after fix |
-| Confirm summary showed wrong numbers | LOW | Cosmetic only. Actual import was correct, just the preview was misleading |
-
-## Pitfall-to-Phase Mapping
-
-| Pitfall | Prevention Phase | Verification |
-|---------|------------------|--------------|
-| Dedup stats counting skipped as new | Client-side stats filtering | Filtered new + duplicate counts exclude skipped rows; sum matches non-skipped valid rows |
-| Server throws on unmapped accounts | Server-side execute changes | Import succeeds with skipped accounts; skipped rows absent from DB |
-| Gate logic blocks skip | Client skip dropdown | Continue button enabled with skip selections; disabled with empty/unselected |
-| Sample rows include skipped accounts | Client-side stats filtering | Toggling skip removes/adds rows from sample table dynamically |
-| Confirm summary shows unfiltered stats | Results step updates | Confirm summary numbers match actual import outcome |
-| Category mappings for skipped accounts | Client-side stats filtering (low priority) | Categories unique to skipped accounts hidden; or deferred as acceptable tech debt |
+- [ ] **Session reset on model change:** Verify switching the dropdown clears sessionId and starts a fresh conversation
+- [ ] **Timeout scaling:** Verify Opus queries do not hit the 30s timeout on multi-tool requests
+- [ ] **Duplicate category rejection:** Call create_category with an existing name and verify error response (not a second row)
+- [ ] **Case-insensitive duplicate check:** "groceries" vs "Groceries" should be caught as duplicate
+- [ ] **Group-scoped duplicate check:** Same category name in different groups is valid (e.g., "Other" in multiple groups)
+- [ ] **Confirmation flow for creates:** Verify the agent emits a confirmation JSON block before creating a category
+- [ ] **New category ID propagation:** Create category then use it in same conversation -- verify correct ID used
+- [ ] **Mobile layout:** Test model selector on mobile Safari with keyboard open -- no layout shift or overlap
+- [ ] **Cache invalidation:** Create category via chat, navigate to Categories page, verify it appears without manual refresh
+- [ ] **Model allowlist enforcement:** Send an invalid model ID from client, verify server rejects with clear error
 
 ## Sources
 
-- Direct code analysis: `packages/server/src/import/import-service.ts` -- dedup stats loop (lines 284-338), unmapped validation (lines 361-366), INSERT logic (lines 369-434)
-- Direct code analysis: `packages/client/src/pages/ImportPage.tsx` -- gate check (lines 105-107), confirm summary (lines 477-527), sample rows display (lines 340-365)
-- Direct code analysis: `packages/server/src/import/import-router.ts` -- Zod schema for execute input (z.record for accountMappings)
-- Project requirements: `.planning/PROJECT.md` (v2.4 milestone definition, lines 42-51)
+- Direct code analysis: `packages/server/src/agent/agent-service.ts` -- session handling (line 33: `resume: sessionId`), model config (line 23: hardcoded model), timeout (line 42: 30s)
+- Direct code analysis: `packages/server/src/agent/tools/action-tools.ts` -- existing tool patterns, validation approach, `categoryExists` helper
+- Direct code analysis: `packages/server/src/categories/category-service.ts` -- `createCategory` and `createGroup` have no duplicate checking
+- Direct code analysis: `packages/server/migrations/001-initial-schema.sql` -- no UNIQUE constraint on category/group names
+- Direct code analysis: `packages/client/src/pages/ChatPage.tsx` -- confirmation parsing (`parseConfirmation`), session state, layout structure, safe-area handling
+- Direct code analysis: `packages/server/src/agent/system-prompt.ts` -- current prompt size (~47 lines), confirmation pattern for budget changes
+- Claude Agent SDK behavior: session-model binding is based on training knowledge (MEDIUM confidence -- verify with SDK docs during implementation)
+- Opus latency characteristics: based on general knowledge of model speed differences (HIGH confidence)
 
 ---
-*Pitfalls research for: CSV import account filtering/skip capability (v2.4)*
+*Pitfalls research for: Chat enhancements -- model selector and category creation tools (v2.5)*
 *Researched: 2026-03-24*
