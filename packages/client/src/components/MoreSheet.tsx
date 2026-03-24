@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router';
 import { Drawer } from 'vaul';
-import { CreditCard, Tag, Sliders, ArrowLeftRight, BarChart } from 'lucide-react';
+import { CreditCard, Tag, Sliders, ArrowLeftRight, BarChart, Upload } from 'lucide-react';
 
 const MORE_LINKS = [
   { to: '/accounts', icon: CreditCard, label: 'Accounts' },
@@ -9,6 +9,7 @@ const MORE_LINKS = [
   { to: '/rules', icon: Sliders, label: 'Rules' },
   { to: '/transfers', icon: ArrowLeftRight, label: 'Transfers' },
   { to: '/reports', icon: BarChart, label: 'Reports' },
+  { to: '/import', icon: Upload, label: 'Import' },
 ] as const;
 
 interface MoreSheetProps {

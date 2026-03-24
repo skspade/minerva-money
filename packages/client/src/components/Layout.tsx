@@ -84,6 +84,14 @@ export default function Layout() {
               >
                 Chat
               </NavLink>
+              <NavLink
+                to="/import"
+                className={({ isActive }) =>
+                  `px-3 py-1 rounded ${isActive ? 'bg-gray-700' : 'hover:bg-gray-800'}`
+                }
+              >
+                Import
+              </NavLink>
             </div>
           </div>
           <div className="flex items-center gap-3">
