@@ -1,6 +1,11 @@
 import { parse } from 'csv-parse/sync';
+import { randomUUID } from 'node:crypto';
+import type Database from 'better-sqlite3';
 import { toCents } from '@minerva/shared';
 import type { Cents } from '@minerva/shared';
+import { generateDedupHash } from '../sync/simplefin-client.js';
+import { categorizeNewTransactions } from '../rules/rules-service.js';
+import { detectTransferCandidates } from '../transfers/transfer-service.js';
 
 // --- Types ---
 
@@ -190,4 +195,243 @@ export function transformRow(row: RawCsvRow): TransformedRow {
     categoryName: (row.Category || '').trim(),
     accountName: (row.Account || '').trim(),
   };
+}
+
+// --- Preview & Execute Types ---
+
+export interface AccountMatch {
+  csvName: string;
+  suggestedId: string | null;
+  suggestedName: string | null;
+}
+
+export interface CategoryMatch {
+  csvName: string;
+  suggestedId: number | null;
+  suggestedName: string | null;
+}
+
+export interface PreviewResult {
+  totalRows: number;
+  validRows: number;
+  sampleRows: TransformedRow[];
+  errors: string[];
+  accounts: AccountMatch[];
+  categories: CategoryMatch[];
+  dedupStats: {
+    newCount: number;
+    duplicateCount: number;
+  };
+}
+
+export interface ExecuteResult {
+  importedCount: number;
+  skippedCount: number;
+  categorizedByRules: number;
+  categorizedFromCsv: number;
+}
+
+// --- Preview ---
+
+export function previewImport(db: Database.Database, csvText: string): PreviewResult {
+  const rawRows = parseCsv(csvText);
+  const allErrors: string[] = [];
+  const validTransformed: TransformedRow[] = [];
+
+  for (let i = 0; i < rawRows.length; i++) {
+    const rowNumber = i + 2; // 1-based, row 1 is header
+    const validation = validateRow(rawRows[i], rowNumber);
+    if (validation.valid) {
+      validTransformed.push(transformRow(rawRows[i]));
+    } else {
+      allErrors.push(...validation.errors!);
+    }
+  }
+
+  // Unique account names
+  const uniqueAccounts = [...new Set(validTransformed.map(r => r.accountName))];
+  // Unique category names (exclude empty)
+  const uniqueCategories = [...new Set(validTransformed.map(r => r.categoryName).filter(Boolean))];
+
+  // Auto-match accounts: case-insensitive substring
+  const dbAccounts = db.prepare('SELECT id, name FROM accounts').all() as { id: string; name: string }[];
+  const accountMatches: AccountMatch[] = uniqueAccounts.map(csvName => {
+    const csvLower = csvName.toLowerCase();
+    const match = dbAccounts.find(a => {
+      const dbLower = a.name.toLowerCase();
+      return dbLower.includes(csvLower) || csvLower.includes(dbLower);
+    });
+    return {
+      csvName,
+      suggestedId: match?.id ?? null,
+      suggestedName: match?.name ?? null,
+    };
+  });
+
+  // Auto-match categories: exact case-insensitive
+  const dbCategories = db.prepare('SELECT id, name FROM categories').all() as { id: number; name: string }[];
+  const categoryMatches: CategoryMatch[] = uniqueCategories.map(csvName => {
+    const csvLower = csvName.toLowerCase();
+    const match = dbCategories.find(c => c.name.toLowerCase() === csvLower);
+    return {
+      csvName,
+      suggestedId: match?.id ?? null,
+      suggestedName: match?.name ?? null,
+    };
+  });
+
+  // Dedup stats: compute hashes for rows with matched accounts
+  const accountIdMap = new Map(accountMatches.filter(a => a.suggestedId).map(a => [a.csvName, a.suggestedId!]));
+  let duplicateCount = 0;
+  let newCount = 0;
+
+  // Collect hashes for rows with matched accounts
+  const hashesToCheck: string[] = [];
+  const rowsWithHashes: { hash: string; hasMappedAccount: boolean }[] = [];
+
+  for (const row of validTransformed) {
+    const accountId = accountIdMap.get(row.accountName);
+    if (accountId) {
+      const hash = generateDedupHash(accountId, row.date, row.amount, row.payee);
+      hashesToCheck.push(hash);
+      rowsWithHashes.push({ hash, hasMappedAccount: true });
+    } else {
+      rowsWithHashes.push({ hash: '', hasMappedAccount: false });
+    }
+  }
+
+  // Batch-check existing hashes
+  const existingHashes = new Set<string>();
+  if (hashesToCheck.length > 0) {
+    // Process in chunks to avoid SQLite parameter limit
+    const CHUNK_SIZE = 500;
+    for (let i = 0; i < hashesToCheck.length; i += CHUNK_SIZE) {
+      const chunk = hashesToCheck.slice(i, i + CHUNK_SIZE);
+      const placeholders = chunk.map(() => '?').join(', ');
+      const rows = db.prepare(
+        `SELECT dedup_hash FROM transactions WHERE dedup_hash IN (${placeholders})`
+      ).all(...chunk) as { dedup_hash: string }[];
+      for (const r of rows) {
+        existingHashes.add(r.dedup_hash);
+      }
+    }
+  }
+
+  for (const entry of rowsWithHashes) {
+    if (!entry.hasMappedAccount) {
+      newCount++; // Conservative: unmapped accounts counted as new
+    } else if (existingHashes.has(entry.hash)) {
+      duplicateCount++;
+    } else {
+      newCount++;
+    }
+  }
+
+  return {
+    totalRows: rawRows.length,
+    validRows: validTransformed.length,
+    sampleRows: validTransformed.slice(0, 10),
+    errors: allErrors,
+    accounts: accountMatches,
+    categories: categoryMatches,
+    dedupStats: { newCount, duplicateCount },
+  };
+}
+
+// --- Execute ---
+
+export function executeImport(
+  db: Database.Database,
+  csvText: string,
+  accountMappings: Record<string, string>,
+  categoryMappings: Record<string, number>,
+): ExecuteResult {
+  // Parse and validate
+  const rawRows = parseCsv(csvText);
+  const validTransformed: TransformedRow[] = [];
+
+  for (let i = 0; i < rawRows.length; i++) {
+    const rowNumber = i + 2;
+    const validation = validateRow(rawRows[i], rowNumber);
+    if (validation.valid) {
+      validTransformed.push(transformRow(rawRows[i]));
+    }
+  }
+
+  // Validate all accounts are mapped
+  const uniqueAccounts = [...new Set(validTransformed.map(r => r.accountName))];
+  const unmappedAccounts = uniqueAccounts.filter(name => !accountMappings[name]);
+  if (unmappedAccounts.length > 0) {
+    throw new Error(`Unmapped accounts: ${unmappedAccounts.join(', ')}. All CSV accounts must be mapped before import.`);
+  }
+
+  // Execute atomically
+  const result = db.transaction(() => {
+    const txnStmt = db.prepare(`
+      INSERT OR IGNORE INTO transactions (id, account_id, date, amount, pending, payee, memo, dedup_hash)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    let importedCount = 0;
+    let skippedCount = 0;
+    const newTransactionIds: string[] = [];
+    const newTxnCategoryMap: Map<string, number> = new Map(); // txnId -> categoryId from CSV
+
+    for (const row of validTransformed) {
+      const accountId = accountMappings[row.accountName];
+      const dedupHash = generateDedupHash(accountId, row.date, row.amount, row.payee);
+      const txnId = randomUUID();
+
+      const info = txnStmt.run(
+        txnId, accountId, row.date, row.amount, 0, row.payee, row.memo, dedupHash,
+      );
+
+      if (info.changes > 0) {
+        importedCount++;
+        newTransactionIds.push(txnId);
+
+        // Track CSV category mapping for fallback
+        const categoryId = categoryMappings[row.categoryName];
+        if (categoryId !== undefined) {
+          newTxnCategoryMap.set(txnId, categoryId);
+        }
+      } else {
+        skippedCount++;
+      }
+    }
+
+    // Post-insert hooks
+    let categorizedByRules = 0;
+    let categorizedFromCsv = 0;
+
+    if (newTransactionIds.length > 0) {
+      // 1. Rules engine first
+      categorizeNewTransactions(db, newTransactionIds);
+
+      // 2. CSV category fallback — only for transactions still uncategorized after rules
+      const fallbackStmt = db.prepare(
+        `UPDATE transactions SET category_id = ? WHERE id = ? AND category_id IS NULL`
+      );
+      for (const [txnId, categoryId] of newTxnCategoryMap) {
+        const updateInfo = fallbackStmt.run(categoryId, txnId);
+        if (updateInfo.changes > 0) {
+          categorizedFromCsv++;
+        }
+      }
+
+      // Count rules-categorized: transactions with non-null rule_id
+      const placeholders = newTransactionIds.map(() => '?').join(', ');
+      const rulesCategorized = db.prepare(
+        `SELECT COUNT(*) as count FROM transactions WHERE id IN (${placeholders}) AND rule_id IS NOT NULL`
+      ).get(...newTransactionIds) as { count: number };
+      categorizedByRules = rulesCategorized.count;
+
+      // 3. Transfer detection
+      detectTransferCandidates(db, newTransactionIds);
+    }
+
+    return { importedCount, skippedCount, categorizedByRules, categorizedFromCsv };
+  })();
+
+  return result;
 }
