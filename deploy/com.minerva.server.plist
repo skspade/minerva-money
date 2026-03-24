@@ -18,7 +18,10 @@
 		<string>production</string>
 	</dict>
 	<key>KeepAlive</key>
-	<true/>
+	<dict>
+		<key>SuccessfulExit</key>
+		<false/>
+	</dict>
 	<key>RunAtLoad</key>
 	<true/>
 	<key>ThrottleInterval</key>
