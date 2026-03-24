@@ -12,6 +12,7 @@
     "@trpc/server": "^11.14.1",
     "better-sqlite3": "^11.7.0",
     "croner": "^10.0.1",
+    "csv-parse": "^5.6.0",
     "express": "^4.21.0",
     "zod": "^4.3.6"
   },
