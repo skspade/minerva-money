@@ -80,7 +80,7 @@ Full details: [milestones/v2.3-ROADMAP.md](milestones/v2.3-ROADMAP.md)
 ### v2.4 CSV Import Account Filtering (In Progress)
 
 - [x] **Phase 29: Server Skip Support** - Server accepts partial account mappings and provides per-account row counts (completed 2026-03-24)
-- [ ] **Phase 30: Client Skip UI** - Skip option in account mapping dropdown with visual styling and row count badges
+- [x] **Phase 30: Client Skip UI** - Skip option in account mapping dropdown with visual styling and row count badges (completed 2026-03-24)
 - [ ] **Phase 31: Stats Filtering and Polish** - Preview stats, sample rows, and results reflect skip decisions; bulk skip and summary banner
 
 ## Phase Details
@@ -165,5 +165,5 @@ Phases execute in numeric order: 29 → 30 → 31
 | 27. Import UI and Navigation | v2.3 | 2/2 | Complete | 2026-03-24 |
 | 28. Phase 26 Verification | v2.3 | 1/1 | Complete | 2026-03-24 |
 | 29. Server Skip Support | 1/1 | Complete    | 2026-03-24 | - |
-| 30. Client Skip UI | v2.4 | 0/? | Not started | - |
+| 30. Client Skip UI | 1/1 | Complete   | 2026-03-24 | - |
 | 31. Stats Filtering and Polish | v2.4 | 0/? | Not started | - |
