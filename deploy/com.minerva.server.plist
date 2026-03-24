@@ -6,16 +6,18 @@
 	<string>com.minerva.server</string>
 	<key>ProgramArguments</key>
 	<array>
-		<string>/Users/seanspade/.nvm/versions/node/v20.16.0/bin/node</string>
+		<string>/Users/seanspade/.nvm/versions/node/v22.19.0/bin/node</string>
 		<string>--env-file=.env</string>
 		<string>packages/server/dist/index.js</string>
 	</array>
 	<key>WorkingDirectory</key>
-	<string>/Users/seanspade/Documents/Source/minverva-money</string>
+	<string>/Users/seanspade/Documents/Source/minerva-money</string>
 	<key>EnvironmentVariables</key>
 	<dict>
 		<key>NODE_ENV</key>
 		<string>production</string>
+		<key>PATH</key>
+		<string>/Users/seanspade/.nvm/versions/node/v22.19.0/bin:/usr/local/bin:/usr/bin:/bin</string>
 	</dict>
 	<key>KeepAlive</key>
 	<dict>
