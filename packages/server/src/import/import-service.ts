@@ -218,6 +218,7 @@ export interface PreviewResult {
   errors: string[];
   accounts: AccountMatch[];
   categories: CategoryMatch[];
+  rowCountByAccount: Record<string, number>;
   dedupStats: {
     newCount: number;
     duplicateCount: number;
@@ -227,6 +228,7 @@ export interface PreviewResult {
 export interface ExecuteResult {
   importedCount: number;
   skippedCount: number;
+  skippedByAccountFilter: number;
   categorizedByRules: number;
   categorizedFromCsv: number;
 }
@@ -246,6 +248,12 @@ export function previewImport(db: Database.Database, csvText: string): PreviewRe
     } else {
       allErrors.push(...validation.errors!);
     }
+  }
+
+  // Per-account row counts (valid rows only)
+  const rowCountByAccount: Record<string, number> = {};
+  for (const row of validTransformed) {
+    rowCountByAccount[row.accountName] = (rowCountByAccount[row.accountName] || 0) + 1;
   }
 
   // Unique account names
@@ -334,6 +342,7 @@ export function previewImport(db: Database.Database, csvText: string): PreviewRe
     errors: allErrors,
     accounts: accountMatches,
     categories: categoryMatches,
+    rowCountByAccount,
     dedupStats: { newCount, duplicateCount },
   };
 }
@@ -358,13 +367,6 @@ export function executeImport(
     }
   }
 
-  // Validate all accounts are mapped
-  const uniqueAccounts = [...new Set(validTransformed.map(r => r.accountName))];
-  const unmappedAccounts = uniqueAccounts.filter(name => !accountMappings[name]);
-  if (unmappedAccounts.length > 0) {
-    throw new Error(`Unmapped accounts: ${unmappedAccounts.join(', ')}. All CSV accounts must be mapped before import.`);
-  }
-
   // Execute atomically
   const result = db.transaction(() => {
     const txnStmt = db.prepare(`
@@ -374,11 +376,16 @@ export function executeImport(
 
     let importedCount = 0;
     let skippedCount = 0;
+    let skippedByAccountFilter = 0;
     const newTransactionIds: string[] = [];
     const newTxnCategoryMap: Map<string, number> = new Map(); // txnId -> categoryId from CSV
 
     for (const row of validTransformed) {
       const accountId = accountMappings[row.accountName];
+      if (!accountId) {
+        skippedByAccountFilter++;
+        continue;
+      }
       const dedupHash = generateDedupHash(accountId, row.date, row.amount, row.payee);
       const txnId = randomUUID();
 
@@ -430,7 +437,7 @@ export function executeImport(
       detectTransferCandidates(db, newTransactionIds);
     }
 
-    return { importedCount, skippedCount, categorizedByRules, categorizedFromCsv };
+    return { importedCount, skippedCount, skippedByAccountFilter, categorizedByRules, categorizedFromCsv };
   })();
 
   return result;
