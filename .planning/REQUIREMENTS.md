@@ -17,11 +17,11 @@ Requirements for mobile-friendly UI milestone. Each maps to roadmap phases.
 
 ### Transactions
 
-- [ ] **TXN-01**: User sees transactions as stacked cards (not a table) on mobile, showing merchant, amount, date, account, and category
-- [ ] **TXN-02**: User can tap a transaction card's category badge to change the category via CategoryPicker
-- [ ] **TXN-03**: User can tap a transaction card to expand and view details (memo, splits, notes)
-- [ ] **TXN-04**: Transaction filters collapse into a "Filter" button on mobile with active filter count badge
-- [ ] **TXN-05**: Desktop transaction table remains unchanged on screens above 768px
+- [x] **TXN-01**: User sees transactions as stacked cards (not a table) on mobile, showing merchant, amount, date, account, and category
+- [x] **TXN-02**: User can tap a transaction card's category badge to change the category via CategoryPicker
+- [x] **TXN-03**: User can tap a transaction card to expand and view details (memo, splits, notes)
+- [x] **TXN-04**: Transaction filters collapse into a "Filter" button on mobile with active filter count badge
+- [x] **TXN-05**: Desktop transaction table remains unchanged on screens above 768px
 
 ### Budget
 
@@ -42,7 +42,7 @@ Requirements for mobile-friendly UI milestone. Each maps to roadmap phases.
 ### Touch & Interaction
 
 - [x] **TOUCH-01**: All interactive elements (buttons, links, form inputs, tab bar items) have a minimum 44x44px tap target on mobile
-- [ ] **TOUCH-02**: Form inputs use `text-base` (16px) minimum font size on mobile to prevent iOS auto-zoom
+- [x] **TOUCH-02**: Form inputs use `text-base` (16px) minimum font size on mobile to prevent iOS auto-zoom
 - [ ] **TOUCH-03**: Form layouts stack vertically on mobile with full-width inputs
 
 ### Modals & Sheets
