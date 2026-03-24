@@ -5,6 +5,8 @@ import { formatCurrency } from '../lib/format';
 import CategoryPicker from '../components/CategoryPicker';
 import SplitModal from '../components/SplitModal';
 import ManualTransactionForm from '../components/ManualTransactionForm';
+import TransactionCard from '../components/TransactionCard';
+import { Filter, ChevronDown, ChevronUp } from 'lucide-react';
 
 type SortColumn = 'date' | 'payee' | 'amount' | 'account';
 type SortDirection = 'asc' | 'desc';
@@ -84,6 +86,8 @@ export default function TransactionsPage() {
   const [categoryFilter, setCategoryFilter] = useState('');
   const [splitTransactionId, setSplitTransactionId] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [filterPanelOpen, setFilterPanelOpen] = useState(false);
 
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
@@ -188,6 +192,9 @@ export default function TransactionsPage() {
     return result;
   }, [transactions, dateFrom, dateTo, debouncedSearch, amountMin, amountMax, categoryFilter, sortColumn, sortDirection]);
 
+  const activeFilterCount = [dateFrom, dateTo, debouncedSearch, amountMin, amountMax, categoryFilter]
+    .filter(v => v !== '').length;
+
   const splitTransaction = splitTransactionId ? transactions?.find(t => t.id === splitTransactionId) : null;
 
   if (isLoading) {
@@ -219,14 +226,31 @@ export default function TransactionsPage() {
 
       {showAddForm && <ManualTransactionForm onClose={() => setShowAddForm(false)} />}
 
-      <div className="flex flex-wrap items-end gap-4 mb-4">
+      {/* Mobile filter toggle */}
+      <div className="md:hidden flex items-center justify-between mb-4">
+        <button
+          onClick={() => setFilterPanelOpen(prev => !prev)}
+          className="flex items-center gap-2 px-3 min-h-[44px] text-sm border border-gray-300 rounded-md"
+        >
+          <Filter size={16} />
+          Filters
+          {activeFilterCount > 0 && (
+            <span className="bg-blue-600 text-white text-xs rounded-full px-1.5 py-0.5 min-w-[20px] text-center">
+              {activeFilterCount}
+            </span>
+          )}
+          {filterPanelOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+        </button>
+      </div>
+
+      <div className={`flex flex-wrap items-end gap-4 mb-4 ${!filterPanelOpen ? 'hidden md:flex' : 'flex'}`}>
         <div className="flex-1 min-w-48">
           <input
             type="text"
             placeholder="Search payee or memo..."
             value={inputValue}
             onChange={e => handleSearchChange(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
         <div className="flex items-center gap-2">
@@ -235,7 +259,7 @@ export default function TransactionsPage() {
             type="date"
             value={dateFrom}
             onChange={e => setDateFrom(e.target.value)}
-            className="px-2 py-2 border border-gray-300 rounded-md text-sm"
+            className="px-2 py-2 border border-gray-300 rounded-md text-base"
           />
         </div>
         <div className="flex items-center gap-2">
@@ -244,7 +268,7 @@ export default function TransactionsPage() {
             type="date"
             value={dateTo}
             onChange={e => setDateTo(e.target.value)}
-            className="px-2 py-2 border border-gray-300 rounded-md text-sm"
+            className="px-2 py-2 border border-gray-300 rounded-md text-base"
           />
         </div>
         <div className="flex items-center gap-2">
@@ -255,7 +279,7 @@ export default function TransactionsPage() {
             placeholder="0.00"
             value={amountMin}
             onChange={e => setAmountMin(e.target.value)}
-            className="w-24 px-2 py-2 border border-gray-300 rounded-md text-sm"
+            className="w-24 px-2 py-2 border border-gray-300 rounded-md text-base"
           />
         </div>
         <div className="flex items-center gap-2">
@@ -266,7 +290,7 @@ export default function TransactionsPage() {
             placeholder="0.00"
             value={amountMax}
             onChange={e => setAmountMax(e.target.value)}
-            className="w-24 px-2 py-2 border border-gray-300 rounded-md text-sm"
+            className="w-24 px-2 py-2 border border-gray-300 rounded-md text-base"
           />
         </div>
         <div className="flex items-center gap-2">
@@ -274,7 +298,7 @@ export default function TransactionsPage() {
           <select
             value={categoryFilter}
             onChange={e => setCategoryFilter(e.target.value)}
-            className="px-2 py-2 border border-gray-300 rounded-md text-sm"
+            className="px-2 py-2 border border-gray-300 rounded-md text-base"
           >
             <option value="">All Categories</option>
             <option value="uncategorized">Uncategorized</option>
@@ -296,7 +320,8 @@ export default function TransactionsPage() {
             : 'No transactions found.'}
         </p>
       ) : (
-        <div className="overflow-x-auto">
+        <>
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full border-collapse">
             <thead>
               <tr className="bg-gray-100 text-left text-sm font-semibold text-gray-700">
@@ -383,6 +408,21 @@ export default function TransactionsPage() {
             </tbody>
           </table>
         </div>
+
+        {/* Mobile cards */}
+        <div className="md:hidden space-y-2">
+          {filtered.map(txn => (
+            <TransactionCard
+              key={txn.id}
+              txn={txn}
+              isExpanded={expandedId === txn.id}
+              onToggle={() => setExpandedId(prev => prev === txn.id ? null : txn.id)}
+              onCategoryChange={categoryId => updateCategoryMut.mutate({ transactionId: txn.id, categoryId })}
+              onSplitClick={() => setSplitTransactionId(txn.id)}
+            />
+          ))}
+        </div>
+        </>
       )}
 
       {splitTransaction && (
