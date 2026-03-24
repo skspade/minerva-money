@@ -98,7 +98,7 @@ function SortableCategory({
         <button
           {...attributes}
           {...listeners}
-          className="cursor-grab text-gray-400 hover:text-gray-600"
+          className="cursor-grab text-gray-400 hover:text-gray-600 max-md:min-h-[44px] max-md:min-w-[44px] max-md:flex max-md:items-center max-md:justify-center"
           title="Drag to reorder"
         >
           ⠿
@@ -177,7 +177,7 @@ function SortableGroup({
           <button
             {...attributes}
             {...listeners}
-            className="cursor-grab text-gray-400 hover:text-gray-600"
+            className="cursor-grab text-gray-400 hover:text-gray-600 max-md:min-h-[44px] max-md:min-w-[44px] max-md:flex max-md:items-center max-md:justify-center"
             title="Drag to reorder group"
           >
             ⠿
