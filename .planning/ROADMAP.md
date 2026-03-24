@@ -75,7 +75,9 @@ Full details: see Phase Details below
   3. Main content has bottom padding that clears the tab bar, and no horizontal scroll occurs at 375px viewport width
   4. The viewport uses `viewport-fit=cover` and the tab bar respects `env(safe-area-inset-bottom)` on iPhone
   5. All tab bar items have minimum 44x44px tap targets
-**Plans**: TBD
+**Plans**: 2 plans
+  - [ ] 21-01-PLAN.md — Viewport, CSS safe area utility, and Layout.tsx mobile restructure
+  - [ ] 21-02-PLAN.md — Install vaul/lucide-react, build BottomTabBar and MoreSheet, wire into Layout
 
 ### Phase 22: Transaction Cards
 **Goal**: Replace the desktop transaction table with a mobile card layout on small screens, with collapsible filters and tap-to-change category
