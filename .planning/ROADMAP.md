@@ -93,10 +93,10 @@ Full details: [milestones/v2.3-ROADMAP.md](milestones/v2.3-ROADMAP.md)
   1. Server execute endpoint accepts an accountMappings record that omits some CSV accounts and imports only the mapped accounts without throwing
   2. Execute result includes a count of rows skipped due to unmapped accounts (skippedByAccountFilter)
   3. Preview result includes per-account row counts (rowCountByAccount) so the client can display how many rows each account contains
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 29-01: TBD
+- [ ] 29-01: Partial account mapping support (execute skip logic + preview rowCountByAccount)
 
 ### Phase 30: Client Skip UI
 **Goal**: Users can mark CSV accounts as "skip" in the import wizard and see which accounts they are skipping with clear visual treatment
