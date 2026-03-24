@@ -11,7 +11,7 @@ Requirements for mobile-friendly UI milestone. Each maps to roadmap phases.
 
 - [ ] **NAV-01**: User sees a fixed bottom tab bar with 5 tabs (Dashboard, Transactions, Budget, Chat, More) on screens below 768px
 - [ ] **NAV-02**: User can tap the "More" tab to open a bottom sheet listing Accounts, Categories, Rules, Transfers, and Reports
-- [ ] **NAV-03**: Desktop horizontal navbar remains unchanged and hidden on mobile; bottom tab bar hidden on desktop
+- [x] **NAV-03**: Desktop horizontal navbar remains unchanged and hidden on mobile; bottom tab bar hidden on desktop
 - [ ] **NAV-04**: Active tab is visually highlighted and updates on navigation
 - [ ] **NAV-05**: "More" sheet auto-closes when user navigates to a page
 
@@ -33,11 +33,11 @@ Requirements for mobile-friendly UI milestone. Each maps to roadmap phases.
 
 ### Layout & Viewport
 
-- [ ] **LAYOUT-01**: Viewport meta tag includes `viewport-fit=cover` to enable safe area insets
-- [ ] **LAYOUT-02**: Bottom tab bar and Chat input bar respect iPhone safe area insets via `env(safe-area-inset-bottom)`
-- [ ] **LAYOUT-03**: Main content area has bottom padding to clear the fixed bottom tab bar on mobile
-- [ ] **LAYOUT-04**: Layout uses `min-h-dvh` instead of `min-h-screen` to handle iOS Safari viewport correctly
-- [ ] **LAYOUT-05**: No horizontal scroll occurs on any page at 375px viewport width
+- [x] **LAYOUT-01**: Viewport meta tag includes `viewport-fit=cover` to enable safe area insets
+- [x] **LAYOUT-02**: Bottom tab bar and Chat input bar respect iPhone safe area insets via `env(safe-area-inset-bottom)`
+- [x] **LAYOUT-03**: Main content area has bottom padding to clear the fixed bottom tab bar on mobile
+- [x] **LAYOUT-04**: Layout uses `min-h-dvh` instead of `min-h-screen` to handle iOS Safari viewport correctly
+- [x] **LAYOUT-05**: No horizontal scroll occurs on any page at 375px viewport width
 
 ### Touch & Interaction
 
