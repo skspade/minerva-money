@@ -70,7 +70,7 @@ Full details: see Phase Details below
 **Milestone Goal:** Add a reusable CSV import feature for migrating transaction history from Monarch Money into Minerva Money, with parsing, account/category mapping, deduplication, and a 3-step wizard UI.
 
 - [x] **Phase 26: Import Service and API** - CSV parsing, validation, dedup, account/category auto-matching, atomic import execution with rules engine and transfer detection (completed 2026-03-24)
-- [ ] **Phase 27: Import UI and Navigation** - 3-step wizard (upload, preview/map, confirm/import), navigation entries, mobile-responsive layout
+- [ ] **Phase 27: Import UI and Navigation** - 3-step wizard (upload, preview/map, confirm/import), navigation entries, mobile-responsive layout (2 plans)
 
 ## Phase Details
 
@@ -98,7 +98,9 @@ Full details: see Phase Details below
   3. Before confirming, user sees a summary showing new transactions to import, duplicates to skip, and error rows — then can confirm to execute or go back to adjust mappings
   4. After successful import, a results screen shows imported count, skipped count, and a link to the Transactions page
   5. The Import page is accessible at `/import`, linked from the desktop nav bar and the mobile "More" bottom sheet, and displays correctly on mobile with stacked layout
-**Plans**: TBD
+**Plans**: 2 plans
+  - [ ] 27-01-PLAN.md — ImportPage.tsx: 3-step wizard (upload, preview/map, confirm/results)
+  - [ ] 27-02-PLAN.md — Navigation wiring: route, desktop NavLink, mobile MoreSheet entry
 
 ### Phase 18: Production Build and Directory Layout
 **Goal**: Server and client produce correct compiled output, Express serves the SPA in production, and all deployment artifacts live in one place
@@ -167,4 +169,4 @@ Full details: see Phase Details below
 | 24. Modal Conversions | v2.2 | 1/1 | Complete | 2026-03-24 |
 | 25. Remaining Pages | v2.2 | 2/2 | Complete | 2026-03-24 |
 | 26. Import Service and API | 2/2 | Complete    | 2026-03-24 | - |
-| 27. Import UI and Navigation | v2.3 | 0/0 | Not started | - |
+| 27. Import UI and Navigation | v2.3 | 0/2 | Not started | - |
