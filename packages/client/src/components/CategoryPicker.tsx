@@ -18,7 +18,7 @@ export default function CategoryPicker({ value, onChange, className }: CategoryP
         const val = e.target.value;
         onChange(val === '' ? null : parseInt(val, 10));
       }}
-      className={`text-sm border border-gray-300 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500 ${className ?? ''}`}
+      className={`text-base border border-gray-300 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500 ${className ?? ''}`}
     >
       <option value="">Uncategorized</option>
       {groups?.map(group => (
