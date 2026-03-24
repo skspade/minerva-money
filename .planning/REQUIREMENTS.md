@@ -70,39 +70,37 @@ Deferred to later release. Tracked but not in current roadmap.
 
 ## Traceability
 
-Updated during roadmap creation.
-
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CSV-01 | — | Pending |
-| CSV-02 | — | Pending |
-| CSV-03 | — | Pending |
-| CSV-04 | — | Pending |
-| CSV-05 | — | Pending |
-| MAP-01 | — | Pending |
-| MAP-02 | — | Pending |
-| MAP-03 | — | Pending |
-| MAP-04 | — | Pending |
-| MAP-05 | — | Pending |
-| IMP-01 | — | Pending |
-| IMP-02 | — | Pending |
-| IMP-03 | — | Pending |
-| IMP-04 | — | Pending |
-| IMP-05 | — | Pending |
-| UI-01 | — | Pending |
-| UI-02 | — | Pending |
-| UI-03 | — | Pending |
-| UI-04 | — | Pending |
-| UI-05 | — | Pending |
-| NAV-01 | — | Pending |
-| NAV-02 | — | Pending |
-| NAV-03 | — | Pending |
+| CSV-01 | Phase 27 | Pending |
+| CSV-02 | Phase 26 | Pending |
+| CSV-03 | Phase 26 | Pending |
+| CSV-04 | Phase 26 | Pending |
+| CSV-05 | Phase 26 | Pending |
+| MAP-01 | Phase 27 | Pending |
+| MAP-02 | Phase 26 | Pending |
+| MAP-03 | Phase 27 | Pending |
+| MAP-04 | Phase 26 | Pending |
+| MAP-05 | Phase 26 | Pending |
+| IMP-01 | Phase 26 | Pending |
+| IMP-02 | Phase 26 | Pending |
+| IMP-03 | Phase 26 | Pending |
+| IMP-04 | Phase 26 | Pending |
+| IMP-05 | Phase 26 | Pending |
+| UI-01 | Phase 27 | Pending |
+| UI-02 | Phase 27 | Pending |
+| UI-03 | Phase 27 | Pending |
+| UI-04 | Phase 27 | Pending |
+| UI-05 | Phase 27 | Pending |
+| NAV-01 | Phase 27 | Pending |
+| NAV-02 | Phase 27 | Pending |
+| NAV-03 | Phase 27 | Pending |
 
 **Coverage:**
 - v2.3 requirements: 23 total
-- Mapped to phases: 0
-- Unmapped: 23 ⚠️
+- Mapped to phases: 23
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-24*
-*Last updated: 2026-03-24 after initial definition*
+*Last updated: 2026-03-24 after roadmap creation*

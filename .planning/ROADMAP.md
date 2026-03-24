@@ -5,7 +5,8 @@
 - ✅ **v1.0 MVP** — Phases 1-13 (shipped 2026-03-22)
 - ✅ **v2.0 Claude Agent** — Phases 14-17 (shipped 2026-03-23)
 - ✅ **v2.1 Deployment Hardening** — Phases 18-20 (shipped 2026-03-24)
-- 🚧 **v2.2 Mobile-Friendly UI** — Phases 21-25 (in progress)
+- ✅ **v2.2 Mobile-Friendly UI** — Phases 21-25 (shipped 2026-03-24)
+- 🚧 **v2.3 CSV Import** — Phases 26-27 (in progress)
 
 ## Phases
 
@@ -53,83 +54,49 @@ Full details: see Phase Details below
 
 </details>
 
-### 🚧 v2.2 Mobile-Friendly UI (In Progress)
+<details>
+<summary>✅ v2.2 Mobile-Friendly UI (Phases 21-25) — SHIPPED 2026-03-24</summary>
 
-**Milestone Goal:** Make every page in Minerva Money fully functional on iPhone (375–430px) with bottom tab navigation, card layouts, safe area insets, and bottom sheet modals — without regressing any desktop behavior.
+- [x] Phase 21: Layout Foundation (2/2 plans) — completed 2026-03-24
+- [x] Phase 22: Transaction Cards (1/1 plan) — completed 2026-03-24
+- [x] Phase 23: Budget Cards (1/1 plan) — completed 2026-03-24
+- [x] Phase 24: Modal Conversions (1/1 plan) — completed 2026-03-24
+- [x] Phase 25: Remaining Pages (2/2 plans) — completed 2026-03-24
 
-- [x] **Phase 21: Layout Foundation** - Bottom tab bar, Sheet component, viewport/safe area fixes, Layout.tsx mobile padding (completed 2026-03-24)
-- [x] **Phase 22: Transaction Cards** - Mobile card layout, filter collapse, CategoryPicker tap-to-change (1 plan) (completed 2026-03-24)
-- [x] **Phase 23: Budget Cards** - Stacked category cards, progress bars, inline allocation editing (1 plan) (completed 2026-03-24)
-    - [x] 23-01-PLAN.md — Extract AllocationCell, create BudgetCategoryCard, add mobile cards + responsive month selector (completed 2026-03-24)
-- [x] **Phase 24: Modal Conversions** - SplitModal, ManualTransactionForm, RuleForm, ManualLinkModal as bottom sheets (completed 2026-03-24)
-- [x] **Phase 25: Remaining Pages** - Dashboard, Accounts, Reports, Chat, Categories, Rules mobile polish (completed 2026-03-24)
+</details>
+
+### 🚧 v2.3 CSV Import (In Progress)
+
+**Milestone Goal:** Add a reusable CSV import feature for migrating transaction history from Monarch Money into Minerva Money, with parsing, account/category mapping, deduplication, and a 3-step wizard UI.
+
+- [ ] **Phase 26: Import Service and API** - CSV parsing, validation, dedup, account/category auto-matching, atomic import execution with rules engine and transfer detection
+- [ ] **Phase 27: Import UI and Navigation** - 3-step wizard (upload, preview/map, confirm/import), navigation entries, mobile-responsive layout
 
 ## Phase Details
 
-### Phase 21: Layout Foundation
-**Goal**: Establish the mobile navigation shell (bottom tab bar, "More" sheet), fix viewport behavior for iOS Safari, and add safe area inset support so all subsequent page work has a correct foundation
-**Depends on**: Nothing (first phase in v2.2)
-**Requirements**: NAV-01, NAV-02, NAV-03, NAV-04, NAV-05, LAYOUT-01, LAYOUT-02, LAYOUT-03, LAYOUT-04, LAYOUT-05, TOUCH-01
+### Phase 26: Import Service and API
+**Goal**: A working import service and tRPC API that can parse Monarch CSV files, validate rows, compute dedup stats, auto-suggest account/category mappings, and execute atomic imports with post-insert rules and transfer detection
+**Depends on**: Nothing (first phase in v2.3)
+**Requirements**: CSV-02, CSV-03, CSV-04, CSV-05, MAP-02, MAP-04, MAP-05, IMP-01, IMP-02, IMP-03, IMP-04, IMP-05
 **Success Criteria** (what must be TRUE):
-  1. On screens below 768px, a fixed bottom tab bar with 5 tabs (Dashboard, Transactions, Budget, Chat, More) is visible; the desktop top navbar is hidden
-  2. Tapping "More" opens a bottom sheet listing Accounts, Categories, Rules, Transfers, and Reports; navigating to any listed page auto-closes the sheet
-  3. Main content has bottom padding that clears the tab bar, and no horizontal scroll occurs at 375px viewport width
-  4. The viewport uses `viewport-fit=cover` and the tab bar respects `env(safe-area-inset-bottom)` on iPhone
-  5. All tab bar items have minimum 44x44px tap targets
-**Plans**: 2 plans
-  - [ ] 21-01-PLAN.md — Viewport, CSS safe area utility, and Layout.tsx mobile restructure
-  - [ ] 21-02-PLAN.md — Install vaul/lucide-react, build BottomTabBar and MoreSheet, wire into Layout
-
-### Phase 22: Transaction Cards
-**Goal**: Replace the desktop transaction table with a mobile card layout on small screens, with collapsible filters and tap-to-change category
-**Depends on**: Phase 21 (layout shell and touch target patterns must exist)
-**Requirements**: TXN-01, TXN-02, TXN-03, TXN-04, TXN-05, TOUCH-02
-**Success Criteria** (what must be TRUE):
-  1. On mobile, transactions display as stacked cards showing merchant, amount, date, account, and category — the desktop table is hidden
-  2. Tapping a transaction card's category badge opens the CategoryPicker to change the category
-  3. Tapping a transaction card expands it to show memo, splits, and notes
-  4. Filters collapse into a "Filter" button with an active filter count badge on mobile
-  5. Form inputs use 16px minimum font size to prevent iOS auto-zoom
-**Plans**: 1 plan
-  - [ ] 22-01-PLAN.md — TransactionCard component, mobile card list, filter collapse, TOUCH-02 input fixes
-
-### Phase 23: Budget Cards
-**Goal**: Replace the desktop budget grid with stacked category cards on mobile, with color-coded progress bars and tap-to-edit allocation
-**Depends on**: Phase 21 (layout shell must exist)
-**Requirements**: BUD-01, BUD-02, BUD-03, BUD-04, BUD-05
-**Success Criteria** (what must be TRUE):
-  1. On mobile, budget categories display as stacked cards grouped by category group — the desktop grid is hidden
-  2. Each card shows category name, color-coded progress bar (green/yellow/red), spent/budgeted amounts, and remaining
-  3. Tapping a budget card expands inline editing for the allocation amount
-  4. The month selector is full-width with left/right navigation arrows on mobile
-**Plans**: 1 plan
-  - [ ] 23-01-PLAN.md — Extract AllocationCell, create BudgetCategoryCard, mobile card section + responsive month selector
-
-### Phase 24: Modal Conversions
-**Goal**: Convert desktop-centered modals to full-screen bottom sheets on mobile with drag-to-dismiss and backdrop tap to close
-**Depends on**: Phase 21 (Sheet component must exist)
-**Requirements**: MODAL-01, MODAL-02, MODAL-03, MODAL-04, MODAL-05, TOUCH-03
-**Success Criteria** (what must be TRUE):
-  1. SplitModal renders as a full-screen bottom sheet on mobile and a centered modal on desktop
-  2. ManualTransactionForm renders as a full-screen bottom sheet on mobile and a centered modal on desktop
-  3. All bottom sheets support drag-to-dismiss and backdrop tap to close
-  4. RuleForm and ManualLinkModal render as full-screen sheets on mobile
-  5. Form layouts stack vertically on mobile with full-width inputs
+  1. Calling the `preview` tRPC mutation with Monarch CSV text returns parsed row count, unique account names with auto-suggested Minerva matches, unique category names with auto-suggested Minerva matches, validation errors with row numbers, and dedup stats (new vs. duplicate counts)
+  2. Calling the `execute` tRPC mutation with CSV text and confirmed account/category mappings inserts all valid transactions atomically — either all succeed or none are written
+  3. Duplicate transactions (matching dedup hash) are silently skipped via INSERT OR IGNORE, and the execute response reports the exact skip count
+  4. After import, the rules engine has run on all imported transactions (setting category_id and rule_id where rules match), and transfer detection has identified candidate pairs
+  5. The API rejects execution when any CSV account is unmapped, returning a clear validation error
 **Plans**: TBD
 
-### Phase 25: Remaining Pages
-**Goal**: Ensure all remaining pages (Dashboard, Accounts, Reports, Chat, Categories, Rules) display correctly at 375px width
-**Depends on**: Phase 21 (layout foundation), Phase 24 (sheet patterns for any page-specific modals)
-**Requirements**: PAGE-01, PAGE-02, PAGE-03, PAGE-04, PAGE-05, PAGE-06
+### Phase 27: Import UI and Navigation
+**Goal**: Users can import Monarch CSV files through a 3-step wizard accessible from both desktop and mobile navigation
+**Depends on**: Phase 26 (preview and execute API must exist)
+**Requirements**: CSV-01, MAP-01, MAP-03, UI-01, UI-02, UI-03, UI-04, UI-05, NAV-01, NAV-02, NAV-03
 **Success Criteria** (what must be TRUE):
-  1. Dashboard displays as single-column cards with no overflow at 375px
-  2. Accounts page stacks account cards vertically with no horizontal overflow
-  3. Reports page charts are readable at 375px width with simplified axis labels
-  4. Chat page input bar is fixed above the bottom tab bar with safe area inset on mobile
-  5. Categories page drag handles meet 44px tap target and Rules page shows rules as cards on mobile
-**Plans**: 2 plans
-  - [ ] 25-01-PLAN.md — ReportsPage, ChatPage, CategoriesPage mobile fixes (date filter stacking, dvh height, safe area inset, drag handle tap targets)
-  - [ ] 25-02-PLAN.md — RulesPage mobile card layout + DashboardPage/AccountsPage 375px audit
+  1. User can drag-and-drop or browse to select a CSV file, and the wizard advances to show a preview with the first 10 rows, total row count, and any parse errors
+  2. User can map each unique CSV account name to a Minerva account via dropdown, and each unique CSV category to a Minerva category or leave it unmapped (defaults to uncategorized)
+  3. Before confirming, user sees a summary showing new transactions to import, duplicates to skip, and error rows — then can confirm to execute or go back to adjust mappings
+  4. After successful import, a results screen shows imported count, skipped count, and a link to the Transactions page
+  5. The Import page is accessible at `/import`, linked from the desktop nav bar and the mobile "More" bottom sheet, and displays correctly on mobile with stacked layout
+**Plans**: TBD
 
 ### Phase 18: Production Build and Directory Layout
 **Goal**: Server and client produce correct compiled output, Express serves the SPA in production, and all deployment artifacts live in one place
@@ -141,8 +108,8 @@ Full details: see Phase Details below
   3. The server loads environment variables via `--env-file` without any dotenv dependency
   4. All deployment config files (plists, scripts) are co-located in the `deploy/` directory with no deployment artifacts elsewhere in the repo
 **Plans**: 2 plans
-  - [ ] 18-01-PLAN.md — Fix production build pipeline (prebuild clean, verify SPA serving)
-  - [ ] 18-02-PLAN.md — Fix plists and verify deployment directory layout
+  - [x] 18-01-PLAN.md — Fix production build pipeline (prebuild clean, verify SPA serving)
+  - [x] 18-02-PLAN.md — Fix plists and verify deployment directory layout
 
 ### Phase 19: Service Configuration
 **Goal**: launchd service definitions correctly manage the server and backup processes with crash recovery and boot startup
@@ -155,7 +122,7 @@ Full details: see Phase Details below
   4. A crash loop is throttled to at most one restart every 10 seconds
   5. The backup plist runs the compiled `dist/backup/run-backup.js` instead of TypeScript source via tsx
 **Plans**: 1 plan
-  - [ ] 19-01-PLAN.md — Fix KeepAlive dict form and verify all PROC requirements
+  - [x] 19-01-PLAN.md — Fix KeepAlive dict form and verify all PROC requirements
 
 ### Phase 20: Deploy Scripts
 **Goal**: One-command first-install and one-command updates with pre-flight validation
@@ -189,11 +156,13 @@ Full details: see Phase Details below
 | 15. Chat UI | v2.0 | 2/2 | Complete | 2026-03-23 |
 | 16. Action Tools | v2.0 | 2/2 | Complete | 2026-03-23 |
 | 17. Audit Gap Closure | v2.0 | 1/1 | Complete | 2026-03-23 |
-| 18. Production Build and Directory Layout | v2.1 | 2/2 | Complete | 2026-03-23 |
+| 18. Production Build | v2.1 | 2/2 | Complete | 2026-03-23 |
 | 19. Service Configuration | v2.1 | 1/1 | Complete | 2026-03-24 |
 | 20. Deploy Scripts | v2.1 | 2/2 | Complete | 2026-03-24 |
-| 21. Layout Foundation | 2/2 | Complete    | 2026-03-24 | — |
-| 22. Transaction Cards | 1/1 | Complete    | 2026-03-24 | — |
-| 23. Budget Cards | 1/1 | Complete    | 2026-03-24 | — |
-| 24. Modal Conversions | 1/1 | Complete    | 2026-03-24 | — |
-| 25. Remaining Pages | 2/2 | Complete    | 2026-03-24 | — |
+| 21. Layout Foundation | v2.2 | 2/2 | Complete | 2026-03-24 |
+| 22. Transaction Cards | v2.2 | 1/1 | Complete | 2026-03-24 |
+| 23. Budget Cards | v2.2 | 1/1 | Complete | 2026-03-24 |
+| 24. Modal Conversions | v2.2 | 1/1 | Complete | 2026-03-24 |
+| 25. Remaining Pages | v2.2 | 2/2 | Complete | 2026-03-24 |
+| 26. Import Service and API | v2.3 | 0/0 | Not started | - |
+| 27. Import UI and Navigation | v2.3 | 0/0 | Not started | - |
