@@ -127,12 +127,45 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| — | — | — |
+| NAV-01 | Phase 21 | Not Started |
+| NAV-02 | Phase 21 | Not Started |
+| NAV-03 | Phase 21 | Not Started |
+| NAV-04 | Phase 21 | Not Started |
+| NAV-05 | Phase 21 | Not Started |
+| LAYOUT-01 | Phase 21 | Not Started |
+| LAYOUT-02 | Phase 21 | Not Started |
+| LAYOUT-03 | Phase 21 | Not Started |
+| LAYOUT-04 | Phase 21 | Not Started |
+| LAYOUT-05 | Phase 21 | Not Started |
+| TOUCH-01 | Phase 21 | Not Started |
+| TXN-01 | Phase 22 | Not Started |
+| TXN-02 | Phase 22 | Not Started |
+| TXN-03 | Phase 22 | Not Started |
+| TXN-04 | Phase 22 | Not Started |
+| TXN-05 | Phase 22 | Not Started |
+| TOUCH-02 | Phase 22 | Not Started |
+| BUD-01 | Phase 23 | Not Started |
+| BUD-02 | Phase 23 | Not Started |
+| BUD-03 | Phase 23 | Not Started |
+| BUD-04 | Phase 23 | Not Started |
+| BUD-05 | Phase 23 | Not Started |
+| MODAL-01 | Phase 24 | Not Started |
+| MODAL-02 | Phase 24 | Not Started |
+| MODAL-03 | Phase 24 | Not Started |
+| MODAL-04 | Phase 24 | Not Started |
+| MODAL-05 | Phase 24 | Not Started |
+| TOUCH-03 | Phase 24 | Not Started |
+| PAGE-01 | Phase 25 | Not Started |
+| PAGE-02 | Phase 25 | Not Started |
+| PAGE-03 | Phase 25 | Not Started |
+| PAGE-04 | Phase 25 | Not Started |
+| PAGE-05 | Phase 25 | Not Started |
+| PAGE-06 | Phase 25 | Not Started |
 
 **Coverage:**
-- v2.2 requirements: 28 total
-- Mapped to phases: 0
-- Unmapped: 28
+- v2.2 requirements: 34 total
+- Mapped to phases: 34
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-23*

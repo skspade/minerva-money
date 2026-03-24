@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v2.2
 milestone_name: Mobile-Friendly UI
-status: requirements
+status: roadmap
 last_updated: "2026-03-23"
 progress:
-  total_phases: 0
+  total_phases: 5
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -18,15 +18,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-23)
 
 **Core value:** Accurate, auto-synced financial data with envelope budgeting that lets you see where every dollar goes and how spending trends over time.
-**Current focus:** Mobile-friendly UI — defining requirements
+**Current focus:** Mobile-friendly UI — Phase 21: Layout Foundation
 
 ## Current Position
 
 Milestone: v2.2 Mobile-Friendly UI
-Phase: Not started (defining requirements)
+Phase: 21 — Layout Foundation
 Plan: —
-Status: Defining requirements
-Last activity: 2026-03-23 — Milestone v2.2 started
+Status: Roadmap complete, ready for planning
+Last activity: 2026-03-23 — Roadmap created for v2.2 (Phases 21-25)
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -42,9 +42,11 @@ Progress: [░░░░░░░░░░] 0%
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
-- launchd over PM2/Docker for process management (native macOS, zero dependencies)
-- Express serves client static files (single process, simpler than nginx)
-- Node 20 --env-file over dotenv (no extra dependency)
+- CSS-first responsiveness using Tailwind v4 `max-md:` variant for mobile overrides
+- `vaul` for bottom sheets (drag-to-dismiss, iOS rubber-banding)
+- `lucide-react` for tab bar icons
+- Safe area insets via CSS `env()` with `viewport-fit=cover`
+- No JS breakpoint hooks for layout (CSS-only responsive visibility)
 
 ### Pending Todos
 
@@ -57,5 +59,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-23
-Stopped at: Milestone v2.2 started, defining requirements
+Stopped at: Roadmap created for v2.2. Next step is planning Phase 21.
 Resume file: None
