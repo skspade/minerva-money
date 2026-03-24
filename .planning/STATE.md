@@ -8,7 +8,7 @@ progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 2
-  completed_plans: 1
+  completed_plans: 2
 ---
 
 # Project State
@@ -24,17 +24,18 @@ See: .planning/PROJECT.md (updated 2026-03-23)
 
 Milestone: v2.2 Mobile-Friendly UI
 Phase: 21 — Layout Foundation
-Plan: 01 of 02 complete, executing 02
-Status: Executing Phase 21
-Last activity: 2026-03-24 — Completed Plan 21-01 (viewport, CSS utilities, Layout shell)
+Plan: 02 of 02 complete
+Status: Phase 21 complete, pending verification
+Last activity: 2026-03-24 — Completed Plan 21-02 (BottomTabBar, MoreSheet, Layout wiring)
 
-Progress: [█████░░░░░] 50%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 1 (v2.2)
+- Total plans completed: 2 (v2.2)
 - Plan 21-01: 1 min, 2 tasks, 3 files
+- Plan 21-02: 1 min, 2 tasks, 4 files
 
 ## Accumulated Context
 
@@ -60,5 +61,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-24
-Stopped at: Completed 21-01-PLAN.md
+Stopped at: Completed 21-02-PLAN.md (Phase 21 all plans done)
 Resume file: None

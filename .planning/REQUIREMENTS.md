@@ -9,11 +9,11 @@ Requirements for mobile-friendly UI milestone. Each maps to roadmap phases.
 
 ### Navigation
 
-- [ ] **NAV-01**: User sees a fixed bottom tab bar with 5 tabs (Dashboard, Transactions, Budget, Chat, More) on screens below 768px
-- [ ] **NAV-02**: User can tap the "More" tab to open a bottom sheet listing Accounts, Categories, Rules, Transfers, and Reports
+- [x] **NAV-01**: User sees a fixed bottom tab bar with 5 tabs (Dashboard, Transactions, Budget, Chat, More) on screens below 768px
+- [x] **NAV-02**: User can tap the "More" tab to open a bottom sheet listing Accounts, Categories, Rules, Transfers, and Reports
 - [x] **NAV-03**: Desktop horizontal navbar remains unchanged and hidden on mobile; bottom tab bar hidden on desktop
-- [ ] **NAV-04**: Active tab is visually highlighted and updates on navigation
-- [ ] **NAV-05**: "More" sheet auto-closes when user navigates to a page
+- [x] **NAV-04**: Active tab is visually highlighted and updates on navigation
+- [x] **NAV-05**: "More" sheet auto-closes when user navigates to a page
 
 ### Transactions
 
@@ -41,7 +41,7 @@ Requirements for mobile-friendly UI milestone. Each maps to roadmap phases.
 
 ### Touch & Interaction
 
-- [ ] **TOUCH-01**: All interactive elements (buttons, links, form inputs, tab bar items) have a minimum 44x44px tap target on mobile
+- [x] **TOUCH-01**: All interactive elements (buttons, links, form inputs, tab bar items) have a minimum 44x44px tap target on mobile
 - [ ] **TOUCH-02**: Form inputs use `text-base` (16px) minimum font size on mobile to prevent iOS auto-zoom
 - [ ] **TOUCH-03**: Form layouts stack vertically on mobile with full-width inputs
 
