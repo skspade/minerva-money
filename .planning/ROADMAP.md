@@ -74,7 +74,8 @@ Full details: [milestones/v2.0-ROADMAP.md](milestones/v2.0-ROADMAP.md)
   3. The server starts automatically on user login without manual intervention
   4. A crash loop is throttled to at most one restart every 10 seconds
   5. The backup plist runs the compiled `dist/backup/run-backup.js` instead of TypeScript source via tsx
-**Plans**: TBD
+**Plans**: 1 plan
+  - [ ] 19-01-PLAN.md — Fix KeepAlive dict form and verify all PROC requirements
 
 ### Phase 20: Deploy Scripts
 **Goal**: One-command first-install and one-command updates with pre-flight validation
@@ -109,5 +110,5 @@ Full details: [milestones/v2.0-ROADMAP.md](milestones/v2.0-ROADMAP.md)
 | 16. Action Tools | v2.0 | 2/2 | Complete | 2026-03-23 |
 | 17. Audit Gap Closure | v2.0 | 1/1 | Complete | 2026-03-23 |
 | 18. Production Build and Directory Layout | 2/2 | Complete    | 2026-03-23 | - |
-| 19. Service Configuration | v2.1 | 0/0 | Not started | - |
+| 19. Service Configuration | v2.1 | 0/1 | Not started | - |
 | 20. Deploy Scripts | v2.1 | 0/0 | Not started | - |
