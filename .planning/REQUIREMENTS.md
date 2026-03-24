@@ -9,9 +9,9 @@ Requirements for CSV Import Account Filtering milestone. Each maps to roadmap ph
 
 ### Account Skip
 
-- [ ] **SKIP-01**: User can select "Skip — do not import" for any CSV account in the account mapping dropdown
-- [ ] **SKIP-02**: User can see how many rows each CSV account contains to make informed skip decisions
-- [ ] **SKIP-03**: Skipped accounts have visually distinct styling (dimmed/amber) in the mapping UI
+- [x] **SKIP-01**: User can select "Skip — do not import" for any CSV account in the account mapping dropdown
+- [x] **SKIP-02**: User can see how many rows each CSV account contains to make informed skip decisions
+- [x] **SKIP-03**: Skipped accounts have visually distinct styling (dimmed/amber) in the mapping UI
 
 ### Stats Filtering
 
@@ -21,7 +21,7 @@ Requirements for CSV Import Account Filtering milestone. Each maps to roadmap ph
 
 ### Import Execution
 
-- [ ] **EXEC-01**: Server accepts partial account mappings and skips rows for unmapped accounts instead of throwing
+- [x] **EXEC-01**: Server accepts partial account mappings and skips rows for unmapped accounts instead of throwing
 - [x] **EXEC-02**: Confirm summary (step 3) reflects filtered counts excluding skipped accounts
 
 ### Polish
@@ -46,16 +46,16 @@ None — this is a focused enhancement milestone.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SKIP-01 | Phase 30 | Pending |
-| SKIP-02 | Phase 30 | Pending |
-| SKIP-03 | Phase 30 | Pending |
-| STAT-01 | Phase 31 | Complete |
-| STAT-02 | Phase 31 | Complete |
-| STAT-03 | Phase 31 | Complete |
-| EXEC-01 | Phase 29 | Pending |
-| EXEC-02 | Phase 31 | Complete |
-| PLSH-01 | Phase 31 | Complete |
-| PLSH-02 | Phase 31 | Complete |
+| SKIP-01 | Phase 30 | Complete |
+| SKIP-02 | Phase 30 | Complete |
+| SKIP-03 | Phase 30 | Complete |
+| STAT-01 | Phase 32 | Pending |
+| STAT-02 | Phase 32 | Pending |
+| STAT-03 | Phase 32 | Pending |
+| EXEC-01 | Phase 29 | Complete |
+| EXEC-02 | Phase 32 | Pending |
+| PLSH-01 | Phase 32 | Pending |
+| PLSH-02 | Phase 32 | Pending |
 
 **Coverage:**
 - v2.4 requirements: 10 total

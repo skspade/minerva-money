@@ -82,6 +82,7 @@ Full details: [milestones/v2.3-ROADMAP.md](milestones/v2.3-ROADMAP.md)
 - [x] **Phase 29: Server Skip Support** - Server accepts partial account mappings and provides per-account row counts (completed 2026-03-24)
 - [x] **Phase 30: Client Skip UI** - Skip option in account mapping dropdown with visual styling and row count badges (completed 2026-03-24)
 - [x] **Phase 31: Stats Filtering and Polish** - Preview stats, sample rows, and results reflect skip decisions; bulk skip and summary banner (completed 2026-03-24)
+- [ ] **Phase 32: Phase 31 Verification** - Formal verification of Phase 31 requirements and checkbox fixes [Gap Closure]
 
 ## Phase Details
 
@@ -129,6 +130,19 @@ Plans:
 Plans:
 - [ ] 31-01: TBD
 
+### Phase 32: Phase 31 Verification
+**Goal:** Formally verify Phase 31 requirements and fix REQUIREMENTS.md checkboxes
+**Depends on:** Phase 31
+**Requirements:** STAT-01, STAT-02, STAT-03, EXEC-02, PLSH-01, PLSH-02
+**Gap Closure:** Closes verification gaps from v2.4 audit
+**Success Criteria** (what must be TRUE):
+  1. VERIFICATION.md exists for Phase 31 confirming all 6 requirements are satisfied
+  2. All 10 v2.4 requirement checkboxes in REQUIREMENTS.md are marked `[x]`
+**Plans**: 1 plan
+
+Plans:
+- [ ] 32-01: Phase 31 verification and requirements checkbox fixes
+
 ## Progress
 
 **Execution Order:**
@@ -167,3 +181,4 @@ Phases execute in numeric order: 29 → 30 → 31
 | 29. Server Skip Support | 1/1 | Complete    | 2026-03-24 | - |
 | 30. Client Skip UI | 1/1 | Complete    | 2026-03-24 | - |
 | 31. Stats Filtering and Polish | 1/1 | Complete    | 2026-03-24 | - |
+| 32. Phase 31 Verification | v2.4 | 0/1 | Planned | - |
