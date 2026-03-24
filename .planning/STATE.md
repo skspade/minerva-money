@@ -25,7 +25,7 @@ See: .planning/PROJECT.md (updated 2026-03-24)
 Milestone: v2.4 CSV Import Account Filtering — SHIPPED 2026-03-24
 Phase: All complete (29-32)
 Status: Milestone archived
-Last activity: 2026-03-24 — Milestone v2.4 completed and archived
+Last activity: 2026-03-24 - Completed quick task 2: Add a UI button to trigger manual sync and backup
 
 Progress: [██████████] 100%
 
@@ -49,6 +49,12 @@ None.
 ### Blockers/Concerns
 
 None.
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 2 | Add a UI button to trigger manual sync and backup | 2026-03-24 | 6fdfae6 | [2-add-a-ui-button-to-trigger-manual-sync-a](./quick/2-add-a-ui-button-to-trigger-manual-sync-a/) |
 
 ## Session Continuity
 
