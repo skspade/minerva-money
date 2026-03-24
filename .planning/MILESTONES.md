@@ -1,5 +1,19 @@
 # Milestones
 
+## v2.1 Deployment Hardening (Shipped: 2026-03-24)
+
+**Phases:** 3 | **Plans:** 5 | **Requirements:** 16/16
+**Timeline:** 2026-03-23 → 2026-03-24 (1 day)
+**Git range:** feat(18-01) → feat(20-02)
+
+**Key accomplishments:**
+1. Production build pipeline — tsc server compilation, Vite client bundle, Express SPA serving
+2. launchd service management — crash recovery (KeepAlive dict form), boot startup, restart throttling
+3. Deploy scripts — `setup.sh` for first-time install, `deploy.sh` for one-command updates with health checks
+4. Deployment config co-located in `deploy/` directory
+
+---
+
 ## v2.0 Claude Agent (Shipped: 2026-03-23)
 
 **Phases:** 4 | **Plans:** 8 | **Requirements:** 34/34
