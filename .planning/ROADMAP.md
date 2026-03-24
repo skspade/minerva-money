@@ -196,4 +196,4 @@ Full details: see Phase Details below
 | 22. Transaction Cards | 1/1 | Complete    | 2026-03-24 | — |
 | 23. Budget Cards | 1/1 | Complete    | 2026-03-24 | — |
 | 24. Modal Conversions | 1/1 | Complete    | 2026-03-24 | — |
-| 25. Remaining Pages | v2.2 | 0/? | Not Started | — |
+| 25. Remaining Pages | 1/2 | In Progress|  | — |
