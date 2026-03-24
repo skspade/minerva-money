@@ -86,6 +86,109 @@
 
 ---
 
+## Milestone: v2.2 — Mobile-Friendly UI
+
+**Shipped:** 2026-03-24
+**Phases:** 5 | **Plans:** 7 | **Requirements:** N/A (design milestone)
+
+### What Was Built
+- Responsive layout foundation with mobile-first breakpoints, bottom navigation bar, and hamburger menu
+- Transaction cards replacing table rows on mobile screens
+- Budget cards with touch-friendly progress bars and category breakdowns
+- Modal conversions for forms and detail views on small screens
+- Remaining page adaptations (dashboard, reports, categories, rules, transfers, chat)
+
+### What Worked
+- Phase-per-component approach kept each change small and independently verifiable
+- Existing Tailwind utility classes made responsive variants straightforward
+- No component library dependency — full control over mobile breakpoints
+
+### What Was Inefficient
+- No audit run for v2.2 — skipped due to design-only nature, but pattern should be consistent
+
+### Patterns Established
+- Mobile-first responsive approach: base styles for mobile, `md:` prefix for desktop
+- Bottom nav for mobile, sidebar nav for desktop
+- MoreSheet component for overflow navigation items on mobile
+
+### Key Lessons
+1. Design milestones move fast when the component structure is already clean from prior milestones
+2. Bottom nav + More sheet is an effective mobile navigation pattern for apps with 8+ pages
+
+### Cost Observations
+- Model mix: primarily opus for execution
+- Sessions: autopilot mode
+- Notable: 5 phases completed in rapid succession, same day as v2.1
+
+---
+
+## Milestone: v2.1 — Deployment Hardening
+
+**Shipped:** 2026-03-24
+**Phases:** 3 | **Plans:** 5 | **Requirements:** 16/16
+
+### What Was Built
+- Production build pipeline (tsc + Vite, Express SPA serving)
+- launchd service management with crash recovery and boot startup
+- Deploy scripts (setup.sh + deploy.sh) with health checks and pre-flight validation
+
+### What Worked
+- Treating deployment as a first-class milestone rather than an afterthought
+- launchd KeepAlive dict form fix caught a real production issue before first deploy
+
+### What Was Inefficient
+- Phase 20 deploy scripts had "Plans: TBD" in ROADMAP but were executed anyway — planning gap
+
+### Key Lessons
+1. launchd KeepAlive requires dict form (not bool) for proper crash recovery semantics
+2. Deploy scripts should validate prerequisites (node path, .env) before touching launchd
+
+### Cost Observations
+- Model mix: primarily opus for execution
+- Sessions: autopilot mode
+- Notable: 3 phases across 2 days, straightforward infrastructure work
+
+---
+
+## Milestone: v2.3 — CSV Import
+
+**Shipped:** 2026-03-24
+**Phases:** 3 | **Plans:** 5 | **Requirements:** 23/23
+
+### What Was Built
+- Monarch CSV parsing with auto-delimiter detection, BOM stripping, CRLF normalization, row validation
+- Stateless preview/execute API with atomic SQLite transactions, dedup hash, auto-suggest mappings
+- 3-step import wizard UI with drag-and-drop, preview, account/category mapping, confirm/results
+- Post-import rules engine categorization and transfer detection
+- Navigation integration at /import route, desktop nav, mobile More sheet
+
+### What Worked
+- TDD approach for CSV parsing caught all edge cases (BOM, CRLF, delimiter detection) before integration
+- Stateless preview/execute pattern eliminated server-side session management complexity
+- Reusing existing service functions (categorizeNewTransactions, detectTransferCandidates, generateDedupHash) kept scope small
+- Audit found only tech debt (no requirement gaps) — per-phase verification working
+
+### What Was Inefficient
+- Phase 28 gap closure was needed because Phase 26 didn't create VERIFICATION.md during execution — same lesson as v1.0 and v2.0
+- REQUIREMENTS.md traceability table shows many rows as "Pending" despite being complete — status tracking drift
+
+### Patterns Established
+- csv-parse/sync for RFC-4180-compliant CSV parsing in Node
+- Auto-delimiter detection via header line inspection
+- Rules engine priority over import-mapped categories (consistent categorization)
+
+### Key Lessons
+1. VERIFICATION.md during execution is STILL being skipped — 3rd milestone in a row with this issue. Need workflow enforcement, not just reminders
+2. Reusing existing service functions (dedup hash, rules, transfers) from earlier milestones drastically reduces scope — v2.3 was 3 phases because v1.0 built the foundations
+3. 54 tests for the import service caught a real issue with dedup hash chunk sizing for SQLite parameter limits
+
+### Cost Observations
+- Model mix: primarily opus for execution
+- Sessions: autopilot mode
+- Notable: entire milestone completed same day as v2.1 and v2.2
+
+---
+
 ## Cross-Milestone Trends
 
 ### Process Evolution
@@ -94,6 +197,9 @@
 |-----------|--------|-------|------------|
 | v1.0 | 13 | 39 | Initial build with gap closure phases |
 | v2.0 | 4 | 8 | Agent integration leveraging existing service layer |
+| v2.1 | 3 | 5 | Deployment hardening as first-class milestone |
+| v2.2 | 5 | 7 | Mobile-first responsive redesign |
+| v2.3 | 3 | 5 | CSV import reusing existing services |
 
 ### Cumulative Quality
 
@@ -101,10 +207,14 @@
 |-----------|-------|--------------|-------------------|
 | v1.0 | 237 | 34/34 | 4 (Phases 10-13) |
 | v2.0 | 259 | 34/34 | 1 (Phase 17) |
+| v2.1 | 259 | 16/16 | 0 |
+| v2.2 | 259 | N/A | 0 |
+| v2.3 | 313 | 23/23 | 1 (Phase 28) |
 
 ### Top Lessons (Verified Across Milestones)
 
-1. Per-phase verification prevents gap closure phases — verify as you go (confirmed v1.0 + v2.0)
+1. Per-phase verification prevents gap closure phases — verify as you go (confirmed v1.0 + v2.0 + v2.3, still being skipped)
 2. Integer cents from day one is non-negotiable for financial apps
-3. Service layer separation enables future integration with zero business logic duplication (v1.0 design → v2.0 agent tools)
-4. Milestone audit always finds real issues — never skip it
+3. Service layer separation enables future integration with zero business logic duplication (v1.0 → v2.0 agent → v2.3 import)
+4. Milestone audit always finds real issues — never skip it (confirmed across all milestones)
+5. Reusing existing service functions dramatically reduces milestone scope (v2.3 was 3 phases because dedup/rules/transfers already existed)

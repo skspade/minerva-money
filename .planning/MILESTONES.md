@@ -1,5 +1,22 @@
 # Milestones
 
+## v2.3 CSV Import (Shipped: 2026-03-24)
+
+**Phases:** 3 | **Plans:** 5 | **Requirements:** 23/23
+**LOC added:** 1,548 TypeScript (source) | **Total LOC:** 18,461
+**Timeline:** 2026-03-24 (single day)
+**Git range:** feat(26-01) → docs(phase-28)
+
+**Key accomplishments:**
+1. Monarch CSV parsing layer — auto-delimiter detection (tab/comma), BOM stripping, CRLF normalization, row validation with error reporting
+2. Stateless preview/execute import API — atomic SQLite transactions, dedup hash with INSERT OR IGNORE, auto-suggest account/category mappings
+3. Post-import processing — rules engine categorization and transfer detection run on all imported transactions
+4. 3-step import wizard UI — drag-and-drop upload, preview with sample rows, account/category mapping dropdowns, confirm/results flow
+5. Navigation integration — /import route, desktop nav bar link, mobile More bottom sheet entry
+6. Full verification of all 12 service-layer requirements with 54 passing tests
+
+---
+
 ## v2.1 Deployment Hardening (Shipped: 2026-03-24)
 
 **Phases:** 3 | **Plans:** 5 | **Requirements:** 16/16

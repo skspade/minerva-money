@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A single-user personal budgeting web app replacing Monarch Money. Built with React, Express, tRPC, and SQLite, hosted on a home iMac server. Pulls financial data from SimpleFIN (MX upstream) and uses envelope budgeting to assign every dollar a job. Ships with a full dashboard, spending/net-worth charts, categorization rules engine, transfer detection, twice-monthly auto-funding, and a Claude-powered conversational agent for querying and modifying financial data through natural language.
+A single-user personal budgeting web app replacing Monarch Money. Built with React, Express, tRPC, and SQLite, hosted on a home iMac server. Pulls financial data from SimpleFIN (MX upstream) and uses envelope budgeting to assign every dollar a job. Ships with a full dashboard, spending/net-worth charts, categorization rules engine, transfer detection, twice-monthly auto-funding, a Claude-powered conversational agent, and CSV import for migrating transaction history from Monarch Money.
 
 ## Core Value
 
@@ -31,18 +31,15 @@ Accurate, auto-synced financial data with envelope budgeting that lets you see w
 - ✓ Agent action tools — 10 tools for categorization, rules, budgets, transfers, sync — v2.0
 - ✓ Confirmation flow — auto-execute reads and most writes, require confirmation for budget amount changes — v2.0
 
+- ✓ CSV import with Monarch format parsing, auto-delimiter detection, validation, and error reporting — v2.3
+- ✓ Preview/execute import API with atomic SQLite transactions, dedup hash, auto-suggest account/category mappings — v2.3
+- ✓ 3-step import wizard UI (upload, preview/map, confirm/results) with drag-and-drop — v2.3
+- ✓ Post-import rules engine categorization and transfer detection — v2.3
+- ✓ Import navigation: /import route, desktop nav bar, mobile More sheet — v2.3
+
 ### Active
 
-## Current Milestone: v2.3 CSV Import
-
-**Goal:** Add a reusable CSV import feature for migrating transaction history from Monarch Money (and potentially other sources) into Minerva Money.
-
-**Target features:**
-- CSV parsing and validation service (tab-delimited Monarch format)
-- tRPC API endpoints for preview (parse + extract mappings) and execute (import with mappings)
-- Import page UI with file upload, account/category mapping, and confirm/import flow
-- Deduplication via existing hash mechanism, rules engine runs post-import
-- Navigation integration (desktop nav bar + mobile "More" sheet)
+(No active milestone — use `/gsd:new-milestone` to start next)
 
 ### Out of Scope
 
@@ -62,16 +59,16 @@ Accurate, auto-synced financial data with envelope budgeting that lets you see w
 
 ## Context
 
-- Shipped v2.0 with 9,447 LOC TypeScript across 40+ new/modified files
-- Tech stack: React + Tailwind / Express + tRPC / SQLite via better-sqlite3 / TanStack Query / Claude Agent SDK
-- Replacing Monarch Money with a self-hosted alternative
+- Shipped v2.3 with 18,461 LOC TypeScript across 28 phases
+- Tech stack: React + Tailwind / Express + tRPC / SQLite via better-sqlite3 / TanStack Query / Claude Agent SDK / csv-parse
+- Replacing Monarch Money with a self-hosted alternative (CSV import enables full data migration)
 - SimpleFIN costs $15/year, connects to MX (16,000+ institutions)
 - Three institutions: Discover (banking + HELOC), Fidelity (investments), Consumers Credit Union (banking)
 - Pay schedule: bi-monthly (15th and last day of month), equal split
 - SimpleFIN rate limit: 24 requests/day per account, 90-day max date range
 - Freedom Mortgage blocks all aggregators but payments appear as bank debits
 - Discover HELOC discontinued July 2025 (Capital One acquisition) — existing loan still serviced
-- Known tech debt: orphaned budget.allocations.byMonth procedure, client uses inline cents conversion instead of shared helper, 2 redundant backup tests, 3 VERIFICATION.md tool name mismatches in Phase 14, no dedicated unit tests for query-tools.ts or ChatPage.tsx
+- Known tech debt: orphaned budget.allocations.byMonth procedure, client uses inline cents conversion instead of shared helper, 2 redundant backup tests (run-backup.test.ts), 3 VERIFICATION.md tool name mismatches in Phase 14, no dedicated unit tests for query-tools.ts or ChatPage.tsx, rules-service.test.ts has 8 repetitive beforeEach/afterEach blocks
 
 ## Constraints
 
@@ -107,6 +104,10 @@ Accurate, auto-synced financial data with envelope budgeting that lets you see w
 | launchd over PM2/Docker for process management | Native macOS, zero dependencies, consistent with existing backup plist | — Pending |
 | Express serves client static files | Single process, simpler deployment than nginx + Express | — Pending |
 | Node 20 --env-file over dotenv | No extra dependency, native support | — Pending |
+| Stateless preview/execute CSV import | Client sends CSV text, server re-parses on execute — no session state | ✓ Good — simple, no cleanup needed |
+| csv-parse library for CSV parsing | RFC-4180 compliant, BOM support, sync API — proven library | ✓ Good — handles edge cases reliably |
+| Rules engine priority over CSV categories | Rules run first, CSV categories only as fallback for unmatched | ✓ Good — consistent categorization |
+| Auto-delimiter detection (tab vs comma) | `headerLine.includes('\t')` check before parsing | ✓ Good — handles both Monarch export formats |
 
 ---
-*Last updated: 2026-03-24 after v2.3 milestone start*
+*Last updated: 2026-03-24 after v2.3 milestone*
