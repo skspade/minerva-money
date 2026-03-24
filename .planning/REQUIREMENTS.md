@@ -49,13 +49,13 @@ None — this is a focused enhancement milestone.
 | SKIP-01 | Phase 30 | Complete |
 | SKIP-02 | Phase 30 | Complete |
 | SKIP-03 | Phase 30 | Complete |
-| STAT-01 | Phase 32 | Pending |
-| STAT-02 | Phase 32 | Pending |
-| STAT-03 | Phase 32 | Pending |
+| STAT-01 | Phase 31 | Complete |
+| STAT-02 | Phase 31 | Complete |
+| STAT-03 | Phase 31 | Complete |
 | EXEC-01 | Phase 29 | Complete |
-| EXEC-02 | Phase 32 | Pending |
-| PLSH-01 | Phase 32 | Pending |
-| PLSH-02 | Phase 32 | Pending |
+| EXEC-02 | Phase 31 | Complete |
+| PLSH-01 | Phase 31 | Complete |
+| PLSH-02 | Phase 31 | Complete |
 
 **Coverage:**
 - v2.4 requirements: 10 total
