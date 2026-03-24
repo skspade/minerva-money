@@ -18,15 +18,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-23)
 
 **Core value:** Accurate, auto-synced financial data with envelope budgeting that lets you see where every dollar goes and how spending trends over time.
-**Current focus:** Mobile-friendly UI — Phase 23: Budget Cards
+**Current focus:** Mobile-friendly UI — Phase 24: Modal Conversions
 
 ## Current Position
 
 Milestone: v2.2 Mobile-Friendly UI
-Phase: 23 — Budget Cards (COMPLETE)
+Phase: 24 — Modal Conversions (IN PROGRESS)
 Plan: 01 of 01 complete
-Status: Phase 23 verified and complete, ready for Phase 24
-Last activity: 2026-03-23 — Completed 23-01 (budget cards, progress bars, mobile month selector)
+Status: All plans executed, awaiting verification
+Last activity: 2026-03-23 — Completed 24-01 (dual-render modals, vaul Drawer bottom sheets)
 
 Progress: [██████████] 100%
 
@@ -38,6 +38,7 @@ Progress: [██████████] 100%
 - Plan 21-02: 1 min, 2 tasks, 4 files
 - Plan 22-01: 3 min, 2 tasks, 3 files
 - Plan 23-01: 3 min, 2 tasks, 3 files
+- Plan 24-01: 4 min, 2 tasks, 6 files
 
 ## Accumulated Context
 
@@ -65,5 +66,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-23
-Stopped at: Completed 23-01-PLAN.md (Phase 23 all plans done)
+Stopped at: Completed 24-01-PLAN.md (Phase 24 all plans done, awaiting verification)
 Resume file: None
