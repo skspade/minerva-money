@@ -58,7 +58,7 @@ Full details: see Phase Details below
 **Milestone Goal:** Make every page in Minerva Money fully functional on iPhone (375–430px) with bottom tab navigation, card layouts, safe area insets, and bottom sheet modals — without regressing any desktop behavior.
 
 - [x] **Phase 21: Layout Foundation** - Bottom tab bar, Sheet component, viewport/safe area fixes, Layout.tsx mobile padding (completed 2026-03-24)
-- [ ] **Phase 22: Transaction Cards** - Mobile card layout, filter collapse, CategoryPicker tap-to-change
+- [ ] **Phase 22: Transaction Cards** - Mobile card layout, filter collapse, CategoryPicker tap-to-change (1 plan)
 - [ ] **Phase 23: Budget Cards** - Stacked category cards, progress bars, inline allocation editing
 - [ ] **Phase 24: Modal Conversions** - SplitModal, ManualTransactionForm, RuleForm, ManualLinkModal as bottom sheets
 - [ ] **Phase 25: Remaining Pages** - Dashboard, Accounts, Reports, Chat, Categories, Rules mobile polish
@@ -89,7 +89,8 @@ Full details: see Phase Details below
   3. Tapping a transaction card expands it to show memo, splits, and notes
   4. Filters collapse into a "Filter" button with an active filter count badge on mobile
   5. Form inputs use 16px minimum font size to prevent iOS auto-zoom
-**Plans**: TBD
+**Plans**: 1 plan
+  - [ ] 22-01-PLAN.md — TransactionCard component, mobile card list, filter collapse, TOUCH-02 input fixes
 
 ### Phase 23: Budget Cards
 **Goal**: Replace the desktop budget grid with stacked category cards on mobile, with color-coded progress bars and tap-to-edit allocation
