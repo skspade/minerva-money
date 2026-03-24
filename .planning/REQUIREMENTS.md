@@ -43,15 +43,15 @@ Requirements for mobile-friendly UI milestone. Each maps to roadmap phases.
 
 - [x] **TOUCH-01**: All interactive elements (buttons, links, form inputs, tab bar items) have a minimum 44x44px tap target on mobile
 - [x] **TOUCH-02**: Form inputs use `text-base` (16px) minimum font size on mobile to prevent iOS auto-zoom
-- [ ] **TOUCH-03**: Form layouts stack vertically on mobile with full-width inputs
+- [x] **TOUCH-03**: Form layouts stack vertically on mobile with full-width inputs
 
 ### Modals & Sheets
 
-- [ ] **MODAL-01**: SplitModal renders as a full-screen bottom sheet on mobile and a centered modal on desktop
-- [ ] **MODAL-02**: ManualTransactionForm renders as a full-screen bottom sheet on mobile and a centered modal on desktop
-- [ ] **MODAL-03**: Bottom sheets support drag-to-dismiss and backdrop tap to close
-- [ ] **MODAL-04**: RuleForm renders as a full-screen sheet on mobile
-- [ ] **MODAL-05**: ManualLinkModal renders as a full-screen sheet on mobile
+- [x] **MODAL-01**: SplitModal renders as a full-screen bottom sheet on mobile and a centered modal on desktop
+- [x] **MODAL-02**: ManualTransactionForm renders as a full-screen bottom sheet on mobile and a centered modal on desktop
+- [x] **MODAL-03**: Bottom sheets support drag-to-dismiss and backdrop tap to close
+- [x] **MODAL-04**: RuleForm renders as a full-screen sheet on mobile
+- [x] **MODAL-05**: ManualLinkModal renders as a full-screen sheet on mobile
 
 ### Remaining Pages
 
@@ -149,12 +149,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | BUD-03 | Phase 23 | Complete |
 | BUD-04 | Phase 23 | Complete |
 | BUD-05 | Phase 23 | Complete |
-| MODAL-01 | Phase 24 | Not Started |
-| MODAL-02 | Phase 24 | Not Started |
-| MODAL-03 | Phase 24 | Not Started |
-| MODAL-04 | Phase 24 | Not Started |
-| MODAL-05 | Phase 24 | Not Started |
-| TOUCH-03 | Phase 24 | Not Started |
+| MODAL-01 | Phase 24 | Complete |
+| MODAL-02 | Phase 24 | Complete |
+| MODAL-03 | Phase 24 | Complete |
+| MODAL-04 | Phase 24 | Complete |
+| MODAL-05 | Phase 24 | Complete |
+| TOUCH-03 | Phase 24 | Complete |
 | PAGE-01 | Phase 25 | Not Started |
 | PAGE-02 | Phase 25 | Not Started |
 | PAGE-03 | Phase 25 | Not Started |

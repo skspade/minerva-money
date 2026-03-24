@@ -193,5 +193,5 @@ Full details: see Phase Details below
 | 21. Layout Foundation | 2/2 | Complete    | 2026-03-24 | — |
 | 22. Transaction Cards | 1/1 | Complete    | 2026-03-24 | — |
 | 23. Budget Cards | 1/1 | Complete    | 2026-03-24 | — |
-| 24. Modal Conversions | 1/1 | Complete   | 2026-03-24 | — |
+| 24. Modal Conversions | 1/1 | Complete    | 2026-03-24 | — |
 | 25. Remaining Pages | v2.2 | 0/? | Not Started | — |
