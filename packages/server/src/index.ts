@@ -1,3 +1,5 @@
+import path from 'path';
+import { fileURLToPath } from 'url';
 import express from 'express';
 import * as trpcExpress from '@trpc/server/adapters/express';
 import { createDatabase } from './db/connection.js';
@@ -7,6 +9,8 @@ import { createRateLimiter } from './sync/rate-limiter.js';
 import { startSyncScheduler, stopSyncScheduler } from './sync/sync-scheduler.js';
 import { startBudgetScheduler, stopBudgetScheduler } from './budget/budget-scheduler.js';
 import type { Context } from './sync/trpc.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 const PORT = 3001;
@@ -30,6 +34,12 @@ if (process.env.NODE_ENV !== 'test') {
     }),
   );
 
+  const clientDist = path.resolve(__dirname, '../../client/dist');
+  app.use(express.static(clientDist));
+  app.get('*', (_req, res) => {
+    res.sendFile(path.join(clientDist, 'index.html'));
+  });
+
   startSyncScheduler(db);
   startBudgetScheduler(db);
 
@@ -40,7 +50,9 @@ if (process.env.NODE_ENV !== 'test') {
   process.on('SIGTERM', () => {
     stopSyncScheduler();
     stopBudgetScheduler();
-    server.close();
+    const forceExit = setTimeout(() => process.exit(0), 5000);
+    forceExit.unref();
+    server.close(() => process.exit(0));
   });
 }
 
