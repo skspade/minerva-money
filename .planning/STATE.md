@@ -6,9 +6,9 @@ status: executing
 last_updated: "2026-03-23"
 progress:
   total_phases: 5
-  completed_phases: 2
-  total_plans: 3
-  completed_plans: 3
+  completed_phases: 3
+  total_plans: 4
+  completed_plans: 4
 ---
 
 # Project State
@@ -18,15 +18,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-23)
 
 **Core value:** Accurate, auto-synced financial data with envelope budgeting that lets you see where every dollar goes and how spending trends over time.
-**Current focus:** Mobile-friendly UI — Phase 22: Transaction Cards
+**Current focus:** Mobile-friendly UI — Phase 23: Budget Cards
 
 ## Current Position
 
 Milestone: v2.2 Mobile-Friendly UI
-Phase: 22 — Transaction Cards (COMPLETE)
+Phase: 23 — Budget Cards (COMPLETE)
 Plan: 01 of 01 complete
-Status: Phase 22 verified and complete, ready for Phase 23
-Last activity: 2026-03-23 — Completed 22-01 (transaction cards, mobile filters, iOS zoom fix)
+Status: Phase 23 verified and complete, ready for Phase 24
+Last activity: 2026-03-23 — Completed 23-01 (budget cards, progress bars, mobile month selector)
 
 Progress: [██████████] 100%
 
@@ -37,6 +37,7 @@ Progress: [██████████] 100%
 - Plan 21-01: 1 min, 2 tasks, 3 files
 - Plan 21-02: 1 min, 2 tasks, 4 files
 - Plan 22-01: 3 min, 2 tasks, 3 files
+- Plan 23-01: 3 min, 2 tasks, 3 files
 
 ## Accumulated Context
 
@@ -64,5 +65,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-23
-Stopped at: Completed 22-01-PLAN.md (Phase 22 all plans done)
+Stopped at: Completed 23-01-PLAN.md (Phase 23 all plans done)
 Resume file: None
