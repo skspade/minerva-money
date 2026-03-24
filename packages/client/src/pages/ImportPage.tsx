@@ -118,7 +118,8 @@ export default function ImportPage() {
   }, [handleFile]);
 
   const handleImport = () => {
-    executeMutation.mutate({ csvText, accountMappings, categoryMappings });
+    const filteredMappings = filterSkippedAccounts(accountMappings);
+    executeMutation.mutate({ csvText, accountMappings: filteredMappings, categoryMappings });
   };
 
   const handleReset = () => {
@@ -134,9 +135,9 @@ export default function ImportPage() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const allAccountsMapped = previewResult
-    ? previewResult.accounts.every((a: AccountMatch) => accountMappings[a.csvName] && accountMappings[a.csvName] !== '')
-    : false;
+  const validationState = previewResult
+    ? getValidationState(previewResult.accounts, accountMappings)
+    : { canContinue: false, message: null };
 
   const stepLabel = step === 'upload'
     ? 'Step 1 of 3: Upload'
@@ -171,7 +172,7 @@ export default function ImportPage() {
           categoryGroups={categoryGroups ?? []}
           accountMappings={accountMappings}
           categoryMappings={categoryMappings}
-          allAccountsMapped={allAccountsMapped}
+          validationState={validationState}
           onAccountMappingChange={(csvName, accountId) => {
             setAccountMappings(prev => ({ ...prev, [csvName]: accountId }));
           }}
@@ -235,12 +236,14 @@ interface PreviewResult {
   errors: string[];
   accounts: AccountMatch[];
   categories: CategoryMatch[];
+  rowCountByAccount: Record<string, number>;
   dedupStats: { newCount: number; duplicateCount: number };
 }
 
 interface ExecuteResult {
   importedCount: number;
   skippedCount: number;
+  skippedByAccountFilter: number;
   categorizedByRules: number;
   categorizedFromCsv: number;
 }
@@ -333,7 +336,7 @@ interface PreviewStepProps {
   categoryGroups: { id: number; name: string; categories: { id: number; name: string }[] }[];
   accountMappings: Record<string, string>;
   categoryMappings: Record<string, number>;
-  allAccountsMapped: boolean;
+  validationState: { canContinue: boolean; message: string | null };
   onAccountMappingChange: (csvName: string, accountId: string) => void;
   onCategoryMappingChange: (csvName: string, categoryId: number) => void;
   onContinue: () => void;
@@ -345,7 +348,7 @@ function PreviewStep({
   categoryGroups,
   accountMappings,
   categoryMappings,
-  allAccountsMapped,
+  validationState,
   onAccountMappingChange,
   onCategoryMappingChange,
   onContinue,
@@ -424,20 +427,37 @@ function PreviewStep({
         <h3 className="text-lg font-semibold text-gray-900 mb-3">Map Accounts</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {previewResult.accounts.map((acct) => (
-            <div key={acct.csvName} className="space-y-1">
-              <label className="text-sm font-medium text-gray-700">{acct.csvName}</label>
+            <div key={acct.csvName} className={`space-y-1 ${
+              accountMappings[acct.csvName] === SKIP_SENTINEL
+                ? 'opacity-60 border-l-4 border-amber-400 pl-3'
+                : ''
+            }`}>
+              <label className="text-sm font-medium text-gray-700">
+                {acct.csvName}
+                {previewResult.rowCountByAccount[acct.csvName] != null && (
+                  <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                    {previewResult.rowCountByAccount[acct.csvName]} {previewResult.rowCountByAccount[acct.csvName] === 1 ? 'row' : 'rows'}
+                  </span>
+                )}
+              </label>
               <select
                 value={accountMappings[acct.csvName] ?? ''}
                 onChange={(e) => onAccountMappingChange(acct.csvName, e.target.value)}
                 className={`w-full rounded-md border px-3 py-2 text-sm ${
-                  !accountMappings[acct.csvName] ? 'border-red-300' : 'border-gray-300'
+                  !accountMappings[acct.csvName] ? 'border-red-300' :
+                  accountMappings[acct.csvName] === SKIP_SENTINEL ? 'border-amber-300' :
+                  'border-gray-300'
                 }`}
               >
                 <option value="" disabled>Select account...</option>
+                <option value={SKIP_SENTINEL}>Skip — do not import</option>
                 {accounts.map((a) => (
                   <option key={a.id} value={a.id}>{a.name}</option>
                 ))}
               </select>
+              {accountMappings[acct.csvName] === SKIP_SENTINEL && (
+                <p className="text-xs text-amber-600 italic">Skipped — rows from this account will not be imported</p>
+              )}
             </div>
           ))}
         </div>
@@ -471,12 +491,12 @@ function PreviewStep({
 
       {/* Continue button */}
       <div className="flex flex-col md:flex-row md:justify-end gap-3">
-        {!allAccountsMapped && (
-          <p className="text-sm text-red-600 self-center">All accounts must be mapped before continuing</p>
+        {validationState.message && (
+          <p className="text-sm text-red-600 self-center">{validationState.message}</p>
         )}
         <button
           onClick={onContinue}
-          disabled={!allAccountsMapped}
+          disabled={!validationState.canContinue}
           className="w-full md:w-auto px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           Continue
