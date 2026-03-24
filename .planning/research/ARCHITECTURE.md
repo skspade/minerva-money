@@ -1,349 +1,448 @@
 # Architecture Research
 
-**Domain:** Deployment hardening — launchd service, static file serving, deploy scripts for Express + Vite + SQLite monorepo on macOS
+**Domain:** Mobile-friendly UI — bottom tab bar, card layouts, mobile sheets/modals, responsive navigation on React + Tailwind v4
 **Researched:** 2026-03-23
-**Confidence:** HIGH (all findings verified against actual codebase and file system)
-
-> NOTE: This file supersedes the v2.0 Agent SDK architecture document. It focuses exclusively on v2.1 deployment hardening. The v2.0 architecture is already implemented and unchanged.
+**Confidence:** HIGH (all findings based on direct codebase inspection)
 
 ---
 
 ## Standard Architecture
 
-### System Overview (Production, Post-v2.1)
+### System Overview (Client Layer, v2.2 Mobile UI)
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    launchd (macOS init system)               │
-│  ┌───────────────────────────┐  ┌────────────────────────┐  │
-│  │  com.minerva.server       │  │  com.minerva.backup    │  │
-│  │  KeepAlive: true          │  │  StartInterval: 21600  │  │
-│  │  RunAtLoad: true          │  │  RunAtLoad: true       │  │
-│  │  ThrottleInterval: 10s    │  └──────────┬─────────────┘  │
-│  └──────────────┬────────────┘             │                 │
-└─────────────────┼────────────────────────  │  ───────────────┘
-                  │ spawns                   │ spawns
-                  ▼                          ▼
-┌─────────────────────────────┐   ┌─────────────────────────┐
-│  Node.js Express Process    │   │  Node.js Backup Process  │
-│  (packages/server/dist/     │   │  (packages/server/dist/  │
-│   index.js)                 │   │   backup/run-backup.js)  │
-│                             │   │                          │
-│  PORT 3001                  │   │  Opens DB directly       │
-│                             │   │  Writes to iCloud Drive  │
-│  /trpc/*   → tRPC router    │   │  Exits cleanly           │
-│  /health   → status check   │   └─────────────────────────┘
-│  /*        → static files   │
-│             (client/dist/)  │             │
-│                             │             ▼
-│  Schedulers (in-process):   │   ~/minerva-money/data/
-│    sync (croner)            │   minerva.db  ←────────────┐
-│    budget (croner)          │                            │
-│                             │                            │
-│  Agent SDK (in-process)     │                            │
-│    → Anthropic API          │                            │
-└─────────────────┬───────────┘                            │
-                  │ reads/writes                            │
-                  └────────────────────────────────────────┘
+│                    app.tsx (BrowserRouter)                   │
+│                                                              │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │                 Layout.tsx  ← MODIFY                 │    │
+│  │                                                      │    │
+│  │  ┌──────────────────┐  ┌────────────────────────┐   │    │
+│  │  │  TopNav (desktop) │  │  BottomTabBar (mobile) │   │    │
+│  │  │  hidden on mobile │  │  hidden on desktop     │   │    │
+│  │  └──────────────────┘  └────────────────────────┘   │    │
+│  │                                                      │    │
+│  │  <main> <Outlet />  ← pages render here             │    │
+│  │                                                      │    │
+│  └─────────────────────────────────────────────────────┘    │
+│                                                              │
+│  Pages: Dashboard | Accounts | Transactions | Budget         │
+│         Categories | Rules | Transfers | Reports | Chat      │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                     tRPC + TanStack Query
+                              │
+                    Express :3001 (unchanged)
 ```
 
 ### Component Responsibilities
 
-| Component | Responsibility | New vs Modified |
-|-----------|----------------|-----------------|
-| `deploy/com.minerva.server.plist` | launchd service definition — crash recovery, boot startup, env loading | MODIFY (fix node path) |
-| `deploy/com.minerva.backup.plist` | launchd backup scheduler — every 6 hours | MODIFY (fix paths for production) |
-| `deploy/setup.sh` | First-time install — copy plists, load services, verify health | MODIFY (use modern launchctl commands) |
-| `deploy/deploy.sh` | One-command update — pull, install, build, restart | VERIFY (already correct) |
-| `packages/server/src/index.ts` | Express static file serving, SIGTERM handler | VERIFY (already implemented) |
+| Component | Responsibility | Status |
+|-----------|----------------|--------|
+| `Layout.tsx` | Shell: top nav (desktop), bottom tab bar (mobile), main content padding | MODIFY |
+| `BottomTabBar` (new) | 5 primary tabs + "More" sheet trigger, active state, 44px tap targets | NEW |
+| `MoreSheet` (new) | Bottom sheet listing overflow pages (Categories, Rules, Transfers, Reports, Chat) | NEW |
+| `Sheet` (new) | Generic bottom sheet primitive: backdrop, slide-up panel, scroll lock | NEW |
+| `TransactionCard` (new) | Mobile card layout for a single transaction row with swipe/tap category picker | NEW |
+| `BudgetCategoryCard` (new) | Mobile stacked card: category name, progress bar, allocated/spent/available | NEW |
+| `TransactionsPage` | Table on desktop, card list on mobile; filter bar collapses to sheet on mobile | MODIFY |
+| `BudgetPage` | 5-column grid on desktop, stacked cards on mobile; inline edit becomes sheet on mobile | MODIFY |
+| `DashboardPage` | Already uses `grid-cols-1 md:grid-cols-2` — minor touch target and spacing fixes | MINOR |
+| `AccountsPage` | Already card-based — add tap target sizing and padding adjustments | MINOR |
+| `ReportsPage` | Date range controls stack on mobile; charts use `ResponsiveContainer` (already) | MINOR |
+| `ChatPage` | Height calc must account for bottom tab bar height; input bar fixed above tab bar | MODIFY |
+| `CategoriesPage` | DnD works on desktop only; no mobile drag needed (existing pattern fine) | MINOR |
+| `RulesPage` | Table → card list on mobile; RuleForm becomes full-screen sheet on mobile | MODIFY |
+| `ManualLinkModal` | `grid-cols-2` → stacked on mobile; `max-w-4xl` → full-screen sheet | MODIFY |
+| `SplitModal` | Already `max-w-lg mx-4` — adjust to full-screen sheet below sm breakpoint | MODIFY |
+| `ManualTransactionForm` | Inline form → full-screen sheet on mobile | MODIFY |
 
 ---
 
 ## Recommended Project Structure
 
 ```
-minverva-money/
-├── deploy/                          # All deployment config (co-located)
-│   ├── com.minerva.server.plist     # launchd server service
-│   ├── com.minerva.backup.plist     # launchd backup service
-│   ├── setup.sh                     # First-time install script
-│   └── deploy.sh                    # Ongoing deploy script
-├── packages/
-│   ├── server/
-│   │   ├── dist/                    # Compiled JS (tsc output) — served by launchd
-│   │   │   ├── index.js             # Entry point for launchd
-│   │   │   ├── backup/
-│   │   │   │   └── run-backup.js    # Entry point for backup plist
-│   │   │   └── db/
-│   │   │       └── ...
-│   │   ├── migrations/              # SQL files (NOT compiled — referenced at runtime)
-│   │   │   └── *.sql
-│   │   └── src/
-│   │       └── index.ts             # Static file serving already wired
-│   └── client/
-│       └── dist/                    # Vite build output — served by Express
-│           ├── index.html
-│           └── assets/
-└── ~/minerva-money/data/
-    └── minerva.db                   # SQLite DB (outside repo)
+packages/client/src/
+├── components/
+│   ├── Layout.tsx              # MODIFY — add BottomTabBar, mobile padding
+│   ├── BottomTabBar.tsx        # NEW — primary nav for mobile
+│   ├── Sheet.tsx               # NEW — reusable bottom sheet primitive
+│   ├── MoreSheet.tsx           # NEW — overflow page links (uses Sheet)
+│   ├── TransactionCard.tsx     # NEW — mobile transaction row
+│   ├── BudgetCategoryCard.tsx  # NEW — mobile budget row
+│   ├── CategoryPicker.tsx      # existing — no changes needed
+│   ├── InlineConfirm.tsx       # existing — no changes needed
+│   ├── ManualLinkModal.tsx     # MODIFY — stacked layout + full-screen on mobile
+│   ├── ManualTransactionForm.tsx  # MODIFY — sheet on mobile
+│   ├── RetroactivePreview.tsx  # existing — minor touch target fixes
+│   ├── RuleForm.tsx            # MODIFY — full-screen sheet on mobile
+│   ├── SplitModal.tsx          # MODIFY — full-screen sheet on mobile
+│   ├── SyncButton.tsx          # existing — 44px tap target
+│   └── SyncStatus.tsx          # existing — no changes needed
+├── pages/
+│   ├── DashboardPage.tsx       # MINOR — spacing only
+│   ├── AccountsPage.tsx        # MINOR — padding/tap targets
+│   ├── TransactionsPage.tsx    # MODIFY — card layout + filter sheet on mobile
+│   ├── BudgetPage.tsx          # MODIFY — stacked card layout on mobile
+│   ├── CategoriesPage.tsx      # MINOR — tap targets on drag handles
+│   ├── RulesPage.tsx           # MODIFY — card list + rule form as sheet
+│   ├── TransfersPage.tsx       # MINOR — stacked pair layout on mobile
+│   ├── ReportsPage.tsx         # MINOR — stack date controls vertically
+│   └── ChatPage.tsx            # MODIFY — bottom inset for tab bar
+├── lib/
+│   └── format.ts               # existing — no changes
+├── styles/
+│   └── app.css                 # existing — no changes (Tailwind v4 via @import)
+├── app.tsx                     # existing — no changes
+├── main.tsx                    # existing — no changes
+└── trpc.ts                     # existing — no changes
 ```
 
 ### Structure Rationale
 
-- **`deploy/` at root:** All deployment artifacts in one place, version-controlled, no scattered config
-- **`packages/server/migrations/` outside `src/`:** SQL files are not TypeScript — `tsc` does not copy them. The path `../../migrations` from `dist/db/` correctly resolves to `packages/server/migrations/` at runtime (verified by path arithmetic)
-- **`packages/client/dist/` as static root:** Express uses `path.resolve(__dirname, '../../client/dist')` where `__dirname` is `packages/server/dist/` at runtime — resolves correctly to `packages/client/dist/`
+- **New components in `components/`:** Sheet, BottomTabBar, MoreSheet are generic UI primitives reused across pages — belong with other shared components, not inside page files.
+- **TransactionCard and BudgetCategoryCard in `components/`:** Extracted from page files to keep page components focused on data fetching and layout logic, not rendering details.
+- **No new directories:** The existing flat structure is appropriate for this codebase size. No `mobile/` subdirectory needed — components are responsive, not mobile-exclusive.
 
 ---
 
 ## Architectural Patterns
 
-### Pattern 1: Express Serving Static Files (Already Implemented)
+### Pattern 1: CSS-Only Responsive Visibility (No JS for Breakpoints)
 
-**What:** In production (`NODE_ENV !== 'test'`), Express serves the Vite-built React app as static files, with a catch-all that serves `index.html` for client-side routing. tRPC requests go to `/trpc/*` before the catch-all, so API and UI share port 3001.
+**What:** Use Tailwind's `hidden` / `block` / `flex` utilities with `sm:` / `md:` prefixes to show/hide entire navigation components. No JavaScript `useWindowSize` hook, no resize listeners.
 
-**When to use:** Single-process deployment — avoids running nginx + Express separately. Perfect for single-user home server.
+**When to use:** Switching between structurally different layouts (top nav vs bottom tab bar). The DOM contains both; CSS controls which is visible.
 
-**Trade-offs:** Simple to operate. The static file path is computed at startup once; if client dist is missing, the server starts anyway but 404s on all UI routes.
+**Trade-offs:** Both components render on every device. This is acceptable — they are small. The benefit is zero layout shift or flash of wrong navigation on load.
 
-```typescript
-// packages/server/src/index.ts (already in place)
-const clientDist = path.resolve(__dirname, '../../client/dist');
-app.use(express.static(clientDist));
-app.get('*', (_req, res) => {
-  res.sendFile(path.join(clientDist, 'index.html'));
-});
+**Example (in Layout.tsx):**
+```tsx
+{/* Desktop navigation — hidden on mobile */}
+<nav className="hidden md:flex bg-gray-900 text-white ...">
+  {/* existing NavLinks */}
+</nav>
+
+{/* Mobile bottom tab bar — hidden on desktop */}
+<BottomTabBar className="flex md:hidden fixed bottom-0 left-0 right-0 z-40" />
 ```
 
-**Build dependency:** Client must be built before server starts in production. `npm run build` runs `--workspaces` which builds both packages (client first due to tsc project references on shared).
+### Pattern 2: Bottom Sheet Primitive
 
-### Pattern 2: launchd KeepAlive for Crash Recovery
+**What:** A generic `Sheet` component with a backdrop overlay and a slide-up panel. Used for: the "More" overflow menu, mobile filter panel on Transactions, mobile RuleForm, and replacing fixed-position center modals on small screens.
 
-**What:** launchd's `KeepAlive: true` automatically restarts the process after any exit. `ThrottleInterval: 10` enforces a 10-second minimum between restarts, preventing rapid crash loops from hammering the CPU.
+**When to use:** Any interaction that would be a modal on desktop becomes a bottom sheet on mobile. Center modals with `fixed inset-0 flex items-center justify-center` are fine on desktop but cramped on phones.
 
-**When to use:** Any long-running service on macOS that must survive crashes and boot automatically.
+**Trade-offs:** One extra component to build and test. Payoff is consistent mobile UX across all overlay interactions.
 
-**Trade-offs:** `ThrottleInterval` means there is a 10-second gap in availability after a crash. Acceptable for personal use. `RunAtLoad: true` starts the service immediately when `launchctl bootstrap` is called (first time or after reboot).
-
-```xml
-<!-- deploy/com.minerva.server.plist (pattern — not exact fix) -->
-<key>KeepAlive</key><true/>
-<key>RunAtLoad</key><true/>
-<key>ThrottleInterval</key><integer>10</integer>
+**Example (Sheet.tsx):**
+```tsx
+export function Sheet({ open, onClose, children }: SheetProps) {
+  return open ? (
+    <div className="fixed inset-0 z-50 flex flex-col justify-end">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative bg-white rounded-t-2xl max-h-[90vh] overflow-y-auto">
+        {children}
+      </div>
+    </div>
+  ) : null;
+}
 ```
 
-### Pattern 3: Node --env-file for Secret Loading (No dotenv Dependency)
+### Pattern 3: Conditional Layout with Tailwind Responsive Prefixes
 
-**What:** Node 20 natively supports `--env-file=.env` as a process flag. The plist passes it as a `ProgramArguments` entry before the script path.
+**What:** A single component renders both desktop and mobile markup, using responsive prefixes to switch between them. No separate mobile component files.
 
-**When to use:** Any Node 20+ process that needs `.env` file loading without adding `dotenv` as a runtime dependency.
+**When to use:** TransactionCard and table rows — both represent the same data, just laid out differently. Keeps data logic (filtering, sorting, mutation) in one place.
 
-**Trade-offs:** Requires Node 20+. Only reads the specified file — no cascade (`.env.local` etc.). Works correctly with launchd since `WorkingDirectory` is set to the repo root where `.env` lives.
+**Trade-offs:** More conditional classes in JSX. Acceptable complexity for 9 pages. Alternative (separate MobileTransactionList / DesktopTable components) adds indirection without much benefit at this scale.
 
-```xml
-<key>ProgramArguments</key>
-<array>
-  <string>/path/to/node</string>
-  <string>--env-file=.env</string>
-  <string>packages/server/dist/index.js</string>
-</array>
-<key>WorkingDirectory</key>
-<string>/Users/seanspade/Documents/Source/minverva-money</string>
+**Example (TransactionsPage — conceptual):**
+```tsx
+{/* Table: visible on md and up */}
+<div className="hidden md:block overflow-x-auto">
+  <table>...</table>
+</div>
+
+{/* Card list: visible below md */}
+<div className="md:hidden space-y-2">
+  {filtered.map(txn => <TransactionCard key={txn.id} txn={txn} ... />)}
+</div>
 ```
 
-### Pattern 4: Separate Long-Lived vs Periodic launchd Services
+### Pattern 4: Mobile-First Tap Targets (44px minimum)
 
-**What:** The server uses `KeepAlive: true` (perpetual). The backup uses `StartInterval: 21600` (periodic, exits after each run). These are fundamentally different service types in launchd.
+**What:** All interactive elements get `min-h-[44px] min-w-[44px]` or equivalent padding so they meet Apple's HIG touch target guidelines. Applied via Tailwind utilities, not a wrapper component.
 
-**When to use:** This split is already the correct design — do not merge them into one process. The backup process opens the SQLite database directly (independent connection), performs the backup, then exits. This is safe because the server keeps WAL mode enabled, allowing concurrent readers.
+**When to use:** Every `<button>`, `<a>`, `<select>`, and clickable `<div>` that appears on mobile. Especially: NavLink items, AllocationCell click target, category picker rows, split/edit/delete action buttons.
 
-**Trade-offs:** Two plist files to manage. The backup process cannot communicate with the server's in-process backup scheduler — they are completely independent. This is intentional and correct: the plist backup is the scheduled backup; the server's in-process backup fires post-sync as a bonus.
+**Trade-offs:** Slightly more padding on desktop — acceptable since these are functional UI elements, not decorative.
+
+### Pattern 5: Scroll Lock for Overlays
+
+**What:** When a Sheet or modal opens, prevent body scroll via `document.body.style.overflow = 'hidden'`. Restore on close. Important on iOS Safari where momentum scroll bleeds through overlays.
+
+**When to use:** Any `position: fixed` overlay (Sheet, modals). Implemented inside the Sheet primitive so all Sheet consumers get it automatically.
+
+**Example (in Sheet.tsx useEffect):**
+```tsx
+useEffect(() => {
+  if (open) {
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = ''; };
+  }
+}, [open]);
+```
 
 ---
 
 ## Data Flow
 
-### Production Startup Flow
+### Responsive State Flow
+
+No new global state is needed. Responsive behavior is handled entirely by CSS breakpoints. The one exception: sheet open/close state lives as local `useState` in the component that triggers it.
 
 ```
-macOS boot
-  → launchd reads ~/Library/LaunchAgents/com.minerva.server.plist
-  → spawns: node --env-file=.env packages/server/dist/index.js
-            (WorkingDirectory = repo root)
-  → index.js creates DB (~/minerva-money/data/minerva.db)
-  → runs migrations (packages/server/migrations/*.sql)
-  → mounts tRPC middleware at /trpc
-  → serves client/dist/ as static files
-  → starts sync scheduler (croner)
-  → starts budget scheduler (croner)
-  → listens on port 3001
+User taps "More" tab (mobile)
+  → MoreSheet open state: false → true (local useState in Layout)
+  → Sheet renders with backdrop + overflow page links
+  → User taps a link → navigate → Sheet closes (onClose)
 ```
 
-### Deploy Flow
-
 ```
-developer: ./deploy/deploy.sh
-  → git pull origin main
-  → npm install (workspace — all packages)
-  → npm run build (tsc for server, vite for client)
-  → launchctl kickstart -k "gui/$(id -u)/com.minerva.server"
-     (kickstart -k = kill running instance + restart with new binary)
-  → server reloads, picks up new packages/server/dist/index.js
-  → new packages/client/dist/ already in place (served on next request)
+User taps filter icon (mobile, TransactionsPage)
+  → filterSheetOpen: false → true (local useState in TransactionsPage)
+  → Sheet renders with existing filter inputs
+  → User applies filters → Sheet closes
+  → filtered list re-renders via existing useMemo (no changes needed)
 ```
 
-### Request Flow (Production)
+### ChatPage Height Fix
+
+ChatPage uses `h-[calc(100vh-56px)]` to subtract the top nav height (56px). On mobile, with a fixed bottom tab bar (~56px), this must become:
 
 ```
-Browser request
-  ↓
-port 3001 (Express)
-  ├── /trpc/*  → tRPC middleware → router → service layer → SQLite
-  ├── /health  → { status: 'ok' }
-  └── /*       → express.static(client/dist/)
-                  → SPA index.html (catch-all for client routing)
+Desktop: h-[calc(100vh-56px)]          (subtract top nav only)
+Mobile:  h-[calc(100vh-56px-56px)]     (subtract top nav + bottom tab bar)
 ```
 
-### SIGTERM Flow (Graceful Shutdown)
+In Tailwind v4 with responsive classes:
+```tsx
+<div className="h-[calc(100vh-56px)] md:h-[calc(100vh-56px)]">
+```
+
+The mobile variant needs `pb-14` on the outer container OR use CSS env variables for safe area insets on iPhone with home indicator. The cleanest approach: add `pb-14` (56px bottom padding = tab bar height) to Layout's `<main>` only when below `md:` breakpoint, then let ChatPage use `h-full` within that space.
+
+### Budget Page Mobile Data Flow
+
+BudgetPage's existing data model is unchanged. The `BudgetGroup` component renders a `grid-cols-5` table row on desktop. On mobile, `BudgetCategoryCard` renders the same `CategorySummary` data as a stacked card with a progress bar. The `AllocationCell` inline-edit interaction is preserved — on mobile it triggers a number input that opens the native keyboard.
 
 ```
-launchctl kickstart -k (or OS shutdown)
-  → SIGTERM sent to Express process
-  → stopSyncScheduler() (croner)
-  → stopBudgetScheduler() (croner)
-  → server.close() (stops accepting new connections)
-  → process exits
-  → launchd restarts (if KeepAlive) or leaves stopped (if shutdown)
+BudgetPage
+  → useQuery(budget.summary) → data.categories → groupCategories()
+  → Desktop: BudgetGroup (grid-cols-5)
+  → Mobile: stacked cards via BudgetCategoryCard
+    → progress bar: (spent / allocated) * 100%
+    → inline AllocationCell (unchanged behavior, bigger tap target)
 ```
 
 ---
 
 ## Scaling Considerations
 
-This is a single-user home server app. Scaling is not a concern. These notes exist only to explain why the architecture is appropriate at this scale and what would break if it were not.
+This is a single-user personal app. Mobile responsiveness has no scaling implications — all logic stays client-side, server is unchanged.
 
-| Concern | Single User (Current) | Notes |
-|---------|----------------------|-------|
-| Static file serving | Express is adequate | nginx would be overkill; no CDN needed |
-| Process management | launchd is sufficient | PM2/Docker add complexity with no benefit |
-| Database concurrency | WAL mode handles it | Backup + server can read simultaneously |
-| Port conflicts | Port 3001 is fixed | No load balancer needed |
+| Concern | Approach |
+|---------|----------|
+| CSS bundle size | Tailwind v4 purges unused utilities — no concern |
+| JS bundle size | No new dependencies needed (Sheet is ~20 lines) |
+| Render performance | Card list renders all filtered transactions — same as table, no virtualization needed for personal finance data volumes |
 
 ---
 
 ## Anti-Patterns
 
-### Anti-Pattern 1: Using /usr/local/bin/node in Plist
+### Anti-Pattern 1: Using a JS Breakpoint Hook for Nav Switching
 
-**What:** The plist hardcodes `/usr/local/bin/node` as the Node binary path.
+**What people do:** `const isMobile = useWindowSize().width < 768` to conditionally render BottomTabBar.
 
-**Why it's wrong:** This machine uses nvm. The actual binary is at `/Users/seanspade/.nvm/versions/node/v20.16.0/bin/node`. `/usr/local/bin/node` does not exist. The service will fail to start with a "program not found" error.
+**Why it's wrong:** Causes layout shift on initial render (server/hydration mismatch or flash of wrong nav). Adds a resize listener. Unnecessary complexity.
 
-**Do this instead:** Use the absolute nvm path. Alternatively, use a wrapper shell script that sources `.nvm/nvm.sh` before exec'ing node. The simplest fix: hardcode the nvm path directly in the plist since this is a single-machine deployment.
+**Do this instead:** CSS-only with `hidden md:flex` / `flex md:hidden`. Both components are in the DOM; only one is visible. Zero JS overhead.
 
-### Anti-Pattern 2: Backup Plist Running TypeScript via tsx
+### Anti-Pattern 2: Creating Separate Mobile Page Files
 
-**What:** The current backup plist uses `node --import tsx packages/server/src/backup/run-backup.ts`.
+**What people do:** `TransactionsMobilePage.tsx` alongside `TransactionsPage.tsx`.
 
-**Why it's wrong:** (1) launchd does not inherit the user's `PATH`, so `tsx` from `node_modules/.bin/` is not resolvable. (2) Running TypeScript source in production bypasses the compiled output. (3) The transpilation overhead adds latency to every scheduled backup.
+**Why it's wrong:** Duplicates data-fetching logic, TanStack Query subscriptions, mutation handlers. Two files to keep in sync whenever server types change.
 
-**Do this instead:** Point the backup plist at the compiled output: `packages/server/dist/backup/run-backup.js`. The `tsc` build already compiles this file. The plist should use the same compiled-JS pattern as the server plist.
+**Do this instead:** One page file with responsive layout — hidden/visible table vs card list via Tailwind classes. Extract only the pure presentation into `TransactionCard` / `BudgetCategoryCard` components.
 
-### Anti-Pattern 3: Using `launchctl load` in setup.sh
+### Anti-Pattern 3: Fixed Pixel Heights That Ignore Tab Bar
 
-**What:** `setup.sh` uses `launchctl load ~/Library/LaunchAgents/com.minerva.server.plist`.
+**What people do:** Leave `h-[calc(100vh-56px)]` on ChatPage unchanged.
 
-**Why it's wrong:** `launchctl load` is deprecated on macOS 10.10+. On modern macOS it still works but prints deprecation warnings to stderr. More importantly, `launchctl load` only loads — it does not start the service immediately if `RunAtLoad: false`. The modern command is `launchctl bootstrap gui/$(id -u) <plist-path>`.
+**Why it's wrong:** On mobile, the fixed bottom tab bar (56px) sits above the bottom of the viewport. The chat input bar ends up behind the tab bar, inaccessible.
 
-**Do this instead:** Use `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.minerva.server.plist`. For re-loading an already-bootstrapped service use `launchctl kickstart gui/$(id -u)/com.minerva.server`. The `deploy.sh` already correctly uses `kickstart -k`.
+**Do this instead:** Layout's `<main>` adds `pb-14 md:pb-0` (padding-bottom matches tab bar height on mobile, none on desktop). ChatPage uses `h-full` instead of an explicit viewport calculation, inheriting the correct space from Layout.
 
-### Anti-Pattern 4: Building Client After Server Starts
+### Anti-Pattern 4: `overflow-x-auto` Tables on Mobile Without an Alternative
 
-**What:** Deploying without running the full build, or running `npm run start:prod` before `npm run build`.
+**What people do:** Wrap `<table>` in `overflow-x-auto` and call it "responsive."
 
-**Why it's wrong:** Express statically serves `packages/client/dist/`. If that directory is stale or absent, the UI silently serves old files or 404s. The API continues working but the UI is wrong or missing.
+**Why it's wrong:** On a 375px iPhone, a 5-column transaction table with `overflow-x-auto` requires horizontal scrolling that feels broken and hides data. The category picker dropdown in the last column is especially difficult to use.
 
-**Do this instead:** Always run `npm run build` (which builds both workspaces) before restarting the server. The `deploy.sh` script enforces this order: pull → install → build → restart.
+**Do this instead:** Render a card list on mobile. The table remains for desktop (where it works well). `TransactionCard` shows date, payee, amount, and category in a tappable card format. This is what the milestone specifically calls for.
+
+### Anti-Pattern 5: Tailwind v4 Custom Config for One-Off Values
+
+**What people do:** Add `theme.extend` with custom spacing for tab bar height in a config file.
+
+**Why it's wrong:** Tailwind v4 uses `@import "tailwindcss"` with no config file. Adding a `tailwind.config.js` just for one value is overkill.
+
+**Do this instead:** Use arbitrary values inline (`h-[56px]`, `pb-14`) for the tab bar height. If the value is used in 3+ places, define a CSS custom property in `app.css` via Tailwind v4's `@theme` directive:
+```css
+@import "tailwindcss";
+@theme {
+  --tab-bar-height: 56px;
+}
+```
+Then use `h-[var(--tab-bar-height)]` in components.
 
 ---
 
 ## Integration Points
 
-### New Components vs Existing (v2.1 Scope Only)
+### Layout.tsx — Primary Integration Surface
 
-| Component | Status | Change Required |
-|-----------|--------|-----------------|
-| `packages/server/src/index.ts` | Already has static serving + SIGTERM | Verify only — no changes needed |
-| `deploy/com.minerva.server.plist` | Exists but broken (wrong node path) | Fix: replace `/usr/local/bin/node` with nvm path |
-| `deploy/com.minerva.backup.plist` | Exists but uses tsx source path | Fix: point to `dist/backup/run-backup.js` |
-| `deploy/setup.sh` | Exists but uses deprecated `launchctl load` | Fix: use `launchctl bootstrap` |
-| `deploy/deploy.sh` | Exists and correct | Verify only |
+Layout.tsx is the single file that ties navigation to all pages. Every mobile navigation change goes through here. The current structure:
 
-### Path Relationships (Verified)
+```
+<div className="min-h-screen bg-gray-50">
+  <nav>  ← becomes desktop-only (hidden md:flex)
+    <div className="mx-auto max-w-6xl ...">
+      [9 NavLinks] + SyncStatus + SyncButton
+    </div>
+  </nav>
+  <main className="mx-auto max-w-6xl px-4 py-6">
+    <Outlet />    ← all pages render here
+  </main>
+</div>
+```
 
-| From | Path | Resolves To |
-|------|------|-------------|
-| `dist/db/connection.js` | `../../migrations` | `packages/server/migrations/` (correct) |
-| `dist/index.js` (__dirname) | `../../client/dist` | `packages/client/dist/` (correct) |
-| plist WorkingDirectory | `--env-file=.env` | repo root `.env` (correct) |
-| plist (server) entry point | `packages/server/dist/index.js` | compiled Express server (correct) |
-| plist (backup) entry point | currently `src/backup/run-backup.ts` | WRONG — fix to `dist/backup/run-backup.js` |
-| plist (both) node binary | `/usr/local/bin/node` | WRONG — does not exist on this machine |
+After modification:
+```
+<div className="min-h-screen bg-gray-50">
+  <nav className="hidden md:flex ...">   ← desktop only
+    [unchanged NavLinks] + SyncStatus + SyncButton
+  </nav>
+  <main className="mx-auto max-w-6xl px-4 py-6 pb-14 md:pb-6">
+    <Outlet />
+  </main>
+  <BottomTabBar className="flex md:hidden fixed bottom-0 ..." />
+</div>
+```
 
-### launchd Service Communication
+### Bottom Tab Bar — 5 Primary + More
 
-The two services do NOT communicate. They interact only through the SQLite database file:
+The 9 pages map to tabs as:
 
-| Service | DB Access | Mode |
-|---------|-----------|------|
-| `com.minerva.server` | Long-lived connection, WAL mode | Read + write |
-| `com.minerva.backup` | Opens fresh connection per run | Read only (backup API) |
+| Tab | Page | Icon suggestion |
+|-----|------|-----------------|
+| Dashboard | `/` | Home |
+| Transactions | `/transactions` | List |
+| Budget | `/budget` | Chart bar |
+| Accounts | `/accounts` | Credit card |
+| More | (sheet) | Ellipsis |
 
-SQLite WAL mode allows simultaneous readers + one writer. The backup uses `db.backup()` which is a read-only snapshot — safe to run while the server is writing.
+"More" sheet contains: Categories, Rules, Transfers, Reports, Chat.
 
-### Log Files (launchd stdout/stderr redirect)
+Tab selection state: use React Router's `useLocation` to derive active tab — same approach as existing NavLink `isActive` prop. No new state needed.
 
-| Service | Stdout | Stderr |
-|---------|--------|--------|
-| `com.minerva.server` | `~/Library/Logs/minerva-server.log` | `~/Library/Logs/minerva-server-error.log` |
-| `com.minerva.backup` | `~/Library/Logs/minerva-backup.log` | `~/Library/Logs/minerva-backup.log` |
+### SyncButton / SyncStatus on Mobile
+
+Currently in the desktop top nav. On mobile (with no top nav visible), these need a home. Options:
+1. Include SyncButton in the "More" sheet footer
+2. Add a small sync indicator in the page header of DashboardPage
+3. Keep them only on desktop nav (sync runs automatically; manual sync is rarely needed)
+
+Recommended: Option 3 for simplicity. The sync indicator in the Dashboard card already shows last sync time. If needed later, the "More" sheet can include a sync button.
+
+### ChatPage Height Calculation
+
+Current: `<div className="h-[calc(100vh-56px)] -mx-4 -mt-6 flex flex-col">`
+
+The `56px` is the desktop nav height. On mobile, the bottom tab bar is also `~56px`. The fix is to move height management to Layout so ChatPage doesn't need to know about navigation geometry.
+
+After fix: ChatPage uses `h-full -mx-4 -mt-6 flex flex-col`, and Layout's `<main>` provides the correct height context via `min-h-[calc(100vh-56px)] md:min-h-[calc(100vh-56px)]` with `pb-14 md:pb-0`.
+
+### Existing Modals — Sheet Conversion
+
+Three existing modals use `fixed inset-0 ... flex items-center justify-center`:
+
+| Modal | Current | Mobile treatment |
+|-------|---------|-----------------|
+| `SplitModal` | `max-w-lg mx-4` centered | Convert to Sheet on mobile: `items-end sm:items-center` |
+| `ManualLinkModal` | `max-w-4xl` centered | Convert to full-screen sheet on mobile (the 2-col layout stacks) |
+| `ManualTransactionForm` | Inline expanded form | Keep inline on desktop, render as Sheet on mobile |
+
+Conversion pattern using Tailwind v4:
+```tsx
+{/* Before: always centered */}
+<div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+  <div className="bg-white rounded-lg w-full max-w-lg mx-4 p-6">
+
+{/* After: bottom sheet on mobile, centered on sm+ */}
+<div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50">
+  <div className="bg-white rounded-t-2xl sm:rounded-lg w-full sm:max-w-lg p-6">
+```
+
+This approach requires no new `Sheet` component for these modals — just changing the flex alignment and border radius. The generic `Sheet` is only needed for BottomTabBar's "More" sheet and the Transactions filter panel.
 
 ---
 
 ## Build Order (Considering Dependencies)
 
+Dependencies flow from primitives to consumers. Build in this order to avoid implementing pages before the primitives they depend on:
+
 ```
-Phase 1: Verify index.ts (no changes expected)
-  └── Confirm static serving + SIGTERM handler work as-is
-  └── Confirm build output paths are correct
+Phase 1 — Foundation (no dependencies on app code)
+  1. Sheet.tsx — generic bottom sheet primitive
+  2. BottomTabBar.tsx — uses Sheet for MoreSheet trigger
+  3. Modify Layout.tsx — add BottomTabBar, adjust main padding
 
-Phase 2: Fix plist files
-  1. com.minerva.server.plist — fix node binary path
-  2. com.minerva.backup.plist — fix node binary path + switch to dist/backup/run-backup.js
+Phase 2 — High-Value Pages (most-used on mobile)
+  4. TransactionCard.tsx — new presentation component
+  5. Modify TransactionsPage.tsx — card list + filter sheet
+  6. Modify BudgetPage.tsx + BudgetCategoryCard.tsx — stacked cards
 
-Phase 3: Fix setup.sh
-  3. Replace `launchctl load` with `launchctl bootstrap gui/$(id -u)`
-  4. (verify) deploy.sh already uses `launchctl kickstart -k` — no change needed
+Phase 3 — Modal Conversions (parallel, no dependencies between them)
+  7. Modify SplitModal.tsx — bottom sheet on mobile
+  8. Modify ManualLinkModal.tsx — stacked + full-screen on mobile
+  9. Modify ManualTransactionForm.tsx — sheet trigger on mobile
 
-Phase 4: Integration test
-  5. npm run build (both workspaces)
-  6. ./deploy/setup.sh (copies plists, bootstraps services, health check)
-  7. Verify http://localhost:3001/health returns {"status":"ok"}
-  8. Verify http://localhost:3001/ serves the React app
-  9. Verify launchctl list | grep minerva shows both services running
+Phase 4 — Remaining Pages (smaller changes)
+  10. Modify ChatPage.tsx — height fix for tab bar
+  11. Modify RulesPage.tsx — card list + RuleForm as sheet
+  12. DashboardPage.tsx — spacing/tap targets (minor)
+  13. AccountsPage.tsx — tap target padding (minor)
+  14. ReportsPage.tsx — stack date controls on mobile (minor)
+  15. TransfersPage.tsx — stack pair layout on mobile (minor)
+  16. CategoriesPage.tsx — drag handle tap targets (minor)
 ```
+
+Phase 1 is the dependency anchor. All navigation and overlay behavior depends on Sheet and Layout changes. Phases 2-4 are otherwise independent and can be sequenced by priority.
 
 ---
 
 ## Sources
 
-- Codebase inspection (HIGH confidence) — all path relationships and existing implementations verified by direct file reads
-- macOS launchd documentation (MEDIUM confidence) — `launchctl bootstrap` vs `load` distinction confirmed by known macOS 10.10+ deprecation
-- Node.js 20 `--env-file` flag — confirmed by `node --version` showing v20.16.0 (HIGH confidence)
-- nvm binary path — confirmed by `which node` on target machine (HIGH confidence)
-- SQLite WAL concurrent read safety — documented better-sqlite3 behavior (HIGH confidence)
+- Direct codebase inspection: all component files read and analyzed (HIGH confidence)
+- Tailwind v4 documentation: `@import "tailwindcss"`, `@theme` directive, arbitrary values (HIGH confidence)
+- Apple Human Interface Guidelines: 44×44pt minimum tap target (HIGH confidence)
+- Project milestone definition (PROJECT.md): target features and page list confirmed
 
 ---
 
-*Architecture research for: v2.1 Deployment Hardening (launchd + static serving + deploy scripts)*
+*Architecture research for: v2.2 Mobile-Friendly UI — React + Tailwind v4 responsive navigation and layouts*
 *Researched: 2026-03-23*

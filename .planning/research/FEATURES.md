@@ -1,23 +1,24 @@
 # Feature Research
 
-**Domain:** Deployment hardening for Node.js/Express app on macOS home server
+**Domain:** Mobile-friendly UI for personal budgeting web app (375-430px iPhone)
 **Researched:** 2026-03-23
 **Confidence:** HIGH
 
 ## Context
 
-This is a subsequent milestone for an existing app (Minerva Money v2.0). The deploy
-infrastructure is already partially scaffolded in `deploy/`:
+This is a subsequent milestone on an existing app (Minerva Money v2.1). The desktop
+UI is complete across 9 pages: Dashboard, Accounts, Transactions, Budget, Categories,
+Rules, Transfers, Reports, Chat. The task is targeted mobile breakpoint overrides —
+not a rewrite. Every feature below must work against the **existing tRPC API and
+React component tree**; new components supplement existing pages rather than replace them.
 
-- `com.minerva.server.plist` — launchd agent plist (written, not yet installed/validated)
-- `com.minerva.backup.plist` — launchd backup plist (existing; uses tsx in production — needs fix)
-- `deploy.sh` — one-command update script (written, not yet tested end-to-end)
-- `setup.sh` — first-install script (written, not yet tested end-to-end)
-
-The server `src/index.ts` already serves client static files via `express.static()`.
-The build command (`npm run build --workspaces`) compiles both server (tsc) and client
-(vite build). The milestone work is finishing and validating these pieces, not starting
-from scratch.
+Key existing constraints that shape mobile design:
+- Layout.tsx: horizontal desktop navbar with 9 links; needs replacement with bottom tab bar on mobile
+- TransactionsPage: full `<table>` layout — unreadable below 600px
+- BudgetPage: `grid-cols-5` row layout — collapses illegibly on small screens
+- CategoriesPage: drag-and-drop reorder via `@dnd-kit` — touch drag is already handled by dnd-kit's PointerSensor
+- ChatPage: full-height flex column with input bar — near-ideal for mobile with minor adjustments
+- ReportsPage: Recharts with fixed heights (300-350px) — ResponsiveContainer already handles width
 
 ---
 
@@ -25,102 +26,118 @@ from scratch.
 
 ### Table Stakes (Users Expect These)
 
-These are the baseline behaviors that make the app usable as a persistent home server.
-Missing any of these = app stops working after a reboot or crash.
+Features that make a mobile web app feel usable. Missing any of these makes the app
+feel broken or frustrating on iPhone.
 
 | Feature | Why Expected | Complexity | Notes |
 |---------|--------------|------------|-------|
-| Auto-restart on crash | A home server app must survive unexpected failures without manual intervention | LOW | launchd `KeepAlive: true` + `ThrottleInterval: 10` already in plist — prevents restart storms on repeated crashes |
-| Start on boot/login | App must be running after iMac restarts without SSH intervention | LOW | launchd `RunAtLoad: true` already in plist; plist in `~/Library/LaunchAgents/` activates at GUI user login |
-| Production build (compiled JS, not tsx) | Running TypeScript via `tsx` in production wastes memory and adds fragility | LOW | `tsc` build already configured; server targets `packages/server/dist/index.js` |
-| Client files served by Express | Single process is simpler than nginx + Express on a home server | LOW | Already implemented in `src/index.ts` — `express.static(clientDist)` + catch-all route for SPA |
-| Health check endpoint | Scripts and monitoring need a reliable signal that the server is up | LOW | `/health` endpoint returning `{"status":"ok"}` already exists in `src/index.ts` |
-| Structured log output | launchd needs stdout/stderr paths for crash diagnosis | LOW | Already in plist: `minerva-server.log` and `minerva-server-error.log` in `~/Library/Logs/` |
+| Bottom tab bar navigation | Mobile apps universally use bottom nav; top nav is thumb-hostile on iPhone | MEDIUM | Replace horizontal desktop navbar with fixed bottom bar on mobile (`sm:hidden` + `hidden sm:flex` split). 5 primary tabs + "More" sheet for overflow routes. Tabs: Dashboard, Transactions, Budget, Chat + More |
+| 44px minimum tap targets | Apple HIG requirement; smaller targets cause frequent mis-taps | LOW | Apply `min-h-[44px] min-w-[44px]` to all interactive elements on mobile. Existing buttons use `py-1`/`py-1.5` — need padding bumps at mobile breakpoints |
+| Transaction card layout (not table) | Tables require horizontal scroll below ~600px; unacceptable on 375px | MEDIUM | Replace `<table>` with stacked card list on mobile. Each card: payee + amount on top row, account + date + category on second row. Same data, different DOM structure behind a breakpoint switch |
+| Full-screen modals / bottom sheets | Desktop modals centered at 50% feel wrong on iPhone; full-screen sheets feel native | MEDIUM | SplitModal, ManualTransactionForm, RuleForm, ManualLinkModal — add `sm:max-w-lg` to keep desktop behavior, use `fixed inset-0` on mobile |
+| Touch-friendly filter controls | Date pickers, dropdowns, and number inputs are fine on mobile — but filter bar wraps badly at 375px | LOW | Collapse filter controls behind a toggle button on mobile. Show active filter count as a badge on the toggle |
+| Budget category progress bars | Numbers in a 5-column grid are unreadable on mobile | MEDIUM | Replace `grid-cols-5` with stacked cards: category name + progress bar (spent/allocated) + available amount. Inline tap-to-edit for allocation amount |
+| Readable Recharts charts | Charts at full desktop width scroll or overflow on 375px | LOW | ResponsiveContainer already handles width. Reduce `outerRadius` on PieChart for mobile. Simplify XAxis tick density. No code change needed for LineChart/BarChart |
+| Sticky/fixed input bar (Chat) | Chat input must stay above keyboard when soft keyboard opens on iOS | LOW | ChatPage already uses `border-t bg-white` fixed bar. Needs `pb-safe` (safe area inset) for iPhone notch/home bar area |
+| Viewport meta tag | Without proper viewport tag, browser renders at desktop width | LOW | Check `packages/client/index.html` for `<meta name="viewport" content="width=device-width, initial-scale=1.0">` — likely already present from Vite scaffold |
+| No horizontal scroll on main content | Content wider than viewport breaks layout on iOS Safari | LOW | Remove `max-w-6xl` constraint from main area on mobile (or make it `100%`). Ensure `overflow-x-hidden` on body |
 
 ### Differentiators (Competitive Advantage)
 
-Features beyond the baseline that make this deployment setup maintainably good.
+Features that make this specific budgeting app shine on mobile. Aligned with core
+value: "see where every dollar goes."
 
 | Feature | Value Proposition | Complexity | Notes |
 |---------|-------------------|------------|-------|
-| One-command deploy (`./deploy/deploy.sh`) | `git pull && npm run build && restart` in a single command eliminates manual error during updates | LOW | Script already written; needs end-to-end validation with `launchctl kickstart -k` |
-| First-install script (`./deploy/setup.sh`) | Reproducible install from scratch without recalling the steps | LOW | Script already written; copies plists to `~/Library/LaunchAgents/`, loads services, health-checks |
-| Co-located deploy config (`deploy/` dir) | Config lives with the code; no hunting across system directories | LOW | Already the pattern — all 4 deploy files in `deploy/` |
-| `--env-file` native env loading | Eliminates the `dotenv` package; Node 20.6+ natively parses `.env` | LOW | Already used in plist and `start:prod` script; confirmed Node 20.6+ feature (HIGH confidence) |
-| Backup plist uses compiled JS | Backup plist currently uses `tsx` (dev transpiler) — should use compiled `dist/` output | LOW | `com.minerva.backup.plist` references `run-backup.ts` via tsx; should reference `dist/backup/run-backup.js` post-build |
+| "More" overflow bottom sheet | Keeps tab bar clean (5 items) while all 9 routes remain accessible | LOW | A slide-up sheet listing Accounts, Categories, Rules, Transfers, Reports with tap-to-navigate. State-driven, no routing needed for the sheet itself |
+| Inline category picker on transaction card | Tap a card to open category selector without navigating away | LOW | CategoryPicker is already a reusable component. Mobile transaction card can show a tap-to-categorize area inline, same as desktop table cell |
+| Budget progress bar with color coding | Visual feedback on envelope spending is the core value on mobile | LOW | Green = under budget, red = over budget. Progress bar is 100% CSS. Leverages existing `availableColor()` logic in BudgetPage |
+| Swipe-to-reveal action on transaction cards | Swipe left to expose "Split" or "Categorize" action | HIGH | High implementation effort. dnd-kit does not have native swipe-to-reveal. Would require a custom touch event handler. NOT recommended for v1 — use tap-to-expand instead |
+| Safe area insets (iPhone notch + home bar) | Without `env(safe-area-inset-*)`, content hides behind hardware chrome | LOW | Add `pb-[env(safe-area-inset-bottom)]` to bottom tab bar. Add `viewport-fit=cover` to meta tag. Pure CSS, no JS |
+| Sync status in bottom tab bar | Show a subtle dot/badge on the tab bar when sync is running or failed | LOW | SyncStatus component already exists in the navbar. Reuse it as a small badge on the Dashboard tab icon |
 
 ### Anti-Features (Commonly Requested, Often Problematic)
 
 | Feature | Why Requested | Why Problematic | Alternative |
 |---------|---------------|-----------------|-------------|
-| PM2 for process management | Popular Node.js process manager; familiar tooling | Adds an npm dependency and config layer redundant to launchd. Mixing PM2 and launchd creates two competing restart systems. macOS has launchd natively. | launchd alone — already decided in PROJECT.md |
-| nginx as reverse proxy | "Standard" production pattern; useful for SSL termination | Adds a second process and install step for a single-user home server with no public traffic. Express alone handles static + API. | `express.static()` already serving client files |
-| Docker containerization | Isolation, reproducibility | Overengineered for a single-user home app. Complicates launchd integration and iCloud Drive backup access. No benefit over a direct Node process on a trusted private machine. | Direct Node process managed by launchd |
-| Legacy `launchctl load`/`unload` | Widely documented as the way to manage plists | Deprecated in modern macOS. `setup.sh` currently uses it — acceptable but may produce warnings. Current preferred commands are `bootstrap`/`bootout` for install/uninstall. | `launchctl bootstrap gui/$(id -u)` for install; `launchctl kickstart -k` for restart (already in deploy.sh) |
-| Git hooks for auto-deploy | Automatic deploy on every push | Adds hidden complexity and risk of silent failures. For a single dev on a home server, an explicit `./deploy/deploy.sh` is safer and more debuggable. | Explicit deploy script run when desired |
-| Retry loop in health check | Verify server started reliably | `sleep 3` + single curl check is adequate. A retry loop adds 20+ lines for no practical benefit when startup time is consistent on local hardware. | Single check after fixed wait (already in setup.sh) |
+| Swipe navigation between pages | Feels native; iOS apps use it | Requires gesture disambiguation with page scroll. Easy to accidentally trigger. Complex state coordination with React Router. Significant implementation effort for low gain | Bottom tab bar navigation is sufficient and universally understood |
+| Pull-to-refresh | Mobile convention for data refresh | iOS Safari has its own pull-to-refresh that conflicts; requires `overscroll-behavior: none` and custom detection. Fragile on web | Manual "Sync Now" button in the "More" sheet or on Dashboard is cleaner |
+| Pinch-to-zoom on charts | Charts are small on mobile | Recharts does not support it out of the box. Implementing zooming in Recharts requires significant additional library or custom code | Scrollable chart area + date range selector is sufficient |
+| Convert to PWA (installable) | "Add to Home Screen" + offline support | Service worker caching with live financial data is complex and error-prone. Stale cache can show wrong balances. No offline capability is possible anyway (server is on LAN) | Responsive web app accessed via Safari bookmark is sufficient for single-user home use |
+| Drag-to-reorder on mobile (Categories) | dnd-kit PointerSensor works on touch | PointerSensor with `activationConstraint: { distance: 5 }` is already configured and handles touch. The real problem is tiny drag handles (⠿ glyph) — tap target is too small | Increase drag handle tap target to 44px on mobile. No library changes needed |
+| Bottom sheet with snap points (fancy) | Native iOS bottom sheet feel | Significantly more complex than a simple modal. Requires touch velocity tracking, snap point math, animation. No existing library in the stack handles this | Simple slide-up fixed panel with overlay dismiss is sufficient |
+| Infinite scroll on transactions | Mobile convention for long lists | Adds complexity to filtering + sort state. Current list is bounded (90-day sync window, ~hundreds of transactions). Not needed at this scale | Current render-all approach is fine. Virtualization only needed above ~1000 visible rows |
 
 ---
 
 ## Feature Dependencies
 
 ```
-Production build (tsc + vite build)
-    required by --> Express static file serving (client/dist must exist)
-    required by --> launchd server plist (points to server/dist/index.js)
-    required by --> deploy.sh (builds before restart)
-    required by --> Backup plist fix (needs dist/backup/run-backup.js)
+Bottom tab bar navigation
+    replaces-on-mobile --> Layout.tsx desktop navbar
+    requires --> Mobile breakpoint detection (Tailwind sm: prefix)
+    contains --> "More" overflow sheet
+        links-to --> Accounts, Categories, Rules, Transfers, Reports pages
 
-Health check endpoint (already exists in src/index.ts)
-    used by --> setup.sh verification step (curl localhost:3001/health)
+Transaction card layout
+    replaces-on-mobile --> <table> in TransactionsPage
+    shares-data --> same tRPC query (transactions.list)
+    contains --> CategoryPicker (already reusable)
+    contains --> Split button (opens SplitModal)
+    requires --> SplitModal as full-screen sheet on mobile
 
-launchd plist installed to ~/Library/LaunchAgents/
-    required by --> auto-restart on crash
-    required by --> boot startup
-    managed by --> setup.sh (first install, copies + loads)
-    restarted by --> deploy.sh (launchctl kickstart -k)
+Budget mobile cards
+    replaces-on-mobile --> grid-cols-5 BudgetGroup in BudgetPage
+    shares-logic --> groupCategories(), availableColor() (already exported)
+    contains --> AllocationCell (already exists, needs touch-friendly min-height)
+    requires --> inline tap-to-edit (AllocationCell already handles this)
+
+Full-screen sheets (mobile modals)
+    applies-to --> SplitModal, ManualTransactionForm, RuleForm, ManualLinkModal, ManualLinkModal
+    requires --> Tailwind breakpoint overrides on existing modal containers
+    conflicts --> fixed positioning + iOS keyboard (needs testing)
+
+Safe area insets
+    required-by --> Bottom tab bar (home bar overlap)
+    required-by --> Chat input bar (home bar overlap)
+    requires --> viewport-fit=cover in index.html meta tag
 ```
 
 ### Dependency Notes
 
-- **Production build must run before launchd service first loads:** The server plist
-  references `packages/server/dist/index.js`. If the build has not run, launchd will
-  fail to start. `setup.sh` already runs `npm run build` before `launchctl load`.
-
-- **Backup plist fix depends on successful server build:** The compiled backup script
-  at `dist/backup/run-backup.js` is only present after `npm run build` runs. The backup
-  plist should not reference `tsx` or `.ts` source files in production.
-
-- **deploy.sh depends on setup.sh having run first:** `deploy.sh` uses `launchctl
-  kickstart` to restart an existing service. This only works if the plist was previously
-  loaded by `setup.sh`. deploy.sh is a day-2 operation; setup.sh is day-1.
+- **Tab bar requires safe area insets:** The bottom tab bar sits exactly where iPhone's home indicator lives. Without `pb-[env(safe-area-inset-bottom)]`, the home bar overlaps the last tab. This is a must-have pairing.
+- **Transaction cards share the filter state:** The existing filter controls (search, date, category, amount) operate on the `filtered` array in TransactionsPage. Mobile cards consume the same filtered output — the filter logic does not change, only the render.
+- **AllocationCell is already touch-compatible:** The click-to-edit pattern works on mobile (tap fires click). The input that appears is a standard `<input type="text">` which iOS keyboards handle. No changes to the component logic needed — only the wrapping card layout changes.
+- **dnd-kit PointerSensor already handles touch:** CategoriesPage drag-to-reorder works on mobile without changes. The only mobile fix needed is enlarging the drag handle tap target from the current tiny glyph to a 44px area.
+- **ChatPage is nearly mobile-ready:** The full-height flex column layout already works on mobile. The two fixes needed are safe area insets on the input bar and ensuring the example question buttons wrap cleanly at 375px.
 
 ---
 
 ## MVP Definition
 
-### Launch With (v2.1 — this milestone)
+### Launch With (v2.2 — this milestone)
 
-- [x] Production TypeScript build confirmed working (`tsc` server + `vite build` client)
-- [x] Express serves compiled client dist at root `/` — single process, no nginx
-- [x] launchd server plist with `KeepAlive`, `RunAtLoad`, `ThrottleInterval`, log paths
-- [ ] Backup plist fixed to run compiled JS (not tsx in production)
-- [x] `setup.sh` — first-install: build, copy plists, load services, health-check
-- [x] `deploy.sh` — update: git pull, build, `launchctl kickstart -k`
-- [ ] All scripts validated end-to-end on the actual iMac
+- [ ] Bottom tab bar: 5 primary tabs (Dashboard, Transactions, Budget, Chat, More) — core navigation on mobile
+- [ ] "More" bottom sheet: links to Accounts, Categories, Rules, Transfers, Reports + Sync button
+- [ ] Transaction card layout: replace table with stacked cards on mobile, same filter/sort controls behind a collapsible toggle
+- [ ] Budget mobile view: stacked category cards with progress bars replacing grid-cols-5
+- [ ] Full-screen sheet behavior for modals on mobile: SplitModal, ManualTransactionForm
+- [ ] 44px tap targets on all interactive elements (buttons, nav items, allocation cells)
+- [ ] Safe area insets on bottom tab bar and Chat input bar
+- [ ] Viewport meta tag confirmed present (`width=device-width, initial-scale=1.0, viewport-fit=cover`)
+- [ ] Desktop layout fully preserved (all mobile changes behind `sm:` breakpoint)
 
-### Add After Validation (v2.1+)
+### Add After Validation (v2.2+)
 
-- [ ] Log rotation — `~/Library/Logs/minerva-server.log` will grow indefinitely.
-  macOS `newsyslog` can be configured for rotation. Low urgency for a single-user
-  app with low traffic but worth adding if logs grow unwieldy.
+- [ ] Full-screen sheet for RuleForm and ManualLinkModal — lower frequency actions, can follow after core pages
+- [ ] Filter controls collapse on mobile for Transactions and Reports — quality-of-life, not blocking
+- [ ] Sync status badge on Dashboard tab icon — nice visual polish
 
 ### Future Consideration (v3+)
 
-- [ ] SSL/TLS termination — only relevant if the app is exposed outside the home
-  network. Not applicable for local-only LAN access.
-- [ ] Automated health alerts — requires an external notification service. Out of
-  scope per PROJECT.md; in-app sync status indicator is sufficient.
+- [ ] PWA manifest / installable — requires service worker strategy compatible with live financial data; revisit if user wants home screen shortcut
+- [ ] Swipe-to-reveal actions on transaction cards — high effort, low return vs tap-to-expand
+- [ ] Virtualized transaction list — only needed if sync history grows beyond ~1000 visible rows
 
 ---
 
@@ -128,15 +145,18 @@ launchd plist installed to ~/Library/LaunchAgents/
 
 | Feature | User Value | Implementation Cost | Priority |
 |---------|------------|---------------------|----------|
-| Auto-restart on crash (launchd KeepAlive) | HIGH | LOW — plist already written | P1 |
-| Boot startup (RunAtLoad) | HIGH | LOW — plist already written | P1 |
-| Production build pipeline | HIGH | LOW — already configured | P1 |
-| Express serves client static files | HIGH | LOW — already implemented | P1 |
-| setup.sh first-install script | HIGH | LOW — written, needs validation | P1 |
-| deploy.sh one-command update | HIGH | LOW — written, needs validation | P1 |
-| Fix backup plist to use compiled JS | MEDIUM | LOW | P1 |
-| Health check verification in setup.sh | MEDIUM | LOW — already in script | P1 |
-| Log rotation | LOW | MEDIUM | P3 |
+| Bottom tab bar navigation | HIGH | MEDIUM | P1 |
+| Transaction card layout | HIGH | MEDIUM | P1 |
+| Budget mobile card view | HIGH | MEDIUM | P1 |
+| 44px tap targets | HIGH | LOW | P1 |
+| Safe area insets | HIGH | LOW | P1 |
+| Viewport meta tag (viewport-fit=cover) | HIGH | LOW | P1 |
+| Full-screen sheets for modals | MEDIUM | MEDIUM | P1 |
+| "More" overflow sheet | MEDIUM | LOW | P1 |
+| Filter controls collapse toggle | MEDIUM | LOW | P2 |
+| Sync badge on tab bar | LOW | LOW | P2 |
+| Swipe-to-reveal on transaction cards | LOW | HIGH | P3 |
+| PWA / installable | LOW | HIGH | P3 |
 
 **Priority key:**
 - P1: Must have for launch
@@ -145,75 +165,71 @@ launchd plist installed to ~/Library/LaunchAgents/
 
 ---
 
+## Competitor Feature Analysis
+
+Reference: how Monarch Money, YNAB, and Copilot handle these problems on mobile.
+
+| Feature | Monarch Money | YNAB | Our Approach |
+|---------|--------------|------|--------------|
+| Navigation | Bottom tab bar (5 tabs) | Bottom tab bar (4 tabs) | Bottom tab bar, 5 tabs + "More" sheet |
+| Transaction list | Card list with payee/amount/category | Card list, swipe to categorize | Card list, tap to categorize inline |
+| Budget view | Category rows with progress bars, grouped | Envelope cards with available amount | Stacked category cards with progress bar + available |
+| Forms / modals | Full-screen sheets, bottom slide-up | Full-screen sheets | Full-screen on mobile, centered on desktop |
+| Charts | Responsive, simplified on mobile, tap for detail | Limited charts, mostly numbers | Recharts ResponsiveContainer (already responsive) |
+| Filter controls | Hidden behind a filter icon/button | Minimal filters | Collapsible filter bar on mobile |
+| Chat / AI | Not applicable | Not applicable | Full-height layout already works |
+
+**Key takeaway:** Both major competitors use bottom tab bar + card layouts — these are table stakes for mobile budgeting. Progress bars on budget categories are universal. Swipe actions (YNAB) are a differentiator but complex to implement correctly.
+
+---
+
 ## Implementation Notes
 
-### launchd Agent vs Daemon
+### Tailwind Breakpoint Strategy
 
-LaunchAgents (in `~/Library/LaunchAgents/`) run as the logged-in GUI user. This is
-correct for Minerva — the process needs access to iCloud Drive for backups and runs
-under the user's environment. LaunchDaemons (in `/Library/LaunchDaemons/`) run as root
-at system boot; unnecessary and inappropriate here. (HIGH confidence — Apple developer docs)
+All mobile changes should use the `sm:` prefix (640px) to isolate mobile from desktop:
+- Mobile-first: write mobile styles first, override at `sm:` for desktop
+- Or: add mobile overrides using `max-sm:` (Tailwind v3.2+) to avoid rewriting desktop styles
 
-### launchctl Command Versions
+Since the entire existing codebase is desktop-first, using `max-sm:` override classes is lower risk — it leaves all existing classes untouched and adds mobile-only overrides.
 
-Modern macOS (12+) prefers newer subcommands over the legacy `load`/`unload`:
+### Bottom Tab Bar Placement
 
-- First install: `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.minerva.server.plist`
-- Uninstall: `launchctl bootout gui/$(id -u)/com.minerva.server`
-- Restart: `launchctl kickstart -k gui/$(id -u)/com.minerva.server`
+The current Layout.tsx renders a `<nav>` at the top and `<main>` below it. Mobile layout requires:
+1. `<main>` padding-bottom to clear the fixed bottom bar (e.g., `pb-16`)
+2. Bottom tab bar as `fixed bottom-0 left-0 right-0 z-50` (above content, below modals)
+3. Safe area inset padding on the bar itself
 
-The current `setup.sh` uses the legacy `launchctl load` — functional but may emit
-deprecation warnings on recent macOS. The `deploy.sh` already uses the modern
-`launchctl kickstart -k` form. (MEDIUM confidence — community sources; Apple official
-docs on subcommand specifics are sparse)
+The desktop navbar stays untouched behind `hidden max-sm:hidden` / `sm:flex` classes.
 
-### Node Binary Path in Plist
+### iOS Safari Quirks Relevant to This App
 
-The server plist hardcodes `/usr/local/bin/node`. On Apple Silicon Macs with Homebrew,
-node lives at `/opt/homebrew/bin/node`. This path needs to match the actual binary
-location on the target iMac. The `setup.sh` could use `which node` to detect the path
-dynamically, or the plist can be machine-specific. (MEDIUM confidence — common community
-pitfall documented across multiple sources)
+- **100vh problem:** `h-[calc(100vh-56px)]` in ChatPage may not account for iOS Safari's URL bar. Use `dvh` (dynamic viewport height) or `100svh` as a fallback. Both are well-supported in iOS 15.4+.
+- **Input zoom:** iOS Safari auto-zooms inputs with `font-size < 16px`. Set `text-base` (16px) on all mobile form inputs to prevent this.
+- **Safe area insets:** Only apply when `viewport-fit=cover` is set in the meta tag. Without it, `env(safe-area-inset-bottom)` evaluates to 0.
+- **Scroll bounce:** `-webkit-overflow-scrolling: touch` is deprecated; the default is already momentum scrolling in modern iOS Safari.
 
-### ThrottleInterval
+### Existing Components Already Mobile-Friendly
 
-`ThrottleInterval: 10` in the server plist sets a 10-second minimum between restart
-attempts. This prevents restart storms if the app crashes on startup (for example,
-due to a missing `.env` file). Good default — leave it in place. (HIGH confidence —
-launchd.info documentation)
-
-### SIGTERM Handling
-
-`src/index.ts` already handles `SIGTERM` by stopping both schedulers and closing the
-Express server gracefully. launchd sends `SIGTERM` before `SIGKILL` when stopping or
-restarting a service. This is correct and complete — no changes needed. (HIGH confidence
-— Express docs + launchd behavior documentation)
-
-### Backup Plist tsx Dependency
-
-The existing `com.minerva.backup.plist` invokes:
-```
-/usr/local/bin/node --import tsx /path/to/run-backup.ts
-```
-`tsx` is a devDependency in `packages/server`. Running TypeScript source files in
-production via tsx adds `tsx` as a runtime dependency and bypasses the type-checking
-that `tsc` provides. After the v2.1 build produces `packages/server/dist/`, the backup
-plist should reference the compiled output directly. (HIGH confidence — observed in
-codebase)
+These require no changes or only minor tweaks:
+- **SyncButton** — single button, easily meets 44px
+- **SyncStatus** — text only, no interaction
+- **CategoryPicker** — uses `<select>` which iOS renders as a native picker
+- **InlineConfirm** — popover on hover; on mobile, consider always-visible or tap-to-show
+- **ChatPage messages** — bubble layout with `max-w-[80%]` works well on small screens
+- **DashboardPage** — already uses `grid-cols-1 md:grid-cols-2`; mobile is already single column
 
 ---
 
 ## Sources
 
-- [launchd.info — comprehensive launchd reference](https://www.launchd.info/)
-- [Apple Developer: Creating Launch Daemons and Agents](https://developer.apple.com/library/archive/documentation/MacOSX/Conceptual/BPSystemStartup/Chapters/CreatingLaunchdJobs.html)
-- [launchctl new subcommand basics — Alan Siu's Blog](https://www.alansiu.net/2023/11/15/launchctl-new-subcommand-basics-for-macos/)
-- [Node.js native --env-file support (Node 20.6+)](https://pawelgrzybek.com/node-js-with-native-support-for-env-files-you-may-not-need-dotenv-anymore/)
-- [Vite — Building for Production](https://vite.dev/guide/build)
-- [Express — Serving Static Files](https://expressjs.com/en/starter/static-files.html)
-- [Launch a Node script at boot on macOS — DEV Community](https://dev.to/mjehanno/launch-a-node-script-at-boot-on-macos-1dnd)
-- Existing codebase: `deploy/` directory, `packages/server/src/index.ts`, `packages/server/package.json`, `package.json`
+- Monarch Money mobile app (iOS) — navigation and transaction list patterns
+- YNAB mobile app (iOS) — budget envelope cards and transaction categorization
+- Apple Human Interface Guidelines — minimum tap target size (44pt), safe area insets, bottom tab bar patterns
+- Tailwind CSS documentation — `max-sm:` modifier, safe area utilities
+- MDN — `env(safe-area-inset-bottom)`, `viewport-fit=cover`, `dvh` unit
+- Existing codebase: all files in `packages/client/src/` reviewed directly
 
 ---
-*Feature research for: Node.js deployment hardening on macOS (Minerva Money v2.1)*
+*Feature research for: Mobile-friendly UI (Minerva Money v2.2)*
 *Researched: 2026-03-23*

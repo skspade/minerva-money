@@ -1,152 +1,179 @@
 # Stack Research
 
-**Domain:** Deployment hardening — macOS launchd process management, production static file serving, deploy scripts
+**Domain:** Mobile-friendly UI — bottom tab navigation, card layouts, touch targets, bottom sheets/modals, responsive breakpoints
 **Researched:** 2026-03-23
 **Confidence:** HIGH
 
 ## Context: Subsequent Milestone
 
-This is a subsequent milestone. The core stack (React + Tailwind, Express + tRPC, SQLite, TanStack Query, Claude Agent SDK) is validated and unchanged. The deployment infrastructure is also substantially pre-built in the `deploy/` directory. This document focuses only on what v2.1 adds or changes.
+This is a subsequent milestone. The core stack (React 19, React Router v7, Vite 6, Tailwind CSS v4, tRPC, TanStack Query, Recharts, better-sqlite3) is validated and unchanged. This document covers only what v2.2 adds.
 
-**Already exists in `deploy/`:**
-- `com.minerva.server.plist` — launchd service with KeepAlive + ThrottleInterval: 10 + RunAtLoad
-- `com.minerva.backup.plist` — launchd scheduled backup service (reference model for server plist)
-- `deploy.sh` — one-command deploy via `git pull && npm install && npm run build && launchctl kickstart -k`
-- `setup.sh` — first-run install via `launchctl load` (deprecated command — see critical note below)
+**v2.2 goal:** Make the existing desktop web app fully functional on iPhone (375–430px viewport) without introducing a component library or heavy new dependencies.
 
-**Already exists in `packages/server/src/index.ts`:**
-- `express.static` serving `packages/client/dist/`
-- SPA fallback: `app.get('*', res.sendFile(index.html))`
-- `NODE_ENV !== 'test'` guard for DB initialization
+**Existing patterns to preserve:**
+- Custom Tailwind utility classes throughout (no shadcn, no MUI, no Radix primitives in use)
+- All modals use `fixed inset-0 bg-black/50 flex items-center justify-center z-50` pattern
+- `Layout.tsx` owns the top nav bar and `<Outlet />` — this is the natural insertion point for a bottom tab bar
+- Tailwind v4 uses CSS-first config (`@import "tailwindcss"` only, no `tailwind.config.js`)
+
+---
 
 ## Recommended Stack
 
 ### New Dependencies
 
-None. All capabilities for v2.1 are provided by existing tools and macOS primitives.
-
 | Technology | Version | Purpose | Why Recommended |
 |------------|---------|---------|-----------------|
-| launchd | macOS built-in | Crash recovery, boot startup, process management | Native macOS daemon manager. Zero dependencies. KeepAlive: true restarts within ~10 seconds of crash. ThrottleInterval: 10 prevents rapid restart loops. Already used for iCloud backup service. |
-| Node.js `--env-file` | Node 20.6+ (built-in, already in use) | Load .env without dotenv | Native flag, no extra dependency. Already used in `start:prod` and server plist. One known limitation: does not support multiline values (not relevant for this project). |
-| `express.static` | Express 4 (existing) | Serve Vite build output | Already implemented in server/src/index.ts. Single-process eliminates nginx coordination overhead. |
-| `tsc` | TypeScript 5.7 (existing) | Compile server to `dist/` | Already configured with `"module": "Node16"` matching Node's ESM resolution algorithm. |
-| Vite build | Vite 6 (existing) | Bundle React client to `packages/client/dist/` | Default output path is already what server expects at `../../client/dist`. |
+| `vaul` | ^1.1.2 | Bottom sheets (mobile modal replacement) | Unstyled drawer built on Radix Dialog. Handles iOS rubber-banding, drag-to-dismiss, snap points. Used in production by Vercel. Explicitly supports React 19 in peerDependencies as of v1.1.1. No default styles — integrates with existing Tailwind classes. |
+| `lucide-react` | ^0.577.0 | Tab bar icons and touch-friendly action icons | Tree-shakeable SVG icons. Zero runtime dependencies. Already the de facto pairing with Tailwind custom-component stacks. Replaces ad-hoc text labels or emoji in the bottom tab bar. |
 
-### Supporting Libraries
+### No New Dev Dependencies
 
-None required. The entire deployment stack is covered by Node.js built-ins, macOS launchd, and bash scripting.
+Tailwind v4 handles all responsive utilities natively. No additional PostCSS plugins or build tools are needed.
+
+---
+
+## CSS-Only Additions (no packages)
+
+These capabilities are handled directly in `app.css` or component Tailwind classes — no packages required.
+
+### 1. Safe Area Insets (iOS notch / home indicator)
+
+Tailwind v4 does not provide `pb-safe` utilities out of the box, but the `@layer utilities` pattern in `app.css` is idiomatic for v4 and requires no plugin:
+
+```css
+/* packages/client/src/styles/app.css */
+@import "tailwindcss";
+
+@layer utilities {
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .pt-safe {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+}
+```
+
+Requires `viewport-fit=cover` in `index.html`:
+```html
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+```
+
+### 2. Bottom Tab Bar
+
+Pure Tailwind + React Router `NavLink`. Fixed to bottom of viewport, `z-50`, uses `pb-safe` for iPhone home indicator clearance. No library needed.
+
+### 3. Responsive Breakpoints
+
+Tailwind v4 ships `sm:` (640px), `md:` (768px), `lg:` (1024px) breakpoints. The mobile-first pattern `class="..." md:hidden` and `class="hidden md:flex"` is sufficient for toggling between card layout (mobile) and table layout (desktop).
+
+### 4. 44px Touch Targets
+
+Use `min-h-[44px] min-w-[44px]` Tailwind utilities on interactive elements. No library needed — this is a CSS size constraint.
+
+### 5. Full-Screen Sheet Modals on Mobile
+
+`vaul` provides the sheet/drawer primitive. On desktop, the existing centered modal pattern (`fixed inset-0 ... max-w-4xl`) is retained. On mobile, modals are replaced with vaul drawers that slide up from the bottom. A shared wrapper component handles the responsive switch.
+
+---
 
 ## Installation
 
-No new packages to install. The production workflow:
-
 ```bash
-# First-time setup on the iMac
-bash deploy/setup.sh
-
-# Every subsequent deploy
-bash deploy/deploy.sh
+# New packages (client workspace only)
+npm install vaul lucide-react --workspace=packages/client
 ```
 
-Build commands (called by deploy scripts):
-```bash
-# Server: produces packages/server/dist/index.js
-npm run build --workspace=packages/server
-
-# Client: produces packages/client/dist/ (served by Express)
-npm run build --workspace=packages/client
-
-# Both at once
-npm run build
-```
+---
 
 ## Alternatives Considered
 
 | Recommended | Alternative | When to Use Alternative |
 |-------------|-------------|-------------------------|
-| launchd | PM2 | Linux/multi-server deployments. Adds npm dependency that duplicates macOS-native capabilities. |
-| launchd | Docker | Cloud/containerized deployments needing isolation. Overkill for a single-user home server. |
-| launchd | nohup / screen | Quick experiments only. No crash recovery, no boot startup. |
-| Express static + SPA fallback | nginx reverse proxy | High-traffic multi-app servers needing compression and SSL termination at scale. Unnecessary second process for single-user home server. |
-| `tsc` | tsup / esbuild | Bundled output useful for libraries or when tree-shaking matters. Server-side Node.js does not benefit meaningfully. tsc is already configured and sufficient. |
+| `vaul` | `@radix-ui/react-dialog` directly | If you're building a component library with full Radix primitives throughout. vaul wraps Radix Dialog and adds mobile-specific UX (drag handle, snap points, iOS scroll locking) that the raw dialog primitive doesn't provide. |
+| `vaul` | Custom CSS `transform: translateY` sheet | Viable for simple cases but requires hand-rolling gesture detection, spring animations, and backdrop interaction — vaul handles all of this correctly across iOS Safari, Chrome Android, and desktop. |
+| `lucide-react` | `heroicons` | When already using Tailwind UI / Headless UI components. Either works; lucide has a larger icon set and more active release cadence. |
+| `lucide-react` | Inline SVGs | Viable for small fixed icon sets. lucide eliminates manual SVG maintenance and provides consistent stroke widths. |
+| CSS `@layer utilities` for safe area | `tailwindcss-safe-area` npm plugin | The plugin is unnecessary overhead for a two-utility addition. The v4 CSS-first approach makes `@layer utilities` the idiomatic choice. |
+| Tailwind responsive prefixes | CSS media queries | Tailwind breakpoints compile to the same output. The `sm:hidden`/`md:flex` pattern keeps mobile styles co-located with component markup rather than split into separate `.css` files. |
+
+---
 
 ## What NOT to Add
 
 | Avoid | Why | Use Instead |
 |-------|-----|-------------|
-| PM2 | Duplicates launchd on macOS; adds npm dependency and a separate daemon to manage | launchd KeepAlive: true |
-| nginx | Second process requiring separate config. Express handles static files adequately for single-user traffic. | `express.static` already in server/src/index.ts |
-| `dotenv` package | Creates two competing env-loading mechanisms alongside `--env-file`. | `--env-file=.env` (already in plist and start:prod) |
-| Docker | Container overhead, volume mounts, network complexity — none of which solve a real problem here | launchd service files directly |
-| `forever` / `nodemon` (production) | Legacy process managers superseded by launchd on macOS | launchd KeepAlive |
+| `shadcn/ui` | Adds Radix UI primitives, `class-variance-authority`, `clsx`, and `tailwind-merge` dependencies. Conflicts with Tailwind v4 CSS-first config (shadcn targets v3 config format as of early 2026). Replacing existing custom components with shadcn components is out of scope. | Existing custom Tailwind components + vaul for sheets only |
+| `@radix-ui/react-*` primitives (beyond vaul's bundled usage) | No existing Radix primitives in the codebase. Adding them introduces a new patterns layer without solving a concrete problem. | Custom Tailwind components for all non-sheet UI |
+| `framer-motion` | 80KB+ bundle addition for animations that can be handled with Tailwind's `transition` utilities and CSS `transform`. vaul already provides sheet animation. | `transition-transform duration-300` Tailwind utilities |
+| `react-spring` | Same animation concern as framer-motion, with a more complex API. | Tailwind transition utilities |
+| `tailwindcss-safe-area` plugin | Two-line `@layer utilities` addition achieves the same result without a package dependency. | CSS `env(safe-area-inset-*)` in `app.css` |
+| `@ionic/react` or `Capacitor` | Native app shell frameworks — the goal is a mobile-responsive web page, not a hybrid app. | Tailwind responsive breakpoints + vaul |
+| `react-native-web` | Native component abstraction. The app is a standard React web app and must remain one. | — |
 
-## Critical Implementation Notes
+---
 
-### launchctl Command Deprecation (HIGH confidence)
+## Integration Notes
 
-`launchctl load` and `launchctl unload` are deprecated in macOS Ventura and unreliable in Sequoia. The current `setup.sh` uses `launchctl load` — this needs updating.
+### vaul with Existing Modal Pattern
 
-**Correct modern commands:**
-```bash
-# First-time load (replaces: launchctl load ~/Library/LaunchAgents/com.minerva.server.plist)
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.minerva.server.plist
+Existing modals (e.g., `ManualLinkModal`, `SplitModal`) use `fixed inset-0 bg-black/50 flex items-center justify-center z-50`. The migration path is:
 
-# Removal (replaces: launchctl unload ...)
-launchctl bootout gui/$(id -u)/com.minerva.server
+1. Create a `Sheet` wrapper component that renders a vaul `Drawer.Root` on mobile and the existing centered modal container on desktop.
+2. Detect mobile with a `useMediaQuery` hook checking `max-width: 767px`, or use a CSS-only approach where the same vaul `Drawer` is always rendered but styled differently at `md:` breakpoint.
+3. The pure CSS approach is simpler: render `Drawer.Content` with `class="fixed bottom-0 inset-x-0 rounded-t-xl md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:max-w-2xl md:rounded-xl"`. This makes vaul handle drag-to-dismiss on mobile while appearing centered on desktop.
 
-# Restart running service — already correct in deploy.sh
-launchctl kickstart -k gui/$(id -u)/com.minerva.server
+### lucide-react with Tailwind v4
+
+No configuration required. Import icons directly:
+```tsx
+import { Home, CreditCard, PieChart, MessageSquare, MoreHorizontal } from 'lucide-react';
+```
+Size with `className="w-5 h-5"` or `size={20}` prop. Both work with Tailwind v4.
+
+### Layout.tsx Changes
+
+The bottom tab bar lives inside `Layout.tsx` alongside the existing top nav. Pattern:
+
+```tsx
+{/* Existing top nav — hide on mobile */}
+<nav className="hidden md:block bg-gray-900 ...">...</nav>
+
+{/* Bottom tab bar — show on mobile only */}
+<nav className="fixed bottom-0 inset-x-0 md:hidden bg-white border-t pb-safe z-50">
+  {/* 5 primary tabs + More */}
+</nav>
+
+{/* Main content — add bottom padding on mobile to clear the tab bar */}
+<main className="mx-auto max-w-6xl px-4 py-6 pb-[calc(4rem+env(safe-area-inset-bottom,0px))] md:pb-6">
+  <Outlet />
+</main>
 ```
 
-The `deploy.sh` already uses `launchctl kickstart -k` which is the current correct API and does not need changing.
-
-### Static File Path Resolution (HIGH confidence)
-
-After `tsc` compiles `packages/server/src/index.ts` to `packages/server/dist/index.js`, the `__dirname` value is `.../packages/server/dist/`. The existing path resolution:
-
-```typescript
-const clientDist = path.resolve(__dirname, '../../client/dist');
-```
-
-Resolves to `.../packages/client/dist/` — which is exactly where Vite writes its build output. This is correct and requires no changes.
-
-### NODE_ENV in Plist (HIGH confidence)
-
-The server plist sets `NODE_ENV=production` via the `EnvironmentVariables` dict. This is required because `server/src/index.ts` gates all initialization on `process.env.NODE_ENV !== 'test'`. The plist approach (not a shell script export) ensures the variable is always set when launchd starts the process.
-
-### Node Path in Plists (MEDIUM confidence)
-
-The backup plist references `/usr/local/bin/node` (Homebrew Intel path). On Apple Silicon Macs, Homebrew installs to `/opt/homebrew/bin/node`. Verify with `which node` on the target iMac and update both plists if necessary. The server plist also uses `/usr/local/bin/node`.
-
-### Vite Dev Proxy Not Active in Production (HIGH confidence)
-
-The Vite dev server proxy (`/trpc` → `localhost:3001`) runs only during development. In production, Express serves both the Vite static output and the tRPC API from the same process on port 3001. Client tRPC calls go to the same origin — this works because the client's tRPC link is configured with a relative or same-host URL.
-
-### Node 20 EOL (MEDIUM confidence)
-
-Node 20 enters Maintenance LTS and reaches EOL in April 2026. Node 22 is Active LTS since October 2024. The `--env-file` flag behavior is identical between versions. No code changes are required to upgrade; the upgrade is worth planning post-v2.1.
+---
 
 ## Version Compatibility
 
 | Package A | Compatible With | Notes |
 |-----------|-----------------|-------|
-| Node 20 `--env-file` | Express 4.21 | No conflicts. Express reads process.env after Node loads it. |
-| TypeScript 5.7 (`module: Node16`) | Node 20 ESM | Node16 moduleResolution matches Node's actual ESM algorithm. `.js` extensions required in relative imports — already enforced in the codebase. |
-| Vite 6 build output | Express `express.static` | Vite emits hashed asset filenames. Express static middleware serves them correctly. The SPA fallback catches all non-asset routes. |
-| launchd `KeepAlive: true` | `ThrottleInterval: 10` | ThrottleInterval prevents restart loops on rapid crashes. 10 seconds is the minimum recommended interval. Already set in server plist. |
+| `vaul@1.1.2` | React 19 | Explicit in peerDependencies: `"react": "^16.8 \|\| ^17.0 \|\| ^18.0 \|\| ^19.0.0"` |
+| `vaul@1.1.2` | Tailwind CSS v4 | vaul is unstyled — all styling is consumer-provided via className. Zero conflict with v4 CSS-first config. |
+| `lucide-react@0.577.0` | React 19 | No peerDependency conflicts. Tree-shaking via named imports works with Vite 6. |
+| `lucide-react@0.577.0` | Tailwind CSS v4 | SVG icon sizing via `w-5 h-5` Tailwind classes works identically in v4. |
+| CSS `env(safe-area-inset-*)` | Safari iOS 11.1+ | All modern iOS Safari versions support `env()`. The fallback `0px` handles desktop. |
+
+---
 
 ## Sources
 
-- [launchd.info Tutorial](https://www.launchd.info/) — KeepAlive, ThrottleInterval, domain-based bootstrap/bootout commands (HIGH confidence)
-- [launchd.plist(5) man page](https://keith.github.io/xcode-man-pages/launchd.plist.5.html) — KeepAlive.Crashed, SuccessfulExit, ThrottleInterval key documentation (HIGH confidence)
-- [Kickstarting and tearing down with launchctl — Eclectic Light](https://eclecticlight.co/2019/08/27/kickstarting-and-tearing-down-with-launchctl/) — kickstart vs load deprecation rationale (MEDIUM confidence)
-- [MacRumors: launchctl legacy subcommands deprecated](https://forums.macrumors.com/threads/launchctl-legacy-subcommands-deprecated.2431281/) — Ventura deprecation confirmation (MEDIUM confidence)
-- [Node.js 20.6.0 built-in .env support — Dotenv blog](https://www.dotenv.org/blog/2023/10/28/node-20-6-0-includes-built-in-support-for-env-files.html) — `--env-file` availability and multiline limitation (HIGH confidence)
-- [Vite Build Options — vite.dev](https://vite.dev/config/build-options) — default `outDir` is `dist/` (HIGH confidence)
-- [Node.js 22 vs 20 — PkgPulse](https://www.pkgpulse.com/blog/nodejs-22-vs-nodejs-20-upgrade-guide) — EOL timeline, Active LTS status (MEDIUM confidence)
-- Direct inspection: `deploy/`, `packages/server/src/index.ts`, `package.json`, `tsconfig.base.json` (HIGH confidence)
+- [vaul npm](https://www.npmjs.com/package/vaul) — v1.1.2 current, React 19 peerDependency confirmed
+- [vaul GitHub releases](https://github.com/emilkowalski/vaul/releases/tag/v1.1.2) — React 19 added to peerDeps in v1.1.1
+- [lucide-react npm](https://www.npmjs.com/package/lucide-react) — v0.577.0 current as of March 2026
+- [Tailwind CSS v4 docs — Compatibility](https://tailwindcss.com/docs/compatibility) — CSS-first config, no tailwind.config.js
+- [Tailwind CSS safe-area discussion](https://github.com/tailwindlabs/tailwindcss/discussions/12536) — confirmed `@layer utilities` approach for v4
+- Direct inspection: `packages/client/src/styles/app.css`, `packages/client/package.json`, `packages/client/src/components/Layout.tsx`, `packages/client/src/components/ManualLinkModal.tsx`
 
 ---
-*Stack research for: Minerva Money v2.1 Deployment Hardening*
+*Stack research for: Minerva Money v2.2 Mobile-Friendly UI*
 *Researched: 2026-03-23*
