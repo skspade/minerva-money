@@ -106,7 +106,7 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="h-[calc(100vh-56px)] -mx-4 -mt-6 flex flex-col">
+    <div className="h-[calc(100dvh-56px)] md:h-[calc(100vh-56px)] -mx-4 -mt-6 flex flex-col">
       {/* Message area */}
       <div className="flex-1 overflow-y-auto p-4">
         {messages.length === 0 ? (
@@ -192,7 +192,7 @@ export default function ChatPage() {
       </div>
 
       {/* Input bar */}
-      <div className="border-t border-gray-200 bg-white px-4 py-3">
+      <div className="border-t border-gray-200 bg-white px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <div className="mx-auto max-w-3xl flex gap-2">
           <textarea
             value={input}

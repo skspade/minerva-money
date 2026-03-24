@@ -51,22 +51,22 @@ export default function ReportsPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 max-md:flex-col max-md:items-start max-md:gap-3">
         <h2 className="text-2xl font-bold">Reports</h2>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 max-md:flex-wrap max-md:w-full">
           <label className="text-sm text-gray-500">From</label>
           <input
             type="date"
             value={startDate}
             onChange={e => setStartDate(e.target.value)}
-            className="px-3 py-1.5 border border-gray-300 rounded text-sm"
+            className="px-3 py-1.5 border border-gray-300 rounded text-base max-md:flex-1"
           />
           <label className="text-sm text-gray-500">To</label>
           <input
             type="date"
             value={endDate}
             onChange={e => setEndDate(e.target.value)}
-            className="px-3 py-1.5 border border-gray-300 rounded text-sm"
+            className="px-3 py-1.5 border border-gray-300 rounded text-base max-md:flex-1"
           />
         </div>
       </div>
@@ -97,10 +97,7 @@ export default function ReportsPage() {
                   nameKey="categoryName"
                   cx="50%"
                   cy="50%"
-                  outerRadius={120}
-                  label={({ name, percent }) =>
-                    `${name ?? ''} ${((Number(percent) || 0) * 100).toFixed(0)}%`
-                  }
+                  outerRadius={100}
                 >
                   {categoryData.map((entry, index) => (
                     <Cell key={entry.categoryId} fill={COLORS[index % COLORS.length]} />
