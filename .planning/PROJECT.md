@@ -39,7 +39,15 @@ Accurate, auto-synced financial data with envelope budgeting that lets you see w
 
 ### Active
 
-(No active milestone — use `/gsd:new-milestone` to start next)
+## Current Milestone: v2.4 CSV Import Account Filtering
+
+**Goal:** Allow users to selectively skip/exclude CSV accounts during import so they can import only the accounts they want while ignoring unsupported account types.
+
+**Target features:**
+- Skip option in account mapping dropdown ("Skip — do not import")
+- Client-side stats filtering (sample rows, row counts, dedup stats exclude skipped accounts)
+- Server-side execute changes (skip rows for unmapped accounts instead of throwing)
+- Results step updates (confirm summary reflects filtered counts)
 
 ### Out of Scope
 
@@ -110,4 +118,4 @@ Accurate, auto-synced financial data with envelope budgeting that lets you see w
 | Auto-delimiter detection (tab vs comma) | `headerLine.includes('\t')` check before parsing | ✓ Good — handles both Monarch export formats |
 
 ---
-*Last updated: 2026-03-24 after v2.3 milestone*
+*Last updated: 2026-03-24 after v2.4 milestone started*
