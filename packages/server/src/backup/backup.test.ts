@@ -3,7 +3,7 @@ import Database from 'better-sqlite3';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createBackup } from './backup.js';
+import { createBackup, resolveBackupDir } from './backup.js';
 
 describe('createBackup', () => {
   let tmpDir: string;
@@ -76,6 +76,17 @@ describe('createBackup', () => {
     expect(rows[0].value).toBe('hello');
   });
 
+  it('uses explicit backupDir when provided and sets isCloudBackup to false', async () => {
+    const result = await createBackup(db, backupDir);
+    expect(result.isCloudBackup).toBe(false);
+  });
+
+  it('returns correct BackupResult shape including isCloudBackup', async () => {
+    const result = await createBackup(db, backupDir);
+    expect(result).toHaveProperty('isCloudBackup');
+    expect(typeof result.isCloudBackup).toBe('boolean');
+  });
+
   it('prunes backups older than 30 days', async () => {
     fs.mkdirSync(backupDir, { recursive: true });
 
@@ -94,5 +105,34 @@ describe('createBackup', () => {
 
     expect(fs.existsSync(oldFile)).toBe(false);
     expect(fs.existsSync(recentFile)).toBe(true);
+  });
+});
+
+describe('resolveBackupDir', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'minerva-resolve-test-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('returns iCloud path when iCloud directory exists', () => {
+    // Create fake iCloud Drive structure
+    const iCloudParent = path.join(tmpDir, 'Library', 'Mobile Documents', 'com~apple~CloudDrive');
+    fs.mkdirSync(iCloudParent, { recursive: true });
+
+    const result = resolveBackupDir(tmpDir);
+    expect(result.isCloud).toBe(true);
+    expect(result.dir).toBe(path.join(iCloudParent, 'MinervaBackups'));
+  });
+
+  it('returns local fallback path when iCloud directory is missing', () => {
+    // tmpDir has no Library/Mobile Documents structure
+    const result = resolveBackupDir(tmpDir);
+    expect(result.isCloud).toBe(false);
+    expect(result.dir).toBe(path.join(tmpDir, 'minerva-money', 'backups'));
   });
 });
