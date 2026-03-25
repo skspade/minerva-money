@@ -127,10 +127,10 @@ Plans:
   3. Agent rejects creation and suggests the existing item when a duplicate name (case-insensitive) is requested
   4. Agent rejects category creation when the target group does not exist
   5. A newly created category can be used by the agent for categorization in the same conversation turn
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 34-01: TBD
+- [ ] 34-01-PLAN.md — Add create_category_group and create_category tools with validation (TDD)
 
 ### Phase 35: System Prompt Updates
 **Goal**: Agent follows behavioral guidance for category creation and directs users to UI for destructive operations
