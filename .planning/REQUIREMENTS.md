@@ -71,33 +71,33 @@ Deferred to future milestone. Tracked but not in current roadmap.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SCHEMA-01 | — | Pending |
-| SCHEMA-02 | — | Pending |
-| SCHEMA-03 | — | Pending |
-| SCHEMA-04 | — | Pending |
-| CRUD-01 | — | Pending |
-| CRUD-02 | — | Pending |
-| CRUD-03 | — | Pending |
-| CRUD-04 | — | Pending |
-| CRUD-05 | — | Pending |
-| IMPORT-01 | — | Pending |
-| IMPORT-02 | — | Pending |
-| IMPORT-03 | — | Pending |
-| IMPORT-04 | — | Pending |
-| DASH-01 | — | Pending |
-| DASH-02 | — | Pending |
-| DASH-03 | — | Pending |
-| DASH-04 | — | Pending |
-| DASH-05 | — | Pending |
-| AGENT-01 | — | Pending |
-| AGENT-02 | — | Pending |
-| AGENT-03 | — | Pending |
+| SCHEMA-01 | Phase 44 | Pending |
+| SCHEMA-02 | Phase 44 | Pending |
+| SCHEMA-03 | Phase 44 | Pending |
+| SCHEMA-04 | Phase 44 | Pending |
+| CRUD-01 | Phase 45 | Pending |
+| CRUD-02 | Phase 45 | Pending |
+| CRUD-03 | Phase 45 | Pending |
+| CRUD-04 | Phase 45 | Pending |
+| CRUD-05 | Phase 45 | Pending |
+| IMPORT-01 | Phase 46 | Pending |
+| IMPORT-02 | Phase 46 | Pending |
+| IMPORT-03 | Phase 46 | Pending |
+| IMPORT-04 | Phase 45 | Pending |
+| DASH-01 | Phase 46 | Pending |
+| DASH-02 | Phase 46 | Pending |
+| DASH-03 | Phase 46 | Pending |
+| DASH-04 | Phase 46 | Pending |
+| DASH-05 | Phase 46 | Pending |
+| AGENT-01 | Phase 46 | Pending |
+| AGENT-02 | Phase 46 | Pending |
+| AGENT-03 | Phase 46 | Pending |
 
 **Coverage:**
 - v2.7 requirements: 21 total
-- Mapped to phases: 0
-- Unmapped: 21 ⚠️
+- Mapped to phases: 21
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-25*
-*Last updated: 2026-03-25 after initial definition*
+*Last updated: 2026-03-25 after roadmap creation*

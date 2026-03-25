@@ -10,6 +10,7 @@
 - ✅ **v2.4 CSV Import Account Filtering** — Phases 29-32 (shipped 2026-03-24)
 - ✅ **v2.5 Chat Enhancements** — Phases 33-37 (shipped 2026-03-24)
 - ✅ **v2.6 Streaming Chat** — Phases 38-43 (shipped 2026-03-25)
+- 🚧 **v2.7 Manual Accounts** — Phases 44-46 (in progress)
 
 ## Phases
 
@@ -120,6 +121,60 @@ Full details: [milestones/v2.6-ROADMAP.md](milestones/v2.6-ROADMAP.md)
 
 </details>
 
+### v2.7 Manual Accounts (In Progress)
+
+**Milestone Goal:** Enable manual account creation and CSV transaction import for accounts that cannot be synced via SimpleFIN, fully integrated into budgets, reports, dashboard, and net worth.
+
+- [ ] **Phase 44: Schema Migration and Sync Safety** - Add source column to accounts table and protect sync pipeline from manual accounts
+- [ ] **Phase 45: Account CRUD Service and Import Integration** - Server-side account management with balance computation and post-import recalculation
+- [ ] **Phase 46: Client UI and Agent Tools** - Inline account creation in import wizard, dashboard visual distinction, and agent account creation
+
+## Phase Details
+
+### Phase 44: Schema Migration and Sync Safety
+**Goal**: Manual accounts can safely exist in the database without contaminating the SimpleFIN sync pipeline
+**Depends on**: Nothing (first phase of v2.7)
+**Requirements**: SCHEMA-01, SCHEMA-02, SCHEMA-03, SCHEMA-04
+**Success Criteria** (what must be TRUE):
+  1. Database has a `source` column on the accounts table and all existing accounts have `source = 'simplefin'`
+  2. Manual account IDs use the `manual_` prefix convention and cannot collide with SimpleFIN IDs
+  3. Sync trigger only fetches and rate-limits SimpleFIN accounts — manual accounts are completely ignored by sync
+  4. The `accounts.list` tRPC query returns the `source` field for every account
+**Plans**: TBD
+
+Plans:
+- [ ] 44-01: TBD
+
+### Phase 45: Account CRUD Service and Import Integration
+**Goal**: Users can create, update, and delete manual accounts via the tRPC API, with balances automatically computed from transactions
+**Depends on**: Phase 44
+**Requirements**: CRUD-01, CRUD-02, CRUD-03, CRUD-04, CRUD-05, IMPORT-04
+**Success Criteria** (what must be TRUE):
+  1. User can create a manual account with name, institution, and type, and it appears in the accounts list
+  2. User can update name, institution, and type of a manual account but cannot modify SimpleFIN accounts
+  3. User can delete a manual account and all its transactions are cascade-removed
+  4. Manual account balance equals the sum of its transaction amounts in integer cents
+  5. After a CSV import targeting a manual account, its balance and balance snapshot are recalculated within the same transaction
+**Plans**: TBD
+
+Plans:
+- [ ] 45-01: TBD
+
+### Phase 46: Client UI and Agent Tools
+**Goal**: Manual accounts are fully visible in the UI with appropriate visual distinction, creatable inline during CSV import, and accessible via the Claude agent
+**Depends on**: Phase 45
+**Requirements**: IMPORT-01, IMPORT-02, IMPORT-03, DASH-01, DASH-02, DASH-03, DASH-04, DASH-05, AGENT-01, AGENT-02, AGENT-03
+**Success Criteria** (what must be TRUE):
+  1. Import wizard account mapping dropdown includes a "+ Create New Account" option that opens an inline form and auto-selects the new account after creation
+  2. Manual accounts appear on the dashboard alongside synced accounts with a "Manual" label and "Last imported" timestamp instead of "Last synced"
+  3. Manual accounts are included in net worth calculations, daily balance snapshots, and all spending reports
+  4. Sync Now button is not shown for manual accounts on the dashboard
+  5. Agent can create manual accounts with confirmation flow and `list_accounts` response includes the `source` field
+**Plans**: TBD
+
+Plans:
+- [ ] 46-01: TBD
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -132,3 +187,6 @@ Full details: [milestones/v2.6-ROADMAP.md](milestones/v2.6-ROADMAP.md)
 | 29-32 | v2.4 | 4/4 | Complete | 2026-03-24 |
 | 33-37 | v2.5 | 5/5 | Complete | 2026-03-24 |
 | 38-43 | v2.6 | 6/6 | Complete | 2026-03-25 |
+| 44. Schema Migration and Sync Safety | v2.7 | 0/TBD | Not started | - |
+| 45. Account CRUD Service and Import Integration | v2.7 | 0/TBD | Not started | - |
+| 46. Client UI and Agent Tools | v2.7 | 0/TBD | Not started | - |
