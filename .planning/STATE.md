@@ -5,8 +5,8 @@ milestone_name: Streaming Chat
 status: unknown
 last_updated: "2026-03-25T03:28:15.696Z"
 progress:
-  total_phases: 9
-  completed_phases: 9
+  total_phases: 5
+  completed_phases: 1
   total_plans: 13
   completed_plans: 13
 ---
