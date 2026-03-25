@@ -2,6 +2,51 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
+## Milestone: v2.7 — Manual Accounts
+
+**Shipped:** 2026-03-25
+**Phases:** 3 | **Plans:** 6 | **Requirements:** 21/21
+
+### What Was Built
+- Database migration adding `source` column to accounts table with sync pipeline filtered to SimpleFIN-only
+- Account CRUD service (createAccount, updateAccount, deleteAccount, recalculateBalance) with SimpleFIN guard
+- tRPC mutations for account management and post-import balance recalculation in atomic transactions
+- Agent create_account tool with duplicate name detection and system prompt guidance (rules 17-19)
+- Dashboard and AccountsPage visual distinction: "Manual" badges and "Last imported" labels
+- Import wizard inline account creation: "+ Create New Account" dropdown option with inline form and auto-selection
+
+### What Worked
+- No gap closure phase needed — milestone audit passed with 21/21 requirements on first check
+- TDD for accounts-service.ts produced 22 new tests covering all CRUD paths and edge cases
+- Reusing existing sentinel pattern (`__skip__` → `__CREATE_NEW__`) for import dropdown kept the UI contract consistent
+- Manual accounts required zero changes for net worth, reports, or balance snapshots — existing queries don't filter by source
+- recalculateBalance running inside import's existing db.transaction() eliminated balance/snapshot drift risk
+
+### What Was Inefficient
+- REQUIREMENTS.md checkboxes for 17 requirements (CRUD, IMPORT, DASH, AGENT) left unchecked despite being verified complete — same drift as prior milestones
+- Phase 46 SUMMARY.md frontmatter has empty `requirements_completed` arrays — 7th milestone with this gap
+- Agent get_account_balances tool has pre-existing bug (references non-existent available_balance column) — not introduced by v2.7 but surfaced during audit
+- Agent trigger_sync rate-limit check doesn't filter by source='simplefin' — minor tech debt surfaced by audit
+
+### Patterns Established
+- `manual_` prefix + UUID pattern for manual account ID generation (avoids SimpleFIN collisions)
+- Source column filtering pattern: `WHERE source = 'simplefin'` for sync operations
+- Inline entity creation in import wizard: sentinel detection → inline form → mutation → auto-select
+- Caller-managed transaction scope for recalculateBalance (atomicity with import)
+
+### Key Lessons
+1. Schema extension milestones can be small (3 phases) when existing queries don't need changes — manual accounts "just work" in reports/net worth
+2. Milestone audit passing on first check (no gap closure phase) shows process maturation — per-phase verification improving
+3. Pre-existing bugs surface during audits of related features — good signal for tech debt backlog
+4. SUMMARY.md frontmatter and REQUIREMENTS.md checkbox drift still not solved — 7 milestones running
+
+### Cost Observations
+- Model mix: primarily opus for execution, sonnet for research/planning
+- Sessions: autopilot mode
+- Notable: 3 phases, 6 plans, 2,047 net lines — smallest feature milestone yet with highest requirements density (21)
+
+---
+
 ## Milestone: v2.6 — Streaming Chat
 
 **Shipped:** 2026-03-25
@@ -328,6 +373,7 @@
 | v2.4 | 4 | 4 | Account-level skip filtering for selective import |
 | v2.5 | 5 | 5 | Chat agent model selection and category creation tools |
 | v2.6 | 6 | 6 | SSE streaming with layered dependency chain |
+| v2.7 | 3 | 6 | Manual accounts with schema extension and import integration |
 
 ### Cumulative Quality
 
@@ -341,6 +387,7 @@
 | v2.4 | 334 | 10/10 | 1 (Phase 32) |
 | v2.5 | 361 | 18/18 | 1 (Phase 37) |
 | v2.6 | 423 | 20/20 | 1 (Phase 43) |
+| v2.7 | 456 | 21/21 | 0 |
 
 ### Top Lessons (Verified Across Milestones)
 

@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A single-user personal budgeting web app replacing Monarch Money. Built with React, Express, tRPC, and SQLite, hosted on a home iMac server. Pulls financial data from SimpleFIN (MX upstream) and uses envelope budgeting to assign every dollar a job. Ships with a full dashboard, spending/net-worth charts, categorization rules engine, transfer detection, twice-monthly auto-funding, a Claude-powered conversational agent with model selection (Haiku/Sonnet/Opus), category creation tools, and real-time token-by-token streaming responses with tool activity indicators. Includes CSV import with account-level skip filtering for migrating transaction history from Monarch Money.
+A single-user personal budgeting web app replacing Monarch Money. Built with React, Express, tRPC, and SQLite, hosted on a home iMac server. Pulls financial data from SimpleFIN (MX upstream) and uses envelope budgeting to assign every dollar a job. Ships with a full dashboard, spending/net-worth charts, categorization rules engine, transfer detection, twice-monthly auto-funding, a Claude-powered conversational agent with model selection (Haiku/Sonnet/Opus), category creation tools, and real-time token-by-token streaming responses with tool activity indicators. Includes CSV import with account-level skip filtering for migrating transaction history from Monarch Money. Supports manual account creation for institutions not available through SimpleFIN, with inline account creation during import, computed balances, and full dashboard/report integration.
 
 ## Core Value
 
@@ -55,19 +55,16 @@ Accurate, auto-synced financial data with envelope budgeting that lets you see w
 - ✓ Incremental text rendering, tool activity indicators (24 tools), smart auto-scroll in ChatPage — v2.6
 - ✓ Session ID continuity fix for resumed chat turns — v2.6
 
+- ✓ Manual account schema with `source` column distinguishing manual from SimpleFIN accounts — v2.7
+- ✓ Account CRUD service (create, update, delete, recalculate balance) with SimpleFIN guard — v2.7
+- ✓ Import wizard inline account creation with auto-selection — v2.7
+- ✓ Manual account balance computed from transaction sums, recalculated on import — v2.7
+- ✓ Dashboard/reporting integration with "Manual" badges and "Last imported" labels — v2.7
+- ✓ Agent create_account tool with duplicate detection and system prompt guidance — v2.7
+
 ### Active
 
-#### Current Milestone: v2.7 Manual Accounts
-
-**Goal:** Enable manual account creation and CSV transaction import for accounts that cannot be synced via SimpleFIN, fully integrated into budgets, reports, dashboard, and net worth.
-
-**Target features:**
-- Database schema extension with `source` column to distinguish manual vs SimpleFIN accounts
-- Account CRUD service and tRPC API (create, update, delete, recalculate balance)
-- Import wizard integration — inline account creation during CSV import mapping step
-- Balance management — computed from transaction sums, recalculated on import
-- Dashboard/reporting integration — manual accounts treated identically to synced accounts with visual distinction
-- Agent tool integration — create_account tool with confirmation flow
+(No active milestone — planning next milestone)
 
 ### Out of Scope
 
@@ -92,18 +89,18 @@ Accurate, auto-synced financial data with envelope budgeting that lets you see w
 
 ## Context
 
-- Shipped v2.6 with 21,189 LOC TypeScript across 43 phases (8 milestones)
+- Shipped v2.7 with 22,030 LOC TypeScript across 46 phases (9 milestones)
 - Tech stack: React + Tailwind / Express + tRPC / SQLite via better-sqlite3 / TanStack Query / Claude Agent SDK / csv-parse
 - Replacing Monarch Money with a self-hosted alternative (CSV import with account filtering enables selective data migration)
-- Agent now supports model selection (Haiku/Sonnet/Opus), category creation, and real-time token-by-token streaming with tool activity indicators
-- v2.7: Adding manual account support for institutions not available through SimpleFIN (design: .planning/designs/2026-03-25-manual-accounts-csv-import-design.md)
+- Agent now supports model selection (Haiku/Sonnet/Opus), category creation, account creation, and real-time token-by-token streaming with tool activity indicators
+- Manual accounts supported for institutions not in SimpleFIN — inline creation during import, computed balances, full dashboard integration
 - SimpleFIN costs $15/year, connects to MX (16,000+ institutions)
 - Three institutions: Discover (banking + HELOC), Fidelity (investments), Consumers Credit Union (banking)
 - Pay schedule: bi-monthly (15th and last day of month), equal split
 - SimpleFIN rate limit: 24 requests/day per account, 90-day max date range
 - Freedom Mortgage blocks all aggregators but payments appear as bank debits
 - Discover HELOC discontinued July 2025 (Capital One acquisition) — existing loan still serviced
-- Known tech debt: orphaned budget.allocations.byMonth procedure, client uses inline cents conversion instead of shared helper, 2 redundant backup tests (run-backup.test.ts), 3 VERIFICATION.md tool name mismatches in Phase 14, no dedicated unit tests for query-tools.ts or ChatPage.tsx, rules-service.test.ts has 8 repetitive beforeEach/afterEach blocks, compiled dist/sse-events.test.js duplicates src test (inflates test count by 10)
+- Known tech debt: orphaned budget.allocations.byMonth procedure, client uses inline cents conversion instead of shared helper, 2 redundant backup tests (run-backup.test.ts), 3 VERIFICATION.md tool name mismatches in Phase 14, no dedicated unit tests for query-tools.ts or ChatPage.tsx, rules-service.test.ts has 8 repetitive beforeEach/afterEach blocks, compiled dist/sse-events.test.js duplicates src test (inflates test count by 10), agent get_account_balances references non-existent available_balance column, agent trigger_sync rate-limit check doesn't filter by source='simplefin'
 
 ## Constraints
 
@@ -157,6 +154,12 @@ Accurate, auto-synced financial data with envelope budgeting that lets you see w
 | Single send path via useStreamingChat | Removed chatMutation entirely; hook handles tRPC fallback internally | ✓ Good — simpler ChatPage code |
 | Live bubble separate from messages array | Avoids array churn on every token delta | ✓ Good — smooth streaming performance |
 | Discriminated union on type field for SSE events | Parsed objects are self-describing; enables switch narrowing | ✓ Good — compile-time protocol safety |
+| `manual_` prefix + UUID for manual account IDs | Avoids collisions with SimpleFIN-assigned IDs | ✓ Good — clean namespace separation |
+| Balance computed from transaction sums (no manual entry) | Transactions are single source of truth; avoids divergence on import | ✓ Good — recalculateBalance runs atomically with import |
+| `__CREATE_NEW__` sentinel in import dropdown | Reuses existing sentinel pattern from skip (`__skip__`) | ✓ Good — consistent UI contract |
+| Account type restricted to banking/credit | Investment accounts are balance-only (not transaction-summed); deferred | ✓ Good — avoids scope creep |
+| recalculateBalance caller-managed transaction | Allows atomic execution inside import's db.transaction() | ✓ Good — no balance/snapshot drift |
+| No index on accounts.source column | Table has ~3 rows at current scale — not needed | ✓ Good — avoid premature optimization |
 
 ---
-*Last updated: 2026-03-25 after v2.7 milestone start*
+*Last updated: 2026-03-25 after v2.7 milestone*

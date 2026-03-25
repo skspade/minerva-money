@@ -1,5 +1,22 @@
 # Milestones
 
+## v2.7 Manual Accounts (Shipped: 2026-03-25)
+
+**Phases:** 3 | **Plans:** 6 | **Requirements:** 21/21
+**LOC added:** ~2,047 TypeScript | **Total LOC:** 22,030
+**Timeline:** 2026-03-25 (single day)
+**Git range:** feat(44-01) → feat(46-03)
+
+**Key accomplishments:**
+1. Schema migration — added `source` column to accounts table with sync pipeline filtered to SimpleFIN-only accounts
+2. Account CRUD service — TDD-built createAccount, updateAccount, deleteAccount, recalculateBalance with SimpleFIN guard
+3. tRPC mutations and import integration — account create/update/delete endpoints with post-import balance recalculation
+4. Agent tools — create_account tool with duplicate detection and system prompt guidance for manual accounts
+5. Dashboard visual distinction — "Manual" pill badges and "Last imported" labels on Dashboard and AccountsPage
+6. Import wizard inline creation — "+ Create New Account" option with inline form and auto-selection after creation
+
+---
+
 ## v2.6 Streaming Chat (Shipped: 2026-03-25)
 
 **Phases:** 6 | **Plans:** 6 | **Requirements:** 20/20
