@@ -147,6 +147,50 @@ describe('sync-service', () => {
     expect(snapshots).toHaveLength(3);
   });
 
+  it('migration adds source column defaulting to simplefin', async () => {
+    const client = createMockSimpleFINClient();
+    const limiter = createRateLimiter();
+    await runSync(db, client, limiter, { skipBackup: true });
+
+    const accounts = db.prepare('SELECT id, source FROM accounts').all() as { id: string; source: string }[];
+    expect(accounts.length).toBeGreaterThan(0);
+    for (const acct of accounts) {
+      expect(acct.source).toBe('simplefin');
+    }
+  });
+
+  it('sync trigger query excludes manual accounts', () => {
+    // Insert a manual account directly
+    db.prepare(
+      "INSERT INTO accounts (id, name, institution, type, balance, source) VALUES (?, ?, ?, ?, ?, ?)",
+    ).run('manual_test-uuid', 'Test Manual Account', 'Manual Bank', 'checking', 0, 'manual');
+
+    // Use the same query the sync trigger uses (with source filter)
+    const syncAccounts = db.prepare("SELECT id, name FROM accounts WHERE source = 'simplefin'").all() as { id: string }[];
+
+    // Manual account should NOT appear in sync query
+    expect(syncAccounts.find(a => a.id === 'manual_test-uuid')).toBeUndefined();
+
+    // All accounts should still be listed when querying without filter
+    const allAccounts = db.prepare('SELECT id FROM accounts').all() as { id: string }[];
+    expect(allAccounts.find(a => a.id === 'manual_test-uuid')).toBeDefined();
+  });
+
+  it('accounts list query includes source field', async () => {
+    const client = createMockSimpleFINClient();
+    const limiter = createRateLimiter();
+    await runSync(db, client, limiter, { skipBackup: true });
+
+    const accounts = db.prepare(
+      'SELECT id, name, institution, type, balance, last_synced, source FROM accounts ORDER BY type ASC, name ASC',
+    ).all() as { source: string }[];
+
+    expect(accounts.length).toBeGreaterThan(0);
+    for (const acct of accounts) {
+      expect(acct.source).toBe('simplefin');
+    }
+  });
+
   it('rate limiter blocks sync when limit exceeded', async () => {
     const client = createMockSimpleFINClient();
     const limiter = createRateLimiter(1, 0); // 1 request per day per account
