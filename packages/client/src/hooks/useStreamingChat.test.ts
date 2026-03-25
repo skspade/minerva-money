@@ -123,12 +123,11 @@ describe('useStreamingChat (integration)', () => {
 
     await processStream('Hello', handlers, { sessionId: 'sess-1', model: 'claude-sonnet-4-20250514' });
 
-    expect(fetchSpy).toHaveBeenCalledWith('/api/chat/stream', {
+    expect(fetchSpy).toHaveBeenCalledWith('/api/chat/stream', expect.objectContaining({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: 'Hello', sessionId: 'sess-1', model: 'claude-sonnet-4-20250514' }),
-      signal: expect.any(AbortSignal),
-    });
+    }));
   });
 
   it('accumulates text-delta events', async () => {

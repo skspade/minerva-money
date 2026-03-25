@@ -7,6 +7,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/trpc': 'http://localhost:3001',
+      '/api': 'http://localhost:3001',
     },
     fs: {
       allow: ['..'],
