@@ -71,10 +71,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PROTO-03 | Phase 38 | Pending |
 | SRVR-01 | Phase 40 | Pending |
 | SRVR-02 | Phase 40 | Pending |
-| SRVR-03 | Phase 39 | Pending |
-| SRVR-04 | Phase 39 | Pending |
-| SRVR-05 | Phase 39 | Pending |
-| SRVR-06 | Phase 39 | Pending |
+| SRVR-03 | Phase 39 | Complete |
+| SRVR-04 | Phase 39 | Complete |
+| SRVR-05 | Phase 39 | Complete |
+| SRVR-06 | Phase 39 | Complete |
 | CLNT-01 | Phase 41 | Pending |
 | CLNT-02 | Phase 41 | Pending |
 | CLNT-03 | Phase 41 | Pending |
