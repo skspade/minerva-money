@@ -155,10 +155,11 @@ Plans:
   3. User can delete a manual account and all its transactions are cascade-removed
   4. Manual account balance equals the sum of its transaction amounts in integer cents
   5. After a CSV import targeting a manual account, its balance and balance snapshot are recalculated within the same transaction
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 45-01: TBD
+- [ ] 45-01-PLAN.md — Account CRUD service (TDD: createAccount, updateAccount, deleteAccount, recalculateBalance)
+- [ ] 45-02-PLAN.md — tRPC router mutations and import integration wiring
 
 ### Phase 46: Client UI and Agent Tools
 **Goal**: Manual accounts are fully visible in the UI with appropriate visual distinction, creatable inline during CSV import, and accessible via the Claude agent
@@ -188,5 +189,5 @@ Plans:
 | 33-37 | v2.5 | 5/5 | Complete | 2026-03-24 |
 | 38-43 | v2.6 | 6/6 | Complete | 2026-03-25 |
 | 44. Schema Migration and Sync Safety | 1/1 | Complete    | 2026-03-25 | - |
-| 45. Account CRUD Service and Import Integration | v2.7 | 0/TBD | Not started | - |
+| 45. Account CRUD Service and Import Integration | v2.7 | 0/2 | Planned | - |
 | 46. Client UI and Agent Tools | v2.7 | 0/TBD | Not started | - |
