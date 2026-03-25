@@ -112,7 +112,7 @@ Full details: [milestones/v2.5-ROADMAP.md](milestones/v2.5-ROADMAP.md)
 
 - [x] **Phase 38: SSE Event Protocol** - Shared TypeScript types defining the 6-event SSE contract imported by both server and client (completed 2026-03-25)
 - [x] **Phase 39: Server Stream Processing** - Async generator that iterates Agent SDK streaming output and yields typed SSE events (completed 2026-03-25)
-- [ ] **Phase 40: Express SSE Endpoint** - HTTP handler that wires the stream generator to POST /api/chat/stream with validation and SSE headers
+- [x] **Phase 40: Express SSE Endpoint** - HTTP handler that wires the stream generator to POST /api/chat/stream with validation and SSE headers (completed 2026-03-25)
 - [ ] **Phase 41: Client Stream Hook** - React hook that consumes the SSE stream via fetch/ReadableStream and exposes reactive streaming state
 - [ ] **Phase 42: ChatPage Streaming UI** - Incremental text rendering, tool activity indicators, smart auto-scroll, and graceful fallback in ChatPage
 
@@ -157,7 +157,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 40-01-PLAN.md — Implement SSE chat stream handler with TDD (validation, SSE formatting, abort handling, route registration)
+- [x] 40-01-PLAN.md — Implement SSE chat stream handler with TDD (validation, SSE formatting, abort handling, route registration)
 
 ### Phase 41: Client Stream Hook
 **Goal**: React components can consume streaming chat responses through a clean hook interface without knowing SSE details
@@ -205,6 +205,6 @@ Phases execute in numeric order: 38 → 39 → 40 → 41 → 42
 | 33-37 | v2.5 | 5/5 | Complete | 2026-03-24 |
 | 38. SSE Event Protocol | 1/1 | Complete    | 2026-03-25 | - |
 | 39. Server Stream Processing | 1/1 | Complete    | 2026-03-25 | - |
-| 40. Express SSE Endpoint | v2.6 | 0/1 | Not started | - |
+| 40. Express SSE Endpoint | v2.6 | 1/1 | Complete | 2026-03-25 |
 | 41. Client Stream Hook | v2.6 | 0/1 | Not started | - |
 | 42. ChatPage Streaming UI | v2.6 | 0/1 | Not started | - |
