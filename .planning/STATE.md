@@ -25,7 +25,7 @@ See: .planning/PROJECT.md (updated 2026-03-25)
 Phase: 45 of 46 (Account CRUD Service and Import Integration)
 Plan: 0 of TBD in current phase
 Status: Ready to plan
-Last activity: 2026-03-25 — Phase 44 complete (schema migration + sync safety)
+Last activity: 2026-03-25 - Completed quick task 4: Expose backup status on dashboard under sync status card
 
 Progress: [███░░░░░░░] 33%
 
