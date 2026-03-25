@@ -50,7 +50,14 @@ Accurate, auto-synced financial data with envelope budgeting that lets you see w
 
 ### Active
 
-(No active milestone — use `/gsd:new-milestone` to start next)
+**Milestone v2.6: Streaming Chat** — Add true token-by-token streaming of LLM responses to the chat interface using SSE, with tool activity indicators
+
+- [ ] SSE event protocol with typed events (session, text-delta, tool-start, tool-end, done, error)
+- [ ] Server SSE endpoint (POST /api/chat/stream) with Zod validation and SSE headers
+- [ ] Server stream processing — iterate Agent SDK async iterable, emit SSE events in real-time
+- [ ] Client stream consumer hook (useStreamingChat) with fetch/ReadableStream
+- [ ] Incremental text rendering and tool activity indicators in ChatPage
+- [ ] Migration path — SSE alongside existing tRPC mutation, both paths functional
 
 ### Out of Scope
 
@@ -63,14 +70,14 @@ Accurate, auto-synced financial data with envelope budgeting that lets you see w
 - Financial advice / recommendations — liability risk; agent answers data questions only
 - Voice input/output — text-only chat sufficient
 - Agent-initiated proactive alerts — dashboard already shows budget status
-- Streaming agent responses — collect-and-return sufficient; upgrade if response times are slow
+- ~~Streaming agent responses~~ — moved to Active (v2.6)
 - Persistent chat history database — SDK sessions handle within-session continuity
 - Category deletion/rename via agent — UI concern with sort ordering; creation is safe but destructive ops stay in UI
 - Multi-agent orchestration — single agent sufficient
 
 ## Context
 
-- Shipped v2.5 with 19,237 LOC TypeScript across 37 phases (7 milestones)
+- Shipped v2.5.1 with 19,237 LOC TypeScript across 37 phases (7 milestones)
 - Tech stack: React + Tailwind / Express + tRPC / SQLite via better-sqlite3 / TanStack Query / Claude Agent SDK / csv-parse
 - Replacing Monarch Money with a self-hosted alternative (CSV import with account filtering enables selective data migration)
 - Agent now supports model selection (Haiku/Sonnet/Opus) and can create categories/groups during conversation
@@ -131,4 +138,4 @@ Accurate, auto-synced financial data with envelope budgeting that lets you see w
 | System prompt behavioral rules for categories | Check existing before create, require confirmation, redirect destructive ops | ✓ Good — 7 tests verify prompt content |
 
 ---
-*Last updated: 2026-03-24 after v2.5 milestone*
+*Last updated: 2026-03-24 after v2.6 milestone start*

@@ -1,14 +1,14 @@
 ---
 gsd_state_version: 1.0
-milestone: v2.5
-milestone_name: Chat Enhancements
-status: complete
-last_updated: "2026-03-25T01:06:53.968Z"
+milestone: v2.6
+milestone_name: Streaming Chat
+status: active
+last_updated: "2026-03-24T00:00:00.000Z"
 progress:
-  total_phases: 5
-  completed_phases: 5
-  total_plans: 5
-  completed_plans: 5
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
 ---
 
 # Project State
@@ -18,22 +18,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-24)
 
 **Core value:** Accurate, auto-synced financial data with envelope budgeting that lets you see where every dollar goes and how spending trends over time.
-**Current focus:** Planning next milestone
+**Current focus:** Defining requirements for v2.6 Streaming Chat
 
 ## Current Position
 
-Milestone: v2.5 Chat Enhancements — SHIPPED 2026-03-24
-Status: Milestone complete, archived
-Last activity: 2026-03-24 — v2.5 milestone archived
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-03-24 — Milestone v2.6 started
 
-Progress: [██████████] 100%
+Progress: [░░░░░░░░░░] 0%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 5 (v2.5)
-- Phases: 5/5
-- Requirements satisfied: 18/18
+- Total plans completed: 0 (v2.6)
+- Phases: 0/0
+- Requirements satisfied: 0/0
 
 ## Accumulated Context
 
@@ -59,5 +60,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-24
-Stopped at: Completed quick task 3
+Stopped at: Starting v2.6 milestone
 Resume file: None
