@@ -184,10 +184,10 @@ Plans:
   3. Chat auto-scrolls during streaming but stops auto-scrolling if the user scrolls up to read earlier messages
   4. Bouncing dots loading indicator shows only before the first text token arrives, then disappears
   5. Confirmation buttons (Confirm/Cancel) appear after the stream completes, parsed from the full response text
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 42-01: TBD
+- [ ] 42-01: Wire streaming hook into ChatPage with live bubble, tool indicator, smart scroll
 
 ## Progress
 
