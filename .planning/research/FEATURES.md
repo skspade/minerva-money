@@ -1,139 +1,175 @@
-# Feature Landscape
+# Feature Landscape: Streaming Chat Responses
 
-**Domain:** Chat agent enhancements -- model selector and category creation tools
+**Domain:** AI chat streaming for personal finance assistant
 **Researched:** 2026-03-24
+**Confidence:** HIGH (verified against Claude Agent SDK official docs and established SSE patterns)
 
 ## Table Stakes
 
-Features users expect for these capabilities. Missing = feels incomplete.
+Features users expect from a streaming AI chat interface. Missing = the chat feels broken or outdated compared to ChatGPT/Claude.ai.
 
-| Feature | Why Expected | Complexity | Dependencies | Notes |
-|---------|-------------|------------|--------------|-------|
-| Model selector dropdown with 3 options (Haiku/Sonnet/Opus) | Users expect to pick cost/quality tradeoff; Sonnet is not always the right tool | Low | New tRPC endpoint for model list, client state | Server-driven list so client never hardcodes model IDs |
-| Selected model persists within session | Switching models mid-conversation and losing the choice is frustrating | Low | Client-side state (useState or localStorage) | Reset on page refresh is acceptable; localStorage is better UX |
-| Model selection sent with each chat request | Server needs to know which model to use | Low | Add `model` field to agent.chat input schema | Current agent-service.ts hardcodes `claude-sonnet-4-20250514` on line 23 |
-| Create category via chat | Natural request when categorizing transactions reveals missing categories ("I need a Subscriptions category") | Med | `createCategory` from category-service.ts, new agent tool | Service function already exists and returns `{ id, name }` |
-| Create category group via chat | Cannot create categories without a group to put them in | Med | `createGroup` from category-service.ts, new agent tool | Service function already exists and returns `{ id, name }` |
-| Duplicate name validation for categories and groups | Creating "Groceries" when it already exists is always a mistake | Low | SQL query before insert | Schema has NO UNIQUE constraint on names -- must validate in tool logic |
-| Confirmation flow for category/group creation | Consistent with existing write operation UX patterns | Low | Existing confirmation JSON block pattern in ChatPage.tsx | Reuse the `parseConfirmation` pattern already working |
-| System prompt guidance for new tools | Agent needs to know when/how to use create tools and the add-only policy | Low | system-prompt.ts update | Covers duplicate checking, add-only scope, multi-step workflows |
-| New category usable immediately after creation | After creating a category, agent should use it in the same turn without extra lookups | Low | Tool returns `{ id, name }` which agent uses | Already works -- `createCategory` returns what agent needs |
+| Feature | Why Expected | Complexity | Depends On |
+|---------|--------------|------------|------------|
+| Token-by-token text streaming | ChatGPT normalized this; a 15-60s blank wait feels broken | Med | SSE endpoint, Agent SDK `includePartialMessages: true` |
+| Incremental markdown rendering | Text must render as markdown while streaming, not raw text then sudden format | Low | Existing `react-markdown` + accumulating text state |
+| Tool activity indicator | Users need to know the agent is working, not stalled, when tools execute silently | Low | `content_block_start` / `content_block_stop` events from SDK |
+| Auto-scroll during streaming | New tokens must keep the latest text visible without manual scrolling | Low | Scroll anchor at bottom of message list |
+| Smart scroll pause on user scroll-up | If user scrolls up to read earlier messages, stop auto-scrolling until they return to bottom | Med | `isAtBottom` state derived from scroll position |
+| Error display mid-stream | If the stream fails partway, show what was received plus an error indicator | Low | SSE `error` event type, client error state |
+| Input disabled during streaming | Prevent sending new messages while a response streams | Low | Existing pattern (already done with `chatMutation.isPending`) |
+| Session continuity | Streaming must preserve the sessionId flow for multi-turn conversations | Low | Already implemented; pass sessionId through SSE endpoint |
+| Graceful degradation to non-streaming | If SSE connection fails to establish, fall back to existing tRPC collect-and-return | Med | Keep existing tRPC mutation alongside new SSE path |
 
 ## Differentiators
 
-Features that improve the experience beyond the basics. Not expected, but valued.
+Features that go beyond baseline. Not required for v2.6 but worth noting.
 
-| Feature | Value Proposition | Complexity | Dependencies | Notes |
-|---------|-------------------|------------|--------------|-------|
-| Model cost/speed hints in dropdown | "Haiku (fast) / Sonnet (balanced) / Opus (smartest)" helps pick without knowing model names | Low | Static labels in server model list | Anthropic model naming is opaque to non-technical users |
-| Agent suggests existing category on duplicate attempt | Instead of bare error, say "Groceries already exists in Food & Drink (ID 5). Want to use that?" | Low | System prompt guidance only | No code change -- prompt engineering tells agent to list_categories first |
-| Combo workflow: create then categorize in one turn | "Create a Subscriptions category under Bills and categorize this Netflix charge there" | Low | Multi-tool turn support (already works with maxTurns: 10) | Agent SDK handles sequential tool calls naturally |
-| Visual model indicator in chat area | Small pill/badge showing active model name so user remembers their selection | Low | Client state only | Useful context when returning to chat after navigation |
-| Model-specific timeout adjustment | Opus is slower (increase to 60s); Haiku is faster (decrease to 15s) | Low | Map model ID to timeout in agent-service.ts | Current hardcoded 30s may timeout Opus on complex multi-tool queries |
-| Duplicate check uses case-insensitive comparison | "groceries" and "Groceries" should be treated as duplicates | Low | SQL COLLATE NOCASE in duplicate check | Prevents near-duplicate categories that differ only in casing |
+| Feature | Value Proposition | Complexity | Notes |
+|---------|-------------------|------------|-------|
+| Human-readable tool name display | Shows "Looking up transactions..." instead of generic spinner -- builds trust | Low | Map MCP tool names to labels (e.g., `get_transactions` -> "Looking up transactions") |
+| Multi-tool progress chain | Show sequential tool calls as compact activity log ("Checked balances -> Found transactions -> Calculated") | Med | Track array of tool events, render as collapsible list below message |
+| Stop/cancel generation button | Let user abort a long streaming response mid-generation | High | Requires AbortController integration with Agent SDK, partial state handling |
+| Streaming confirmation blocks | Parse confirmation JSON from partial stream and show buttons before stream completes | High | Fragmented JSON during streaming makes this very fragile; defer to post-stream |
+| Typing speed normalization | Buffer tokens and release at consistent visual speed to avoid jerky fast/slow bursts | Med | requestAnimationFrame batching; not necessary in practice |
+| Reconnection with resume | If SSE drops mid-stream, reconnect and resume from last event | High | Requires server-side event buffering, Last-Event-ID tracking |
 
 ## Anti-Features
 
-Features to explicitly NOT build. Scoped out per PROJECT.md or would cause problems.
+Features to explicitly NOT build for this milestone.
 
 | Anti-Feature | Why Avoid | What to Do Instead |
 |--------------|-----------|-------------------|
-| Category deletion via agent | Deleting categories affects sort ordering, budget allocations, and transaction history -- destructive op belongs in UI with visual confirmation | Agent says "I can only create categories. To delete or rename, go to the Categories page." |
-| Category rename via agent | Rename has UI implications (sort order, visual placement) and is rare enough to not warrant chat support | Direct to Categories page |
-| Category reorder via agent | Ordering is inherently visual; chat is the wrong interface for drag-and-drop equivalents | Direct to Categories page |
-| Model auto-selection based on query complexity | Sounds smart but is unpredictable; user should control cost decisions | Let user choose; default to Sonnet |
-| Streaming model responses | Scoped out in PROJECT.md; collect-and-return is sufficient for single user | Keep current pattern; revisit only if Opus timeouts become a real problem |
-| Per-model session isolation | Switching models mid-session could confuse context, but SDK sessions handle it; splitting sessions adds complexity for no gain | Allow model switching within same session |
-| Free-text group assignment ("put it in something like Bills") | Fuzzy matching group names is error-prone | Agent lists groups, asks user to pick from the list |
-| Client-side model list | Hardcoding model IDs in React means a client rebuild when Anthropic updates models | Server-driven list; single source of truth |
+| WebSocket transport | Overkill for unidirectional server-to-client streaming; SSE is simpler, works over HTTP, auto-reconnects natively | Use SSE (`text/event-stream`) -- industry standard for LLM streaming |
+| `EventSource` API on client | Cannot send POST body (need message + sessionId + model); requires GET with query params which leaks data in URLs and server logs | Use `fetch()` with `ReadableStream` for POST-based SSE |
+| Client-side token buffering/debouncing | Adds complexity, makes responses feel artificially slow, solves a non-problem | Render tokens as they arrive; browsers handle rapid DOM updates fine |
+| Extended thinking with streaming | Claude Agent SDK explicitly does NOT emit StreamEvents when `maxThinkingTokens` is set -- incompatible | Do not enable extended thinking if streaming is on |
+| Structured output streaming | JSON result only appears in final `ResultMessage`, not as deltas per SDK docs | Parse confirmation blocks from completed messages only (existing pattern) |
+| Persistent stream history/replay | Not needed for single-user app; session continuity handles multi-turn | Keep in-memory message state as-is |
+| Server-Sent Events `id` field / `Last-Event-ID` resumption | Over-engineered for local network single-user; connection drops are rare | On failure, show error with partial text and let user retry |
+| Streaming the tool input JSON to the user | Agent SDK streams `input_json_delta` for tool arguments; showing raw JSON to users is useless | Only show tool name and running/done status |
 
 ## Feature Dependencies
 
 ```
-Server model list endpoint
-    |
-    +--> Client model selector dropdown
-            |
-            +--> Model ID sent with chat request
-                    |
-                    +--> agent-service uses selected model (replaces hardcoded string)
-                            |
-                            +--> Model-specific timeout (optional enhancement)
+SSE event protocol definition (types/contract)
+  -> Server SSE endpoint (POST /api/chat/stream)
+    -> Server stream processing (Agent SDK includePartialMessages: true)
+      -> Client stream consumer hook (useStreamingChat)
+        -> Incremental text rendering in ChatPage
+        -> Tool activity indicators in ChatPage
+        -> Smart auto-scroll behavior
 
-create_category_group tool (standalone -- no dependencies beyond category-service.ts)
-    |
-    +--> create_category tool (needs group_id -- agent calls list_categories or create_group first)
+Existing tRPC mutation (keep unchanged as fallback)
+  -> Graceful degradation (try SSE first, fall back to tRPC on failure)
 
-Both creation tools need:
-    +--> Duplicate name validation (case-insensitive SQL check before INSERT)
-    +--> Confirmation flow (reuses existing parseConfirmation pattern)
-    +--> System prompt update (behavioral guidance for new tools)
+Post-stream confirmation parsing (existing parseConfirmation)
+  -> Triggered by SSE 'done' event carrying full response text
 ```
 
 ### Dependency Notes
 
-- **Model selector is fully independent of category tools.** These two feature groups can be built in parallel or in either order.
-- **create_category depends on groups existing.** Agent must either list_categories to find a group_id or create_group first. The system prompt should guide this behavior.
-- **Confirmation flow requires no new code.** The existing JSON block pattern in the system prompt and `parseConfirmation` in ChatPage.tsx handle it. Just add confirmation instructions for category creation to the system prompt.
-- **Duplicate validation must be in tool logic, not schema.** The SQLite schema has no UNIQUE constraint on category or group names (and adding one would be a migration). Validate in the tool wrapper before calling the service function.
+- **SSE protocol must be defined first** because both server and client depend on the event type contract
+- **Server endpoint before client hook** because the client needs a real endpoint to consume
+- **Text rendering before tool indicators** because tool indicators overlay the streaming flow
+- **Auto-scroll is independent** of streaming implementation but must be wired after text rendering works
+- **Fallback path requires zero new work** -- existing tRPC mutation already works; just need a toggle in `useStreamingChat` to detect SSE failure and fall through
+- **Confirmation flow is unchanged** -- `parseConfirmation()` runs on the completed response text delivered by the `done` SSE event, same as today's `onSuccess` callback
 
 ## MVP Recommendation
 
-**Priority order based on dependencies and impact:**
+### Must Have (v2.6 scope)
 
-1. **Server model list endpoint + client dropdown** -- Unblocks model selection; small surface area; immediate user value. Endpoint returns static list: `[{ id: "claude-haiku-3-5-20241022", label: "Haiku", description: "Fast" }, ...]`. Client stores selection, sends with each chat mutation.
+1. **SSE event protocol** -- typed event contract shared between server and client:
 
-2. **Wire model through agent-service** -- Change `agent-service.ts` to accept model parameter instead of hardcoded string. Add `model` field to `agent.chat` tRPC input schema (optional, defaults to Sonnet for backward compat).
+   | Event | Data | When |
+   |-------|------|------|
+   | `session` | `{ sessionId: string }` | SDK system/init message |
+   | `text-delta` | `{ text: string }` | `content_block_delta` with `text_delta` |
+   | `tool-start` | `{ tool: string }` | `content_block_start` with `tool_use` type |
+   | `tool-end` | `{ tool: string }` | `content_block_stop` after tool block |
+   | `done` | `{ response: string }` | SDK `result` message; full text for confirmation parsing |
+   | `error` | `{ message: string }` | Any error; includes partial text if available |
 
-3. **create_category_group tool** -- Must exist before create_category is useful. Duplicate name check via case-insensitive query. Confirmation flow via system prompt instructions.
+2. **Server SSE endpoint** -- `POST /api/chat/stream` on Express (not tRPC; tRPC does not natively support SSE). Validates input with Zod, sets SSE headers (`Content-Type: text/event-stream`, `Cache-Control: no-cache`, `Connection: keep-alive`), iterates Agent SDK async iterable with `includePartialMessages: true`, maps SDK events to SSE events.
 
-4. **create_category tool** -- Same pattern as group creation. Agent needs group_id from list_categories or prior create_group call.
+3. **Client stream hook** -- `useStreamingChat` using `fetch()` + `ReadableStream` + `TextDecoderStream` to consume SSE from POST endpoint. Manages streaming state (idle/streaming/error), accumulates text deltas, tracks active tools.
 
-5. **System prompt updates** -- Add behavioral guidance: always check for duplicates before creating, explain add-only policy (no delete/rename), guide multi-step creation workflows.
+4. **Incremental text rendering** -- Accumulate `text-delta` events into growing string, feed to existing `react-markdown` + `remarkGfm`. Message bubble appears immediately on first token.
 
-**Defer (include if time permits, all Low complexity):**
-- Model-specific timeout adjustment
-- Visual model indicator pill
-- Case-insensitive duplicate comparison (should actually just include this -- it is 2 words of SQL)
+5. **Tool activity indicator** -- On `tool-start`: show compact indicator below streaming text (e.g., spinner + "Looking up transactions..."). On `tool-end`: mark as complete. Simple implementation -- not a collapsible log.
 
-## Complexity Assessment
+6. **Smart auto-scroll** -- Track `isAtBottom` via scroll event listener. Auto-scroll on new tokens only when user is at bottom. When user scrolls up, pause auto-scroll. Optionally show "scroll to bottom" button.
 
-| Feature | Estimated Effort | Risk |
-|---------|-----------------|------|
-| Model list tRPC query endpoint | ~20 lines | None -- static data |
-| Client model dropdown (native select) | ~30 lines | Low -- standard HTML select, mobile-friendly |
-| Agent-service model parameter | ~10 lines changed | Low -- swap hardcoded string for parameter |
-| create_category_group tool | ~30 lines | Low -- mirrors existing action tools pattern |
-| create_category tool | ~35 lines | Low -- mirrors existing action tools pattern |
-| Duplicate validation (both tools) | ~10 lines each | Low -- simple SQL check |
-| Confirmation flow integration | ~0 new lines (reuse existing) | None -- pattern already works |
-| System prompt additions | ~20 lines of prompt text | Low -- behavioral, not code |
-| **Total** | **~170 lines new/changed** | **Low overall** |
+7. **Graceful degradation** -- Primary path: SSE streaming. If `fetch` fails to establish SSE connection (network error, non-200 response), fall back to existing `agent.chat` tRPC mutation transparently.
 
-## Edge Cases to Handle
+### Defer to Future
 
-### Model Selector
-- **Model unavailable / API error**: Agent-service already catches errors and returns user-friendly message; model-specific errors (e.g., Opus access denied) surface naturally through existing error handling
-- **Empty/missing model in request**: Default to Sonnet (current behavior) if model field is omitted -- backward compatible
-- **Model list staleness**: Static server list; update model IDs in server code when Anthropic releases new versions (no dynamic discovery needed)
-- **Switching model mid-conversation**: Allow it. SDK sessions maintain context. Different model may give different quality answers but that is the user's choice
+- **Stop/cancel button**: AbortController + Agent SDK abort adds complexity; low value for single-user with fast local network
+- **Multi-tool collapsible log**: Simple "Using [tool]..." indicator is sufficient for v2.6
+- **Reconnection with resume**: Over-engineered for local network; retry on failure is fine
+- **Streaming confirmation parsing**: Too fragile with partial JSON; parse from completed message
 
-### Category Creation
-- **Duplicate category name in same group**: Block with clear error ("Groceries already exists in Food & Drink")
-- **Duplicate category name in different group**: Allow -- reasonable to have "Other" in multiple groups
-- **Duplicate group name**: Block with clear error ("A group named Bills already exists")
-- **Empty name**: Validate non-empty string in Zod schema (`.min(1)`)
-- **Group does not exist when creating category**: Validate group_id exists before INSERT (same pattern as existing `categoryExists` helper)
-- **Very long names**: Cap at 100 characters to prevent UI overflow in category dropdowns
-- **Creating category then immediately using it**: Works naturally -- tool returns `{ id, name }`, agent uses returned ID in next tool call within same turn
-- **No groups exist at all**: Unlikely (app ships with groups), but agent should guide user to create_group first
+## Existing Assets to Leverage
+
+| Existing | Reuse Strategy |
+|----------|---------------|
+| `ChatPage.tsx` message rendering | Add streaming message type (`role: 'streaming'`) alongside existing types |
+| `react-markdown` + `remarkGfm` | Same renderer, fed incrementally growing text string |
+| `parseConfirmation()` | Run on completed message text from `done` event |
+| `chatMutation` (tRPC) | Keep as fallback; `useStreamingChat` is primary path |
+| `messagesEndRef` scroll anchor | Enhance with `isAtBottom` detection for smart scroll |
+| Agent SDK `query()` async iterable | Already used in `collectResponse()`; add `includePartialMessages: true` |
+| `models.ts` / model selector | Pass selected model through SSE endpoint identically |
+| Confirmation flow (Confirm/Cancel) | Unchanged; triggered after stream `done` event |
+| Express `app` instance | Add SSE route directly; already serves health check and static files |
+
+## Agent SDK Streaming Details (from official docs)
+
+The Claude Agent SDK's `query()` returns an `AsyncIterable<SDKMessage>`. With `includePartialMessages: true`, it yields `stream_event` messages containing raw Claude API streaming events. The message flow is:
+
+```
+StreamEvent (message_start)
+StreamEvent (content_block_start) -- text block
+StreamEvent (content_block_delta) -- text chunks (accumulate these)
+StreamEvent (content_block_stop)
+StreamEvent (content_block_start) -- tool_use block (tool name here)
+StreamEvent (content_block_delta) -- tool input JSON chunks (ignore for UI)
+StreamEvent (content_block_stop)  -- tool execution begins
+StreamEvent (message_delta)
+StreamEvent (message_stop)
+AssistantMessage -- complete message with all content
+... tool executes ...
+... more streaming events for next turn ...
+ResultMessage -- final result (extract full text here)
+```
+
+TypeScript type for stream events:
+```typescript
+type SDKPartialAssistantMessage = {
+  type: "stream_event";
+  event: RawMessageStreamEvent; // from @anthropic-ai/sdk
+  parent_tool_use_id: string | null;
+  uuid: string;
+  session_id: string;
+};
+```
+
+Key event types to handle:
+- `event.type === "content_block_start"` + `event.content_block.type === "tool_use"` -> tool-start
+- `event.type === "content_block_delta"` + `event.delta.type === "text_delta"` -> text-delta
+- `event.type === "content_block_stop"` (when in tool) -> tool-end
+- `message.type === "system"` with `subtype === "init"` -> session ID
+- `message.type === "result"` with `subtype === "success"` -> done with full text
+
+**Known limitation**: Streaming is incompatible with `maxThinkingTokens`. Do not enable extended thinking.
 
 ## Sources
 
-- Existing codebase analysis: `category-service.ts` (createCategory, createGroup already exist), `action-tools.ts` (established tool wrapper pattern), `agent-service.ts` (hardcoded model on line 23, 30s timeout), `ChatPage.tsx` (parseConfirmation, confirmation buttons), `agent-router.ts` (tRPC input schema), `system-prompt.ts` (current prompt structure)
-- Database schema: `001-initial-schema.sql` (no UNIQUE on category/group names, CASCADE deletes)
-- PROJECT.md: v2.5 target features, out-of-scope items (no delete/rename via agent, no streaming)
-
----
-*Feature research for: Chat Agent Model Selector and Category Creation Tools*
-*Researched: 2026-03-24*
+- [Claude Agent SDK - Stream responses in real-time](https://platform.claude.com/docs/en/agent-sdk/streaming-output) -- HIGH confidence, official docs, verified TypeScript types and event flow
+- [Claude Agent SDK - TypeScript reference](https://platform.claude.com/docs/en/agent-sdk/typescript) -- HIGH confidence, official docs
+- [MDN - Using Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events) -- HIGH confidence, official docs
+- [Streaming AI with SSE - Technical Case Study](https://akanuragkumar.medium.com/streaming-ai-agents-responses-with-server-sent-events-sse-a-technical-case-study-f3ac855d0755) -- MEDIUM confidence
+- [SSE Backbone of LLMs 2025/2026](https://procedure.tech/blogs/the-streaming-backbone-of-llms-why-server-sent-events-(sse)-still-wins-in-2025) -- MEDIUM confidence
+- [AI UI Patterns - patterns.dev](https://www.patterns.dev/react/ai-ui-patterns/) -- MEDIUM confidence
+- [Intuitive Scrolling for Chatbot Streaming](https://tuffstuff9.hashnode.dev/intuitive-scrolling-for-chatbot-message-streaming) -- MEDIUM confidence
+- [SSE Deep Dive - Agent Factory](https://agentfactory.panaversity.org/docs/TypeScript-Language-Realtime-Interaction/async-patterns-streaming/server-sent-events-deep-dive) -- MEDIUM confidence

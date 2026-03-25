@@ -1,350 +1,488 @@
 # Architecture Patterns
 
-**Domain:** Chat agent enhancements (model selector + category creation tools)
+**Domain:** SSE streaming for LLM chat in Express + tRPC monorepo
 **Researched:** 2026-03-24
-**Focus:** Integration with existing Minerva Money architecture
 
-## Current Architecture Summary
+## Recommended Architecture
 
-```
-ChatPage.tsx (React) --> tRPC mutation --> agent-router.ts --> agent-service.ts --> Claude Agent SDK
-                                                                                    |
-                                                                              mcp-server.ts
-                                                                              /            \
-                                                                query-tools.ts    action-tools.ts
-                                                                (11 tools)        (10 tools)
-                                                                                       |
-                                                                              category-service.ts
-                                                                              rules-service.ts
-                                                                              budget-service.ts
-                                                                              transfer-service.ts
-                                                                              sync-service.ts
-```
+**Approach:** Add a standalone Express POST endpoint (`/api/chat/stream`) alongside the existing tRPC middleware. Do NOT use tRPC subscriptions or streaming mutations for this -- use raw Express with SSE. The tRPC chat mutation remains as a fallback.
 
-Key facts from code inspection:
-- `agent-service.ts` hardcodes `model: 'claude-sonnet-4-20250514'` on line 23
-- `agent-router.ts` accepts `{ message: string, sessionId?: string }` -- no model parameter
-- `ChatPage.tsx` sends `{ message, sessionId }` via `chatMutation.mutate()`
-- `action-tools.ts` exports `createActionTools(db, ctx)` returning an array of 10 tool objects
-- `category-service.ts` already has `createCategory(db, groupId, name)` and `createGroup(db, name)` functions
-- `listGroupsWithCategories(db)` is already imported in `query-tools.ts` for the `list_categories` tool
-- System prompt in `system-prompt.ts` is a const string with numbered rules (1-13)
-- `mcp-server.ts` spreads both `createQueryTools(db)` and `createActionTools(db, ctx)` into the tools array -- new tools added to either array are automatically registered
+### Why raw Express SSE, not tRPC streaming
 
-## Feature 1: Model Selector
+tRPC v11 (currently at 11.14.1 in this project) does support SSE subscriptions and streaming mutations via `httpBatchStreamLink`, but the chat streaming use case is a poor fit for tRPC streaming for three reasons:
 
-### What Changes
+1. **POST with body required.** SSE via `EventSource` is GET-only. tRPC subscriptions use GET-based SSE. Our chat needs to send a message body (message text, sessionId, model), which requires a POST request consumed via `fetch` + `ReadableStream` on the client.
+2. **No type-safety benefit.** The SSE event stream is a sequence of typed JSON events parsed client-side. The tRPC type-safety wrapper adds no value over a Zod-validated POST body + typed SSE event parser. Type safety comes from the shared `SSEEvent` union type instead.
+3. **Simpler integration.** A raw Express route avoids coupling streaming lifecycle to tRPC's middleware chain and batch link configuration. The existing tRPC setup stays completely untouched.
 
-This feature touches 4 files (3 modified, 0 new).
+**Confidence:** HIGH -- verified tRPC v11 subscription docs (GET-based SSE), confirmed EventSource limitation (MDN), and validated the POST+fetch pattern is the standard approach for LLM streaming (used by OpenAI, Anthropic APIs).
 
-#### Modified Files
+### Component Boundaries
 
-| File | Change | Complexity |
-|------|--------|------------|
-| `packages/server/src/agent/agent-router.ts` | Add `model` to chat input schema; add `models` query procedure | Low |
-| `packages/server/src/agent/agent-service.ts` | Accept `model` parameter, use it in SDK query options instead of hardcoded string | Low |
-| `packages/client/src/pages/ChatPage.tsx` | Add model selector dropdown above input bar, store selected model in state, pass to mutation | Low |
-
-#### No New Files Needed
-
-The model list can be a simple `agent.models` query on the existing `agentRouter`. No separate router or service file warranted for a static list of 3 models.
+| Component | Location | Responsibility | New/Modified |
+|-----------|----------|----------------|--------------|
+| SSE event types | `packages/shared/src/sse-events.ts` | TypeScript union type for all SSE events | **NEW** |
+| Stream handler | `packages/server/src/agent/stream-handler.ts` | Express handler: validate input, set SSE headers, iterate chatStream generator, write SSE events | **NEW** |
+| Agent service | `packages/server/src/agent/agent-service.ts` | New `chatStream()` async generator alongside existing `chat()` | **MODIFIED** |
+| Express app | `packages/server/src/index.ts` | Mount `POST /api/chat/stream` route before tRPC middleware | **MODIFIED** |
+| Client stream hook | `packages/client/src/hooks/useStreamingChat.ts` | `fetch` POST, read SSE via `ReadableStream`, parse events, manage state | **NEW** |
+| Chat page | `packages/client/src/pages/ChatPage.tsx` | Replace `chatMutation` with `useStreamingChat`, add tool activity indicators, incremental text | **MODIFIED** |
+| Agent router | `packages/server/src/agent/agent-router.ts` | tRPC mutation kept as-is for fallback | **UNCHANGED** |
+| Shared index | `packages/shared/src/index.ts` | Re-export SSE event types | **MODIFIED** |
 
 ### Data Flow
 
+**Current flow (collect-and-return):**
 ```
-1. Client loads ChatPage
-2. ChatPage calls trpc.agent.models.useQuery() to get available models
-3. User selects model from dropdown (default: Sonnet)
-4. User sends message
-5. chatMutation.mutate({ message, sessionId, model: selectedModel })
-6. agent-router.ts maps model key ('sonnet') to API string ('claude-sonnet-4-20250514')
-7. agent-router.ts passes API model string to agent-service.ts chat()
-8. agent-service.ts uses model string in SDK query options
+ChatPage -> tRPC mutation -> agent-router -> chat() -> collectResponse(query()) -> full response -> tRPC response -> ChatPage renders all at once
 ```
 
-### Component Design
+**New flow (streaming):**
+```
+ChatPage -> fetch POST /api/chat/stream -> stream-handler -> chatStream()
+  -> query({ prompt, options: { includePartialMessages: true } })
+     -> for await (msg of queryStream):
+          system(init)                          -> SSE: session {sessionId}
+          stream_event(content_block_start, tool_use) -> SSE: tool-start {toolName, toolCallId}
+          stream_event(content_block_delta, text_delta) -> SSE: text-delta {text}
+          stream_event(content_block_stop)       -> SSE: tool-end {toolCallId}
+          result(success)                        -> SSE: done {sessionId}
+     -> ChatPage renders incrementally via useStreamingChat state
+```
 
-**Server: Model list and mapping**
+## SSE Event Protocol
+
+Six event types, all sent as `event: <type>\ndata: <json>\n\n`:
 
 ```typescript
-// In agent-router.ts
-const AVAILABLE_MODELS = [
-  { id: 'haiku', name: 'Haiku', description: 'Fast, lightweight', apiModel: 'claude-haiku-4-20250514' },
-  { id: 'sonnet', name: 'Sonnet', description: 'Balanced', apiModel: 'claude-sonnet-4-20250514' },
-  { id: 'opus', name: 'Opus', description: 'Most capable', apiModel: 'claude-opus-4-20250514' },
-] as const;
+// packages/shared/src/sse-events.ts
 
-export const agentRouter = router({
-  models: publicProcedure.query(() => {
-    return AVAILABLE_MODELS.map(({ id, name, description }) => ({ id, name, description }));
-  }),
-  chat: publicProcedure
-    .input(z.object({
-      message: z.string(),
-      sessionId: z.string().optional(),
-      model: z.enum(['haiku', 'sonnet', 'opus']).optional().default('sonnet'),
-    }))
-    .mutation(async ({ ctx, input }) => {
-      const modelConfig = AVAILABLE_MODELS.find(m => m.id === input.model)!;
-      return chat(ctx.db, ctx, input.message, input.sessionId, modelConfig.apiModel);
-    }),
+type SSESessionEvent = {
+  type: 'session';
+  sessionId: string;
+};
+
+type SSETextDeltaEvent = {
+  type: 'text-delta';
+  text: string;
+};
+
+type SSEToolStartEvent = {
+  type: 'tool-start';
+  toolName: string;   // e.g. "get_balances", "create_rule"
+  toolCallId: string; // unique ID for matching start/end
+};
+
+type SSEToolEndEvent = {
+  type: 'tool-end';
+  toolCallId: string;
+};
+
+type SSEDoneEvent = {
+  type: 'done';
+  sessionId: string;
+};
+
+type SSEErrorEvent = {
+  type: 'error';
+  message: string;
+};
+
+type SSEEvent =
+  | SSESessionEvent
+  | SSETextDeltaEvent
+  | SSEToolStartEvent
+  | SSEToolEndEvent
+  | SSEDoneEvent
+  | SSEErrorEvent;
+```
+
+**Design rationale:** These six event types map directly to the Claude Agent SDK's `stream_event` subtypes (`content_block_start`, `content_block_delta`, `content_block_stop`) plus the `system` init and `result` messages. No intermediate translation layer needed.
+
+**Confidence:** HIGH -- event types map directly to Claude Agent SDK stream event types documented at https://platform.claude.com/docs/en/agent-sdk/streaming-output.
+
+## Patterns to Follow
+
+### Pattern 1: POST-based SSE with fetch + ReadableStream
+
+**What:** Client sends POST with JSON body, server responds with `text/event-stream`. Client reads via `fetch` + `pipeThrough(TextDecoderStream)` + `getReader()`, not `EventSource` (which is GET-only).
+
+**When:** Any time you need SSE with a request body (LLM chat, search-as-you-type).
+
+**Server side:**
+```typescript
+// packages/server/src/agent/stream-handler.ts
+import type { Request, Response } from 'express';
+import { z } from 'zod';
+
+const StreamRequestSchema = z.object({
+  message: z.string().min(1),
+  sessionId: z.string().optional(),
+  model: z.string().optional(),
+});
+
+export function createStreamHandler(db: Database.Database, ctx: Context) {
+  return async (req: Request, res: Response) => {
+    const parsed = StreamRequestSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.message });
+      return;
+    }
+
+    // SSE headers
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',  // Disable proxy buffering if ever fronted by nginx
+    });
+
+    // Helper to write typed SSE events
+    function sendEvent(event: SSEEvent) {
+      res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+    }
+
+    try {
+      for await (const sseEvent of chatStream(db, ctx, parsed.data)) {
+        sendEvent(sseEvent);
+      }
+    } catch (err) {
+      sendEvent({ type: 'error', message: err instanceof Error ? err.message : 'Unknown error' });
+    }
+
+    res.end();
+  };
+}
+```
+
+**Client side:**
+```typescript
+// packages/client/src/hooks/useStreamingChat.ts
+async function* readSSEStream(response: Response): AsyncGenerator<SSEEvent> {
+  const reader = response.body!.pipeThrough(new TextDecoderStream()).getReader();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += value;
+
+    // Split on double newline (SSE event boundary)
+    const events = buffer.split('\n\n');
+    buffer = events.pop()!; // Keep incomplete last chunk in buffer
+
+    for (const raw of events) {
+      const dataLine = raw.split('\n').find(l => l.startsWith('data: '));
+      if (dataLine) {
+        yield JSON.parse(dataLine.slice(6)) as SSEEvent;
+      }
+    }
+  }
+}
+```
+
+**Confidence:** HIGH -- this is the standard pattern used by OpenAI, Anthropic, and every major LLM API. Verified via MDN ReadableStream docs and multiple production implementations.
+
+### Pattern 2: Agent SDK includePartialMessages for streaming
+
+**What:** Pass `includePartialMessages: true` in Agent SDK options to receive `stream_event` messages containing raw Claude API streaming events (`content_block_start`, `content_block_delta`, `content_block_stop`).
+
+**When:** You need token-by-token text and tool activity from the Agent SDK.
+
+**Key SDK details (from official docs):**
+
+- TypeScript type: `SDKPartialAssistantMessage` with `type: 'stream_event'`
+- Contains `event: RawMessageStreamEvent` from the Anthropic SDK
+- Also includes `session_id: string` and `parent_tool_use_id: string | null`
+- Text arrives as `content_block_delta` events where `delta.type === 'text_delta'`
+- Tool calls arrive as `content_block_start` (with `content_block.type === 'tool_use'` and `content_block.name`)
+- Message flow: `message_start` -> `content_block_start` -> `content_block_delta`(s) -> `content_block_stop` -> `message_delta` -> `message_stop`
+
+**Server-side generator (the core new function in agent-service.ts):**
+```typescript
+export async function* chatStream(
+  db: Database.Database,
+  ctx: Context,
+  input: { message: string; sessionId?: string; model?: string },
+): AsyncGenerator<SSEEvent> {
+  const mcpServer = createMcpServer(db, ctx);
+  const model = (input.model as ModelId) || DEFAULT_MODEL_ID;
+
+  const options = {
+    model,
+    systemPrompt: getSystemPrompt(),
+    mcpServers: { minerva: mcpServer },
+    allowedTools: ['mcp__minerva__*'],
+    tools: [],
+    maxTurns: 10,
+    permissionMode: 'bypassPermissions' as const,
+    allowDangerouslySkipPermissions: true,
+    includePartialMessages: true,  // <-- THE KEY CHANGE: enables streaming
+    ...(input.sessionId ? { resume: input.sessionId } : {}),
+  };
+
+  let currentToolCallId: string | null = null;
+  let inTool = false;
+
+  for await (const msg of query({ prompt: input.message, options })) {
+    // Session init
+    if (msg.type === 'system' && 'subtype' in msg && msg.subtype === 'init') {
+      yield { type: 'session', sessionId: (msg as any).session_id };
+    }
+
+    // Stream events (text deltas, tool calls)
+    if (msg.type === 'stream_event') {
+      const event = msg.event;
+
+      if (event.type === 'content_block_start' && event.content_block.type === 'tool_use') {
+        currentToolCallId = event.content_block.id;
+        inTool = true;
+        yield {
+          type: 'tool-start',
+          toolName: event.content_block.name,
+          toolCallId: currentToolCallId,
+        };
+      }
+
+      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta' && !inTool) {
+        yield { type: 'text-delta', text: event.delta.text };
+      }
+
+      if (event.type === 'content_block_stop' && inTool) {
+        yield { type: 'tool-end', toolCallId: currentToolCallId! };
+        inTool = false;
+        currentToolCallId = null;
+      }
+    }
+
+    // Final result
+    if (msg.type === 'result' && 'subtype' in msg && msg.subtype === 'success') {
+      yield { type: 'done', sessionId: (msg as any).session_id || '' };
+    }
+  }
+}
+```
+
+**Confidence:** HIGH -- verified against official Agent SDK streaming docs at https://platform.claude.com/docs/en/agent-sdk/streaming-output. The `stream_event` type, `content_block_delta`, and `text_delta` patterns are documented with TypeScript examples.
+
+### Pattern 3: Mount Express route before tRPC middleware
+
+**What:** Register the SSE endpoint as a standard Express route in `index.ts` before the tRPC middleware, so it is handled by Express directly.
+
+**Current index.ts structure:**
+```typescript
+app.use(express.json({ limit: '10mb' }));     // line 18
+app.get('/health', ...);                        // line 20
+app.use('/trpc', trpcExpress.createExpressMiddleware(...)); // line 29
+app.use(express.static(clientDist));            // line 38
+app.get('*', ...);                              // line 39 (SPA catch-all)
+```
+
+**New route insertion point -- between health check and tRPC:**
+```typescript
+app.get('/health', ...);
+app.post('/api/chat/stream', createStreamHandler(db, ctx));  // <-- NEW
+app.use('/trpc', trpcExpress.createExpressMiddleware(...));
+```
+
+**Why this position:** The `/api/chat/stream` path does not conflict with `/trpc/*`, but placing it before tRPC makes the intent clear. It MUST be before the SPA catch-all `app.get('*', ...)` which would swallow it.
+
+**Confidence:** HIGH -- standard Express routing behavior, verified by reading the current index.ts.
+
+### Pattern 4: AbortController for client-side cancellation
+
+**What:** Use `AbortController` with the fetch request so the user can cancel a streaming response or the component can clean up on unmount.
+
+**Example:**
+```typescript
+// In useStreamingChat hook
+const abortControllerRef = useRef<AbortController | null>(null);
+
+async function sendMessage(message: string) {
+  abortControllerRef.current?.abort(); // Cancel any in-flight request
+  const controller = new AbortController();
+  abortControllerRef.current = controller;
+
+  const response = await fetch('/api/chat/stream', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message, sessionId, model }),
+    signal: controller.signal,
+  });
+  // ... read stream
+}
+
+// Cleanup on unmount
+useEffect(() => {
+  return () => abortControllerRef.current?.abort();
+}, []);
+```
+
+**Server-side detection:**
+```typescript
+// In stream-handler.ts
+req.on('close', () => {
+  // Client disconnected -- the for-await loop will naturally end
+  // when res.write() fails on the next iteration
 });
 ```
 
-**Why server-driven model list:** The model list comes from the server so the client never needs updating when models change. The `apiModel` string stays server-side only (never sent to client). This is the pattern PROJECT.md specifies ("centralized model list endpoint").
+**Confidence:** MEDIUM -- the fetch AbortController is well-documented. The Agent SDK query generator cleanup on client disconnect needs testing to confirm it terminates cleanly rather than leaking.
 
-**Server: agent-service.ts change**
+### Pattern 5: Per-model timeout on streaming
 
-```typescript
-// Before: model: 'claude-sonnet-4-20250514' hardcoded
-// After: model parameter passed through
-export async function chat(
-  db: Database.Database,
-  ctx: Context,
-  message: string,
-  sessionId?: string,
-  model: string = 'claude-sonnet-4-20250514',
-): Promise<ChatResult> {
-  // ... existing code ...
-  const options: Record<string, unknown> = {
-    model,  // was hardcoded, now parameterized
-    // ... rest unchanged ...
-  };
-```
+**What:** Apply per-model timeouts matching the existing `TIMEOUT_MS` config in `models.ts` (Haiku: 15s, Sonnet: 30s, Opus: 60s).
 
-**Client: Model selector in ChatPage.tsx**
+**Note:** For streaming, the timeout semantics change. With collect-and-return, timeout means "total time to get complete response." With streaming, timeout should mean "maximum time with no events" (stall detection), since a multi-tool response legitimately takes longer than a single text response.
+
+**Recommended approach:** Use a stall timeout that resets on each received event, rather than a total duration timeout.
 
 ```typescript
-// New state
-const [selectedModel, setSelectedModel] = useState('sonnet');
-const modelsQuery = trpc.agent.models.useQuery();
+// In stream-handler.ts
+const STALL_TIMEOUT_MS = TIMEOUT_MS[model]; // Reuse existing per-model config
 
-// In the input bar, before the textarea:
-<select
-  value={selectedModel}
-  onChange={e => setSelectedModel(e.target.value)}
-  className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
->
-  {modelsQuery.data?.map(m => (
-    <option key={m.id} value={m.id}>{m.name}</option>
-  ))}
-</select>
+let stallTimer: NodeJS.Timeout;
+function resetStallTimer() {
+  clearTimeout(stallTimer);
+  stallTimer = setTimeout(() => {
+    sendEvent({ type: 'error', message: `No response for ${STALL_TIMEOUT_MS / 1000}s` });
+    res.end();
+  }, STALL_TIMEOUT_MS);
+}
 
-// Mutation call updated:
-chatMutation.mutate({ message: messageText, sessionId, model: selectedModel });
+resetStallTimer();
+for await (const sseEvent of chatStream(db, ctx, parsed.data)) {
+  resetStallTimer();
+  sendEvent(sseEvent);
+}
+clearTimeout(stallTimer);
 ```
 
-**Why native select:** PROJECT.md specifies "mobile-friendly native select." Native `<select>` renders the OS picker on mobile (iOS scroll wheel, Android dropdown). A custom dropdown would require significant work for equivalent mobile UX and violates the "custom Tailwind components, no component library" convention.
-
-### Key Decision: Model ID Mapping Location
-
-The mapping from user-facing ID (`sonnet`) to API string (`claude-sonnet-4-20250514`) belongs in `agent-router.ts`, NOT in the service. Reason: when Anthropic releases new model versions, you update one const array. The service receives a pre-resolved API model string and does not need to know about the user-facing model IDs.
-
-## Feature 2: Category Creation Tools
-
-### What Changes
-
-This feature touches 2 files (2 modified, 0 new).
-
-#### Modified Files
-
-| File | Change | Complexity |
-|------|--------|------------|
-| `packages/server/src/agent/tools/action-tools.ts` | Add `create_category` and `create_category_group` tool definitions; add imports for `createCategory`, `createGroup` from category-service | Medium |
-| `packages/server/src/agent/system-prompt.ts` | Add rules 14-15 for category creation behavioral guidance | Low |
-
-#### No New Files Needed
-
-The tools follow the exact same pattern as the existing 10 action tools. They import from `category-service.ts` which already exports `createCategory` and `createGroup`. No new service functions needed.
-
-### Data Flow
-
-```
-1. User asks agent: "Create a 'Subscriptions' category in the Bills group"
-2. Agent calls list_categories tool (existing, in query-tools.ts) to find Bills group ID
-3. Agent calls create_category tool with { groupId, name: "Subscriptions" }
-4. Tool validates: group exists, no duplicate name (case-insensitive)
-5. Tool calls category-service.createCategory(db, groupId, name)
-6. Tool returns { success: true, id, name, groupId }
-7. Agent reports: "Created 'Subscriptions' category in the Bills group (ID: 42)"
-```
-
-### Tool Design
-
-**create_category tool:**
-
-```typescript
-tool(
-  'create_category',
-  'Create a new category within an existing category group. Validates no duplicate name exists in that group.',
-  {
-    groupId: z.number().describe('Category group ID to add the category to'),
-    name: z.string().describe('Category name'),
-  },
-  async (args) => {
-    try {
-      const group = db.prepare('SELECT id, name FROM category_groups WHERE id = ?').get(args.groupId);
-      if (!group) return errorResult(new Error(`Category group ${args.groupId} not found`));
-
-      const existing = db.prepare(
-        'SELECT id FROM categories WHERE group_id = ? AND name = ? COLLATE NOCASE'
-      ).get(args.groupId, args.name);
-      if (existing) return errorResult(new Error(`Category "${args.name}" already exists in this group`));
-
-      const result = createCategory(db, args.groupId, args.name);
-      return jsonResult({ success: true, id: result.id, name: result.name, groupId: args.groupId });
-    } catch (error) {
-      return errorResult(error);
-    }
-  },
-),
-```
-
-**create_category_group tool:**
-
-```typescript
-tool(
-  'create_category_group',
-  'Create a new category group. Validates no group with the same name exists.',
-  {
-    name: z.string().describe('Category group name'),
-  },
-  async (args) => {
-    try {
-      const existing = db.prepare(
-        'SELECT id FROM category_groups WHERE name = ? COLLATE NOCASE'
-      ).get(args.name);
-      if (existing) return errorResult(new Error(`Category group "${args.name}" already exists`));
-
-      const result = createGroup(db, args.name);
-      return jsonResult({ success: true, id: result.id, name: result.name });
-    } catch (error) {
-      return errorResult(error);
-    }
-  },
-),
-```
-
-### Duplicate Validation Strategy
-
-Duplicate checking happens in the tool layer, not the service layer. This is consistent with the existing pattern: `action-tools.ts` already does validation checks (`categoryExists`, `ruleExists` helper functions on lines 12-18) before calling service functions. The service layer (`category-service.ts`) does not validate uniqueness -- it lets SQLite handle constraint violations if any. Adding case-insensitive duplicate checking in the tool provides a clear, human-readable error message back to the agent, rather than a raw SQLite error.
-
-**Why case-insensitive:** Users might say "create a Groceries category" when "groceries" already exists. `COLLATE NOCASE` catches this.
-
-### Confirmation Flow Decision
-
-Category/group creation does NOT need the confirmation flow (JSON confirmation block + Confirm/Cancel buttons). Rationale from PROJECT.md: "add-only, no delete/rename." Creation is safe and reversible (user can delete via the Categories UI). The existing confirmation pattern is reserved for budget amount changes which have financial impact. This matches the existing behavior where `create_rule`, `categorize_transaction`, and other write tools auto-execute without confirmation.
-
-### System Prompt Updates
-
-Add to the system prompt after the existing rule 13:
-
-```
-## Category Management
-
-14. You can create categories and category groups using create_category and create_category_group. ALWAYS call list_categories first to check what already exists before creating anything. Never create duplicates.
-15. You can ONLY create categories and groups. Do NOT attempt to delete, rename, or reorder categories or groups -- those operations are only available in the Categories page UI.
-```
-
-## Component Boundary Map
-
-| Component | Current State | v2.5 Change | Changed? |
-|-----------|--------------|-------------|----------|
-| `agent-router.ts` | 1 mutation (chat) | Add 1 query (models), extend chat input with model param | YES |
-| `agent-service.ts` | Hardcoded model string | Accept model parameter, use in SDK options | YES |
-| `action-tools.ts` | 10 tools, imports from 4 services | Add 2 tools, add imports from category-service | YES |
-| `system-prompt.ts` | 13 rules | Add rules 14-15 for category creation guidance | YES |
-| `ChatPage.tsx` | Input bar with textarea + send | Add model selector dropdown, model state, pass to mutation | YES |
-| `category-service.ts` | Has createCategory, createGroup | NO CHANGES -- already has the functions we need | NO |
-| `mcp-server.ts` | Spreads query + action tools | NO CHANGES -- automatically picks up new action tools | NO |
-| `tool-helpers.ts` | jsonResult, errorResult, xmlWrap | NO CHANGES | NO |
-| `query-tools.ts` | 11 tools including list_categories | NO CHANGES | NO |
-| `trpc-router.ts` | Mounts agentRouter | NO CHANGES | NO |
-| `trpc.ts` | Context type definition | NO CHANGES | NO |
-
-**Total: 5 files modified, 0 files created.**
+**Confidence:** MEDIUM -- the stall-based timeout approach is sound, but the exact timeout values may need tuning. Tool execution (e.g., database queries) adds internal latency between stream events that is not stalling.
 
 ## Anti-Patterns to Avoid
 
-### Anti-Pattern 1: Separate Model Config Service
-**What:** Creating a new service file, database table, or config system for model management.
-**Why bad:** There are 3 static models. A const array in `agent-router.ts` is sufficient. Over-engineering creates unnecessary files and indirection.
-**Instead:** Const array in `agent-router.ts`.
+### Anti-Pattern 1: Using EventSource for POST requests
+**What:** Trying to use the browser's `EventSource` API to connect to the SSE endpoint.
+**Why bad:** `EventSource` only supports GET requests. Cannot send a JSON body with message, sessionId, model.
+**Instead:** Use `fetch` with `ReadableStream` + `getReader()` as shown in Pattern 1.
 
-### Anti-Pattern 2: Client-Side Model Strings
-**What:** Putting API model strings (`claude-sonnet-4-20250514`) in the client code or sending them from client to server.
-**Why bad:** Leaks API implementation details. Forces client rebuild when model versions change. Could allow arbitrary model strings if not validated.
-**Instead:** Client sends model key (`sonnet`), server maps to API string. Server validates with `z.enum()`.
+### Anti-Pattern 2: tRPC subscription for chat streaming
+**What:** Using tRPC v11's SSE subscription feature for the chat stream.
+**Why bad:** tRPC subscriptions are GET-based SSE designed for server-push scenarios (live updates, notifications). Chat requires sending a message body. Would need a two-step flow (POST mutation to start, then GET subscription to receive) adding unnecessary complexity and a race condition window.
+**Instead:** Single POST endpoint that returns an SSE stream.
 
-### Anti-Pattern 3: Duplicate Validation in Service Layer
-**What:** Adding uniqueness checks to `category-service.ts` `createCategory`/`createGroup`.
-**Why bad:** Changes existing service behavior that the UI (CategoriesPage) relies on. The tRPC router endpoints for category creation (lines 142-146, 170-173 of `trpc-router.ts`) do not check for duplicates -- they pass through to the service directly. Changing service behavior could break existing UI flows.
-**Instead:** Duplicate checks in the tool definitions only, matching the existing validation pattern in `action-tools.ts`.
+### Anti-Pattern 3: Buffering events before sending
+**What:** Collecting stream events into an array then sending them in a batch.
+**Why bad:** Defeats the entire purpose of streaming. User sees the same delay as the current collect-and-return approach.
+**Instead:** Write each SSE event to the response immediately as it arrives from the Agent SDK.
 
-### Anti-Pattern 4: New Router for Models
-**What:** Creating `model-router.ts` with its own router mounted on the app router.
-**Why bad:** Models are an agent concern. A separate router adds a file, an import in `trpc-router.ts`, and a mount point for a single query procedure.
-**Instead:** Add `models` query to the existing `agentRouter`.
+### Anti-Pattern 4: Parsing SSE events with complex regex
+**What:** Complex regex patterns to parse the SSE text format on the client.
+**Why bad:** Fragile, doesn't handle edge cases (multi-line data, buffered/split chunks across reads).
+**Instead:** Split on `\n\n` boundaries, find `data:` lines, parse JSON. Keep it simple and buffer-aware (see Pattern 1 client example).
 
-### Anti-Pattern 5: Confirmation Flow for Category Creation
-**What:** Requiring JSON confirmation blocks and Confirm/Cancel buttons for creating categories.
-**Why bad:** Creation is safe and add-only. Confirmation flow adds latency and friction for a non-destructive operation. PROJECT.md explicitly says creation is safe. All other write tools (except budget changes) auto-execute.
-**Instead:** Auto-execute like `create_rule`, `categorize_transaction`, etc.
+### Anti-Pattern 5: Removing the existing tRPC chat mutation
+**What:** Deleting the tRPC `agent.chat` mutation when adding SSE streaming.
+**Why bad:** Removes fallback path. If streaming fails (network issues, proxy buffering), the user has no way to chat. Also breaks the migration path -- both should work during development.
+**Instead:** Keep both paths. ChatPage uses SSE by default. The tRPC mutation remains available and functional.
+
+### Anti-Pattern 6: Using httpBatchStreamLink for the whole app
+**What:** Switching the tRPC client to use `httpBatchStreamLink` to enable streaming across all tRPC calls.
+**Why bad:** Changes the transport for every tRPC call in the app, not just chat. Risk of breaking existing working queries/mutations. Overkill for one streaming endpoint.
+**Instead:** The SSE endpoint is completely separate from tRPC. No tRPC configuration changes needed.
+
+## Integration Points (Detailed)
+
+### 1. Shared SSE Event Types
+- **File:** `packages/shared/src/sse-events.ts` (NEW)
+- **Also:** `packages/shared/src/index.ts` (MODIFIED -- add re-export)
+- **What:** Export the `SSEEvent` union type and individual event types
+- **Why shared:** Both server (to emit events) and client (to parse events) import the same type definitions, ensuring the protocol contract is enforced at compile time
+- **Dependency on:** Nothing. This is a pure type definition file.
+
+### 2. Server: Agent Service Extension
+- **File:** `packages/server/src/agent/agent-service.ts` (MODIFIED)
+- **What:** Add `chatStream()` async generator function alongside the existing `chat()` function
+- **Key change:** Pass `includePartialMessages: true` to SDK options, iterate stream events, yield typed `SSEEvent` objects
+- **Dependencies:** Same as `chat()` -- `query` from SDK, `createMcpServer`, `getSystemPrompt`, `models.ts`
+- **Existing `chat()` function:** Completely unchanged. Kept as fallback path.
+- **Dependency on:** Shared SSE event types (for `SSEEvent` type)
+
+### 3. Server: Stream Handler
+- **File:** `packages/server/src/agent/stream-handler.ts` (NEW)
+- **What:** Express request handler that validates input with Zod, sets SSE headers, iterates `chatStream()` generator, writes events to response
+- **Responsibilities:** HTTP concerns only -- input validation, SSE header setup, event serialization, error handling, connection cleanup
+- **Dependencies:** `agent-service.chatStream()`, shared SSE event types, Zod, Express types, `isValidModelId` from models.ts
+- **Why separate from agent-service:** Separates HTTP transport concerns from agent logic. `chatStream()` is a pure generator that could be reused by a WebSocket handler or CLI.
+
+### 4. Server: Express App Mount
+- **File:** `packages/server/src/index.ts` (MODIFIED)
+- **What:** Import `createStreamHandler` and add `app.post('/api/chat/stream', createStreamHandler(db, ctx))` between health check and tRPC middleware
+- **Lines affected:** ~3 lines (1 import + 1 route registration + maybe 1 blank line)
+- **Critical ordering:** Must be AFTER `express.json()` (needs parsed body) and BEFORE the SPA catch-all `app.get('*', ...)`
+
+### 5. Client: Streaming Chat Hook
+- **File:** `packages/client/src/hooks/useStreamingChat.ts` (NEW)
+- **What:** Custom React hook that manages the full streaming lifecycle
+- **State managed:**
+  - `messages: ChatMessage[]` -- complete message history (same type as current ChatPage)
+  - `streamingText: string` -- current partial response being built from text-delta events
+  - `activeTools: { toolName: string; toolCallId: string }[]` -- tools currently executing
+  - `sessionId: string | undefined` -- agent session for multi-turn conversation
+  - `isStreaming: boolean` -- whether a stream is in progress
+- **Returns:** `{ messages, streamingText, activeTools, isStreaming, sendMessage, sessionId }`
+- **No TanStack Query dependency:** Raw `fetch` -- TanStack Query's mutation model (single request/response) does not fit streaming
+- **Dependency on:** Shared SSE event types (for parsing)
+
+### 6. Client: ChatPage Modifications
+- **File:** `packages/client/src/pages/ChatPage.tsx` (MODIFIED)
+- **What:** Replace `chatMutation` usage with `useStreamingChat` hook
+- **Key UI changes:**
+  - Bouncing dots replaced with live streaming text as it arrives
+  - New tool activity indicator (e.g., animated pill showing "Looking up balances...") during tool execution
+  - `streamingText` rendered in an assistant bubble that grows as text arrives
+  - When stream completes (`done` event), `streamingText` is finalized into a `ChatMessage` in the `messages` array
+  - Confirmation flow (JSON block parsing) moves to happen after stream completes, since the full response text is needed to detect confirmation blocks
+- **Preserved:** Model selector, session management, example questions, mobile-friendly layout
 
 ## Suggested Build Order
 
-Build order follows dependency chain: server changes first (independently testable), then client.
+Build in this order to enable incremental testing at each step:
 
-```
-Phase 1: Model selector server
-  - Add AVAILABLE_MODELS const to agent-router.ts
-  - Add models query procedure to agentRouter
-  - Extend chat input schema with model param (optional, default 'sonnet')
-  - Map model key to API string in router before calling chat()
-  - Update agent-service.ts chat() signature to accept model string param
-  - Test: models query returns 3 models, chat accepts and uses model param
+| Step | What | Files | Why This Order | Testable? |
+|------|------|-------|----------------|-----------|
+| 1 | SSE event types in shared package | `shared/src/sse-events.ts`, `shared/src/index.ts` | Zero dependencies. Everything else imports from here. | `npm run build` passes (type-only) |
+| 2 | `chatStream()` generator in agent-service.ts | `server/src/agent/agent-service.ts` | Core streaming logic. Can be unit tested by mocking the SDK query and verifying yielded events. | Unit test: mock query, check yields |
+| 3 | Stream handler + Express mount | `server/src/agent/stream-handler.ts`, `server/src/index.ts` | Wires generator to HTTP. Testable with curl. | `curl -X POST -H 'Content-Type: application/json' -d '{"message":"test"}' http://localhost:3001/api/chat/stream` |
+| 4 | `useStreamingChat` hook | `client/src/hooks/useStreamingChat.ts` | Client-side SSE consumer. Testable against running server from step 3. | Manual: call hook from console or minimal test page |
+| 5 | ChatPage integration | `client/src/pages/ChatPage.tsx` | UI rendering of streaming text + tool indicators. Requires hook from step 4. | Visual: send message, see streaming text appear |
+| 6 | Polish: cancellation, timeouts, fallback | All files | Error handling and edge cases after happy path works. | Manual: test abort, test timeout, test network failure |
 
-Phase 2: Category creation tools
-  - Add create_category tool to action-tools.ts
-  - Add create_category_group tool to action-tools.ts
-  - Add imports for createCategory, createGroup from category-service
-  - Test: duplicate detection (case-insensitive), group-not-found validation, successful creation
+**Step ordering rationale:**
+- Steps 1-3 are server-only -- fully testable without any client changes
+- Steps 4-5 are client-only -- build on a working server endpoint
+- Step 6 is hardening -- only meaningful after the happy path works end-to-end
+- Steps 2 and 3 must be sequential (handler depends on generator)
+- Steps 4 and 5 must be sequential (ChatPage depends on hook)
 
-Phase 3: System prompt updates
-  - Add rules 14-15 to system-prompt.ts
-  - No automated test needed (string content, verified by integration testing)
+## Known Limitation: Extended Thinking
 
-Phase 4: Model selector UI
-  - Add selectedModel state and models query to ChatPage.tsx
-  - Add native <select> dropdown in input bar area
-  - Pass model to chatMutation.mutate()
-  - Style: consistent with existing input bar (border-gray-300, rounded-lg, text-sm)
+The Agent SDK docs explicitly state that `StreamEvent` messages are **not emitted** when `maxThinkingTokens` is set. Since the current Minerva agent does not use extended thinking (no `maxThinkingTokens` in the options), this is not an issue. If extended thinking is added later, streaming would need to fall back to the collect-and-return path for those requests.
 
-Phase 5: Integration verification
-  - Manual test: select each model, send message, verify response (Haiku faster, Opus more thorough)
-  - Manual test: ask agent to create category, verify it appears in Categories page
-  - Manual test: ask agent to create duplicate, verify clear error message
-  - Manual test: ask agent to create group then category in that group (two-step flow)
-```
-
-**Phase ordering rationale:**
-- Phase 1 before Phase 4: Server models endpoint must exist before client can call it
-- Phase 2 independent of Phase 1: No dependency between model selector and category tools
-- Phase 3 after Phase 2: System prompt should reference tools that exist
-- Phase 4 after Phase 1: Client model selector depends on server models query
-- Phase 5 last: End-to-end verification after all pieces in place
-- Phases 1 and 2 could be built in parallel since they touch different files
+**Confidence:** HIGH -- explicitly documented limitation at https://platform.claude.com/docs/en/agent-sdk/streaming-output.
 
 ## Sources
 
-- Direct code inspection of all files in `packages/server/src/agent/` directory
-- Direct code inspection of `packages/client/src/pages/ChatPage.tsx`
-- Direct code inspection of `packages/server/src/categories/category-service.ts`
-- Direct code inspection of `packages/server/src/sync/trpc-router.ts` and `trpc.ts`
-- PROJECT.md v2.5 milestone requirements
-- Existing patterns in `action-tools.ts` for tool definition, validation, and error handling
-- Confidence: HIGH -- all findings based on direct code inspection of the existing codebase
+- [Claude Agent SDK streaming output docs](https://platform.claude.com/docs/en/agent-sdk/streaming-output) -- HIGH confidence, official Anthropic documentation. Verified `includePartialMessages`, `stream_event` type, `content_block_delta`/`text_delta` patterns, and the extended thinking limitation.
+- [MDN: Using server-sent events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events) -- HIGH confidence, authoritative web standard reference. Confirmed EventSource is GET-only.
+- [MDN: ReadableStream](https://developer.mozilla.org/en-US/docs/Web/API/ReadableStream) -- HIGH confidence, authoritative. Confirmed `pipeThrough(TextDecoderStream)` + `getReader()` pattern.
+- [tRPC v11 Subscriptions docs](https://trpc.io/docs/server/subscriptions) -- HIGH confidence, official tRPC docs. Confirmed subscriptions use GET-based SSE.
+- [tRPC Streaming Mutations Issue #4477](https://github.com/trpc/trpc/issues/4477) -- MEDIUM confidence, GitHub discussion on streaming mutations.
+- [SSE POST without EventSource](https://medium.com/@david.richards.tech/sse-server-sent-events-using-a-post-request-without-eventsource-1c0bd6f14425) -- MEDIUM confidence, community pattern validation.
+- [Consuming Streamed LLM Responses on the Frontend](https://tpiros.dev/blog/streaming-llm-responses-a-deep-dive/) -- MEDIUM confidence, practical implementation guide for fetch+SSE with LLMs.
+- Direct code inspection of: `packages/server/src/agent/agent-service.ts`, `agent-router.ts`, `models.ts`, `mcp-server.ts`, `index.ts`, `trpc.ts`, `trpc-router.ts`, `packages/client/src/pages/ChatPage.tsx`, `packages/client/src/trpc.ts`
 
 ---
-*Architecture research for: v2.5 Chat Enhancements (Model Selector + Category Creation Tools)*
+*Architecture research for: v2.6 Streaming Chat (SSE integration with Express + tRPC)*
 *Researched: 2026-03-24*

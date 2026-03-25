@@ -1,165 +1,230 @@
 # Domain Pitfalls
 
-**Domain:** Adding model selector and category creation tools to existing Claude Agent SDK chat system
+**Domain:** Adding SSE streaming to an Express/React chat app with Claude Agent SDK
 **Researched:** 2026-03-24
 
 ## Critical Pitfalls
 
 Mistakes that cause rewrites or major issues.
 
-### Pitfall 1: Model Change Breaks Active Session
+### Pitfall 1: Using EventSource API for POST Requests
 
-**What goes wrong:** The Claude Agent SDK `query()` function accepts a `model` parameter and the current code stores a `sessionId` for conversation continuity. If the user switches models mid-conversation (e.g., Haiku to Opus), the session was initialized with the previous model. Passing a different model to `resume` with an existing `sessionId` may cause the SDK to either error or silently ignore the model change, leading to confusing behavior where the user thinks they switched but the old model is still responding.
+**What goes wrong:** The browser `EventSource` API only supports GET requests. The chat endpoint needs `message`, `sessionId`, and `model` in a request body. Attempting to use EventSource forces encoding all parameters in query strings, which is fragile, has URL length limits, and leaks conversation content into server logs.
+**Why it happens:** EventSource is the "obvious" SSE client API, but it was designed for subscription-style GET endpoints, not request-response patterns like chat.
+**Consequences:** Either you hack parameters into query strings or you abandon EventSource mid-implementation and rewrite the client.
+**Prevention:** Use `fetch()` with `ReadableStream` from the start. The pattern is: `fetch('/api/chat/stream', { method: 'POST', body: JSON.stringify(payload) })` then read from `response.body.getReader()` with a `TextDecoder`. Parse SSE format manually (split on `\n\n`, extract `data:` lines).
+**Detection:** If you find yourself building a GET endpoint for chat, stop -- you are on the wrong path.
+**Confidence:** HIGH -- EventSource GET-only limitation is a spec constraint (MDN, WHATWG spec).
 
-**Why it happens:** The `agent-service.ts` hardcodes `model: 'claude-sonnet-4-20250514'` in the options object and passes `resume: sessionId` for continuity. Sessions in the Claude Agent SDK are bound to configuration at creation time. The model is part of that configuration.
+### Pitfall 2: Agent SDK Timeout Race Condition with Streaming
 
-**Consequences:** User selects Opus expecting higher quality answers but still gets Sonnet responses. Or the SDK throws an error and the conversation breaks entirely. Either outcome destroys trust in the model selector feature.
+**What goes wrong:** The current `agent-service.ts` (lines 43-49) uses `Promise.race()` with a monolithic timeout (15s/30s/60s per model). With streaming, the first token may arrive within the timeout, but the full response takes much longer. If the timeout fires mid-stream, the server aborts the Agent SDK iterator while the client is still reading SSE events.
+**Why it happens:** The existing collect-and-return pattern treats the entire agent response as one unit. Streaming breaks this assumption -- the "response" is now a long-lived stream with tokens spread over the full duration.
+**Consequences:** Partial responses cut off abruptly. The client receives an error mid-sentence. The Agent SDK async iterator may not be properly cleaned up, leaking resources. Opus responses (which are slower) get cut off more frequently than Haiku responses.
+**Prevention:** Replace the monolithic timeout with two timeouts: (a) a **first-token timeout** (e.g., 15s) that fires if no events arrive at all, and (b) an **idle timeout** (e.g., 10s between events) that fires if the stream stalls mid-response. Reset the idle timeout on each received event. Do NOT use a total wall-clock timeout for streaming.
+**Detection:** Send a complex multi-tool query with Opus selected and observe whether it completes or gets truncated.
+**Confidence:** HIGH -- this is a direct consequence of the existing timeout architecture in `agent-service.ts`.
 
-**Prevention:** When the model changes, clear the `sessionId` and start a fresh session. The client should detect model changes and reset. Specifically:
-1. Store the `selectedModel` alongside `sessionId` in ChatPage state
-2. When the user changes the model dropdown, call `setSessionId(undefined)` to force a new session
-3. Optionally show a subtle indicator that "switching models starts a new conversation"
+### Pitfall 3: Memory Leak from Unclosed Server-Side Streams
 
-**Detection:** Test by switching models mid-conversation and verifying the response headers or behavior match the newly selected model. Check if the SDK throws when resuming a session with a different model parameter.
+**What goes wrong:** If the client disconnects (navigates away, closes tab, network drop) while the Agent SDK is still iterating, the server-side `for await` loop keeps running, consuming API tokens and memory. The response object is closed but the Agent SDK async iterator is not.
+**Why it happens:** Express does not automatically abort async iterators when the client disconnects. The `for await` loop on `query()` continues until the iterator completes or throws.
+**Consequences:** Wasted Anthropic API credits. Memory accumulates from orphaned iterators. Under repeated disconnects, the server process grows unbounded.
+**Prevention:** Listen for the `close` event on the Express request object:
+```typescript
+let aborted = false;
+req.on('close', () => { aborted = true; });
 
-**Phase:** Must be addressed in the model selector phase, not deferred.
+for await (const msg of queryStream) {
+  if (aborted) break;
+  // ... process message
+}
+```
+Additionally, call `.return()` on the async iterator after breaking to signal the Agent SDK to stop cleanly.
+**Detection:** Monitor server memory over time during development. Navigate away from ChatPage mid-response repeatedly and check if memory grows.
+**Confidence:** HIGH -- standard server-side streaming issue (Express #2248), directly applicable to the existing `collectResponse` pattern.
 
-### Pitfall 2: Duplicate Category Names Without Database Constraint
+### Pitfall 4: react-markdown Rendering Incomplete Markdown During Streaming
 
-**What goes wrong:** The `categories` and `category_groups` tables have NO UNIQUE constraint on `name` (confirmed in `001-initial-schema.sql`). The existing `createCategory` and `createGroup` service functions perform no duplicate checking -- they just INSERT. If the agent creates a category that already exists, you get two "Groceries" categories with different IDs, causing budget confusion, incorrect spending reports, and rules pointing to the wrong one.
+**What goes wrong:** `react-markdown` (currently used in ChatPage.tsx line 156) is designed for complete markdown documents. When fed partial streaming content, it produces visual artifacts: unclosed `**bold**` shows literal asterisks, partial code blocks show raw backticks, incomplete tables resize chaotically, and partial links show bracket soup.
+**Why it happens:** Markdown is context-sensitive -- `**` means bold only when the closing `**` arrives. During streaming, the closing delimiter has not arrived yet.
+**Consequences:** The UI looks broken and janky during streaming. Users see raw markdown syntax flickering until each element completes.
+**Prevention:** Two options:
+1. **Use `streamdown`** -- Vercel's drop-in replacement for react-markdown, purpose-built for streaming AI content. It auto-completes unclosed markdown syntax before rendering using the `remend` package. This is the recommended approach.
+2. **Add a markdown "healer" function** that detects and closes unclosed markdown elements before passing to react-markdown. This is more fragile and requires maintaining the healer logic.
+Both approaches should be combined with a stable container width to prevent layout shifts as table/code content streams in.
+**Detection:** Stream a response that includes a code block or table -- watch for visual jank as it renders incrementally.
+**Confidence:** HIGH -- documented issue (remarkjs/discussions#1262, remarkjs/discussions#1342, markedjs/marked#3657).
 
-**Why it happens:** The original UI-driven category creation likely relied on the user visually checking for duplicates. The agent has no such visual context. When a user says "create a Groceries category," the agent will blindly call `createCategory` without checking if one already exists. The LLM might sometimes check via `list_categories` first, but system prompt instructions are not reliable enforcement.
+### Pitfall 5: Confirmation Flow Breaks During Streaming
 
-**Consequences:** Duplicate categories corrupt the data model silently. Transactions split across two identically-named categories. Budget allocations on the wrong one. Spending reports show misleading numbers. Cleanup requires manual SQL or careful UI work to merge.
-
-**Prevention:** Duplicate validation MUST be in the tool implementation, not in the system prompt. The `create_category` and `create_category_group` tool handlers must:
-1. Query existing categories/groups by name (case-insensitive: `WHERE LOWER(name) = LOWER(?)`)
-2. If a match exists, return an error result like `"Category 'Groceries' already exists (id: 5) in group 'Monthly Bills'"`
-3. Include the existing ID so the agent can suggest using the existing one instead
-
-**Detection:** Unit test that calls `create_category` twice with the same name and verifies the second call returns an error, not a new row.
-
-**Phase:** Must be addressed in the category creation tool phase. This is the tool's primary validation concern.
-
-### Pitfall 3: Agent Creates Category Then Fails to Use It
-
-**What goes wrong:** A user says "Create a Pet Supplies category and categorize these three transactions under it." The agent creates the category (getting back a new ID), but then uses the wrong ID for subsequent `categorize_transaction` calls -- either hallucinating an ID or losing track of the returned ID across tool calls.
-
-**Why it happens:** LLMs handle multi-step tool workflows imperfectly. The agent must: (1) create category, (2) read the returned ID from the tool result, (3) use that exact ID in subsequent tool calls. With `maxTurns: 10`, this is within bounds, but the model may confuse IDs if many categories exist.
-
-**Consequences:** Transactions get categorized under the wrong category. The user asked for a specific workflow and got a silent miscategorization.
-
-**Prevention:**
-1. The `create_category` tool result must clearly return `{ success: true, id: 42, name: "Pet Supplies", groupId: 3 }` -- all identifying information
-2. System prompt should include guidance: "After creating a category, use the returned ID for any follow-up operations"
-3. Keep the tool result format simple and unambiguous (the current `jsonResult` pattern is fine for this)
-4. Consider returning the full category list after creation so the agent has fresh context
-
-**Detection:** Integration test: send a multi-step message like "create a Subscriptions category in Monthly Bills and categorize transaction X under it" and verify the transaction ends up in the correct new category.
-
-**Phase:** Address in system prompt updates phase. The tool implementation naturally handles this if the return value is clear.
+**What goes wrong:** The current ChatPage has a confirmation flow for budget changes (lines 27-47). The `parseConfirmation()` regex looks for a JSON code block with `"type": "confirmation"`. During streaming, this JSON block arrives incrementally. The parser either fails to match the partial content or triggers prematurely on incomplete JSON.
+**Why it happens:** The `parseConfirmation()` regex runs against incomplete markdown. A partial JSON block like ````json\n{"type": "conf` matches nothing, but the regex is designed for complete content.
+**Consequences:** Confirmation buttons never appear (regex does not match partial content), or they flicker as the JSON block streams in.
+**Prevention:** Only run confirmation parsing on the **final complete message**, not on the streaming text. During streaming, display text as-is. When the `done` SSE event arrives, run `parseConfirmation()` on the full accumulated text and update the message in place. This is a clean separation: streaming = display text, done = parse structure.
+**Detection:** Test with a budget change request that triggers the confirmation flow while streaming is active.
+**Confidence:** HIGH -- directly derived from examining the existing `parseConfirmation()` implementation in ChatPage.tsx.
 
 ## Moderate Pitfalls
 
-### Pitfall 4: Model Selector Leaks API Key Awareness to Client
+### Pitfall 6: Not Flushing Response Headers Immediately
 
-**What goes wrong:** The model list endpoint returns model IDs (like `claude-haiku-3-5-20241022`) and the client sends the selected model back. Developers might be tempted to let the client specify arbitrary model strings, which could cause cryptic Anthropic API errors if the model string is malformed.
+**What goes wrong:** Node.js/Express may buffer response writes internally. Calling `res.write()` for each SSE event does not guarantee immediate delivery to the client. Without explicit header flushing, the client's fetch call may not resolve `response.body` until enough data accumulates.
+**Why it happens:** Node.js HTTP response streams have internal buffering. Without explicit flushing, small writes may be held.
+**Consequences:** Events arrive in unpredictable batches. Text appears to "jump" forward in chunks rather than streaming token-by-token. The client may hang waiting for the response to start.
+**Prevention:** Call `res.flushHeaders()` immediately after writing SSE headers:
+```typescript
+res.writeHead(200, {
+  'Content-Type': 'text/event-stream',
+  'Cache-Control': 'no-cache, no-transform',
+  'Connection': 'keep-alive',
+  'X-Accel-Buffering': 'no',
+});
+res.flushHeaders();
+```
+The `X-Accel-Buffering: no` header is forward-compatible if a reverse proxy is ever added. The `no-transform` directive also prevents any future compression middleware from buffering (the project does not currently use compression middleware).
+**Detection:** Text arrives in bursts of 5-10 tokens instead of individual tokens.
+**Confidence:** HIGH -- standard SSE implementation requirement.
 
-**Prevention:** Server-driven model list with a fixed allowlist. The tRPC endpoint returns `[{ id: "haiku", label: "Haiku (fast)", model: "claude-haiku-3-5-20241022" }]` and the client sends only the short `id` back. The server maps the `id` to the real model string. Never trust client-provided model identifiers directly.
+### Pitfall 7: Tool Execution Gaps Appear as Stream Freezes
 
-### Pitfall 5: Confirmation Flow Not Extended to Category Creation
+**What goes wrong:** The Agent SDK yields `content_block_start` with `tool_use` type, then the tool executes (potentially taking seconds for DB queries), then streaming resumes. During tool execution, no text events arrive. Without a tool activity indicator, the user sees the stream "freeze" and thinks it is broken.
+**Why it happens:** Tool execution is a server-side gap with no text output. It is easy to forget this is a visible UX gap that needs its own UI treatment.
+**Prevention:** Emit dedicated `tool-start` and `tool-end` SSE events when the Agent SDK yields `content_block_start` with type `tool_use` and when the corresponding content block stops. The client should display a tool activity indicator (e.g., "Looking up account balances...") using the tool name from `content_block.name`. The project spec already calls for this (PROJECT.md line 55).
+**Detection:** Ask a question that requires tool use (e.g., "What is my checking account balance?"). The stream should show the tool indicator, not just freeze.
+**Confidence:** HIGH -- directly informed by Agent SDK streaming docs showing the tool_use content block flow.
 
-**What goes wrong:** The existing confirmation pattern (JSON block in response, parsed by `parseConfirmation` in ChatPage) is used for budget changes. Category creation is a write operation that creates persistent data. If the agent creates categories without confirmation, the user might get unwanted categories from ambiguous requests ("maybe I should add a category for that").
+### Pitfall 8: State Update Storms from High-Frequency Token Deltas
 
-**Prevention:** Category and group creation should follow the same confirmation pattern as budget changes. Update the system prompt to require a confirmation block before calling `create_category` or `create_category_group`. The existing `parseConfirmation` function and confirm/cancel button UI already handle the generic pattern -- just need the system prompt rules and new `action` types like `"create_category"` and `"create_category_group"`.
+**What goes wrong:** Each `text_delta` event from the Agent SDK triggers a React state update. With fast models (Haiku), tokens can arrive every 10-30ms. Even with React 18's automatic batching, the rendering cost of re-rendering the entire message list plus markdown parsing on every single token is significant.
+**Why it happens:** The streaming reader loop runs asynchronously. Each iteration appends text to state. Markdown parsing and DOM reconciliation on every token adds up.
+**Consequences:** UI becomes sluggish. Scroll jank. High CPU usage, especially on mobile devices.
+**Prevention:** Use `requestAnimationFrame` batching: accumulate text deltas in a `ref` and flush to state on each animation frame (~16ms intervals). This naturally throttles updates to 60fps:
+```typescript
+const bufferRef = useRef('');
+const rafRef = useRef<number>();
 
-### Pitfall 6: Group ID Resolution Ambiguity
+function appendText(chunk: string) {
+  bufferRef.current += chunk;
+  if (!rafRef.current) {
+    rafRef.current = requestAnimationFrame(() => {
+      setStreamingText(prev => prev + bufferRef.current);
+      bufferRef.current = '';
+      rafRef.current = undefined;
+    });
+  }
+}
+```
+This reduces re-renders by 80-95% while maintaining smooth visual streaming.
+**Detection:** Profile the ChatPage with React DevTools during a streaming response. If you see 100+ renders per second, you need batching.
+**Confidence:** HIGH -- well-documented React streaming performance pattern.
 
-**What goes wrong:** When the user says "create a Coffee category," the agent needs to know which category group to put it in. If the agent guesses wrong (puts "Coffee" in "Income" instead of "Dining & Drinks"), the category ends up in the wrong group. The agent must first call `list_categories` to see the groups, then pick the right one.
+### Pitfall 9: SSE Event Parsing Edge Cases with Chunk Boundaries
 
-**Prevention:**
-1. The `create_category` tool should require `groupId` as a parameter (not group name -- IDs are unambiguous)
-2. System prompt guidance: "Before creating a category, call list_categories to find the appropriate group. If the user doesn't specify a group, ask which group to use or suggest the most logical one"
-3. If the user says "add Coffee to Dining," the agent should resolve "Dining" to a group ID first
+**What goes wrong:** When reading from `ReadableStream` via `TextDecoder`, chunk boundaries can split multi-byte UTF-8 characters or split SSE events mid-line. A naive parser that splits on `\n\n` may produce malformed events when a chunk boundary falls inside an event.
+**Why it happens:** Network chunks are arbitrary byte boundaries. A single SSE event like `data: Hello\n\n` may arrive as `data: Hel` in one chunk and `lo\n\n` in the next. Multi-byte characters (e.g., currency symbols) can split mid-byte.
+**Consequences:** Garbled text, missed events, or parser errors that silently drop tokens.
+**Prevention:** Use `TextDecoder` with `{ stream: true }` to handle multi-byte splitting. Maintain a line buffer across chunks -- only process complete lines (ending in `\n`). Hold incomplete lines until the next chunk arrives:
+```typescript
+const decoder = new TextDecoder();
+let buffer = '';
 
-### Pitfall 7: 30-Second Timeout Too Short for Opus
+// In the read loop:
+buffer += decoder.decode(chunk, { stream: true });
+const lines = buffer.split('\n');
+buffer = lines.pop() ?? '';  // Last element may be incomplete
+// Process complete lines...
+```
+**Detection:** Test with non-ASCII content. Also test by asking questions that produce long responses where chunk boundaries are more likely to fall mid-event.
+**Confidence:** HIGH -- fundamental streaming text parsing issue.
 
-**What goes wrong:** The current `agent-service.ts` has a 30-second timeout via `Promise.race`. Claude Opus is significantly slower than Sonnet, especially on complex multi-tool queries. If the user selects Opus and asks a complex question requiring multiple tool calls, the 30-second timeout fires and the user gets "Agent query timed out."
+### Pitfall 10: Error Handling Mid-Stream (HTTP 200 Already Sent)
 
-**Why it happens:** The timeout was tuned for Sonnet. Opus can take 2-3x longer per response, and with `maxTurns: 10` allowing multiple sequential tool calls, total wall time can easily exceed 30 seconds.
+**What goes wrong:** If the Agent SDK throws an error after streaming has started, the server has already sent SSE headers with status 200. It cannot change the HTTP status code. If the error is silently swallowed, the client sees an incomplete response with no indication of failure.
+**Why it happens:** HTTP status codes are set before the response body begins. SSE responses commit to 200 immediately. Errors during streaming (API rate limit, network failure to Anthropic, tool execution crash) cannot change the status code.
+**Consequences:** Silent data loss. The user sees a partial response and thinks it is complete.
+**Prevention:** Define an `error` SSE event type in the protocol. When the server catches an error during streaming, emit `event: error\ndata: {"message": "..."}\n\n` before closing the stream. The client must handle this event by displaying an error indicator on the partial message. The `done` event should include a status field so the client knows whether the stream completed successfully or was terminated by error.
+**Detection:** Simulate an API error mid-stream and verify the client shows an error state, not a truncated response.
+**Confidence:** HIGH -- fundamental SSE error handling pattern.
 
-**Prevention:** Scale the timeout based on the selected model:
-- Haiku: 30 seconds (fast, keep tight)
-- Sonnet: 45 seconds (current model, slight buffer)
-- Opus: 90 seconds (slower but higher quality)
+### Pitfall 11: Duplicate Message on Stream Completion
 
-Alternatively, use a single generous timeout (90s) since this is a single-user app with no resource contention concerns.
-
-### Pitfall 8: Mobile Dropdown Overlapping Chat Input
-
-**What goes wrong:** Adding a model selector dropdown above the chat input bar on mobile creates layout issues. The `ChatPage` uses `h-[calc(100dvh-56px)]` for full-height layout with a flex column. Adding another element between the message area and input bar compresses the message area or causes the dropdown to overlap with the keyboard on mobile Safari.
-
-**Prevention:** Use a native `<select>` element for mobile (not a custom dropdown). Place it in a thin bar above the textarea, within the existing input bar `<div>`. Keep it compact -- just the select element, no labels. The `pb-[max(0.75rem,env(safe-area-inset-bottom))]` safe area handling should still work since the select is inside the existing input container.
+**What goes wrong:** The Agent SDK yields both `stream_event` deltas (text chunks) AND a final `AssistantMessage` with the complete text after all stream events. If the server emits both the streamed deltas and then the complete text from AssistantMessage, the client receives the response content twice.
+**Why it happens:** The Agent SDK streaming docs show that `AssistantMessage` follows all `StreamEvent` messages for each turn. This is useful for collect-and-return but dangerous for streaming where the client has already accumulated the text.
+**Consequences:** The response appears duplicated in the chat, or the final message replaces the streamed one causing a visual flash.
+**Prevention:** On the server, only emit `text-delta` SSE events from `stream_event` messages. When the `AssistantMessage` arrives, do NOT emit its content. When the `ResultMessage` arrives, emit the `done` SSE event. The client has already accumulated the full text from deltas.
+**Detection:** Watch for a flash or duplication at the end of each streamed response.
+**Confidence:** HIGH -- directly from Agent SDK streaming docs showing that AssistantMessage follows StreamEvent messages.
 
 ## Minor Pitfalls
 
-### Pitfall 9: System Prompt Bloat from New Tool Guidance
+### Pitfall 12: tRPC Route Conflict with Raw Express SSE Endpoint
 
-**What goes wrong:** Adding behavioral guidance for two new tools (create_category, create_category_group) plus model-specific instructions inflates the system prompt. The current prompt is well-structured at ~47 lines. Adding too much text degrades the LLM's ability to follow all instructions consistently.
+**What goes wrong:** The new SSE endpoint (`POST /api/chat/stream`) is a raw Express route, not a tRPC procedure. The current server setup (index.ts) mounts tRPC at `/trpc` then has a catch-all `app.get('*')` for SPA routing. If the SSE route is registered after the catch-all or static middleware, it could be shadowed.
+**Prevention:** Register the SSE route BEFORE the static file middleware and catch-all route in `index.ts`. The registration order should be: (1) health check, (2) JSON body parser, (3) tRPC middleware, (4) SSE streaming endpoint, (5) static files, (6) SPA catch-all. Since the SSE endpoint is POST and the catch-all is GET, there is no strict conflict, but maintaining correct order prevents future confusion.
+**Detection:** If the SSE endpoint returns HTML content or 404, check route registration order.
+**Confidence:** HIGH -- directly observed from index.ts route setup.
 
-**Prevention:** Keep new instructions to 3-5 lines maximum. Rely on tool descriptions for usage guidance (the existing pattern -- tool descriptions are already detailed). Only add system prompt rules for behavior that cannot be encoded in the tool itself (like the confirmation requirement).
+### Pitfall 13: Auto-Scroll Fighting User During Streaming
 
-### Pitfall 10: TanStack Query Cache Stale After Category Creation
+**What goes wrong:** The current ChatPage scrolls to bottom on message changes (lines 78-80). During streaming, content updates continuously. If `scrollIntoView` fires on every state update, it fights with the user trying to scroll up to read earlier messages.
+**Prevention:** Only auto-scroll if the user is already near the bottom. Track scroll position and set a "stick to bottom" flag. If the user scrolls up more than ~100px from bottom, stop auto-scrolling. Resume when they scroll back down.
+**Confidence:** MEDIUM -- UX concern, not a correctness bug. But very noticeable during streaming.
 
-**What goes wrong:** If the user creates a category via the chat agent, other pages (BudgetPage, CategoriesPage, TransactionsPage) that use TanStack Query to fetch categories will show stale data until manually refreshed. The user creates "Pet Supplies" in chat, navigates to the Budget page, and it is not there.
+### Pitfall 14: Session ID Timing with Streaming
 
-**Prevention:** The chat mutation's `onSuccess` handler should invalidate category-related queries. Simplest approach: invalidate category queries on every chat response (cheap since it is a single-user app with fast SQLite reads). This avoids needing to parse the response to detect whether a category was created.
+**What goes wrong:** The Agent SDK's `session_id` arrives in the `system` init message at the very start of the stream. If the server does not extract and emit it as the first SSE event, the client cannot store it. If the user sends a second message before the first stream completes, there is no session ID to send, breaking conversation continuity.
+**Prevention:** Emit the session ID as the very first SSE event (`event: session\ndata: {"sessionId": "..."}\n\n`). The client hook must capture and store this before processing any text events. This aligns with the existing pattern in `collectResponse()` (agent-service.ts line 74) and the PROJECT.md spec (line 55: "session" event type).
+**Confidence:** HIGH -- directly from the existing session_id extraction pattern.
 
-### Pitfall 11: Model List Endpoint Hardcoded and Stale
+### Pitfall 15: Keeping Both tRPC and SSE Paths Functional
 
-**What goes wrong:** Anthropic periodically releases new model versions and deprecates old ones. If the model list is hardcoded in the server, deploying an update is required to add new models.
+**What goes wrong:** The PROJECT.md spec requires both tRPC mutation and SSE working during migration (line 60). If the SSE endpoint duplicates logic from the tRPC agent router without sharing the service layer, bug fixes and model validation changes must be applied in two places.
+**Prevention:** Extract shared logic (model validation, MCP server creation, system prompt loading) into `agent-service.ts`. The tRPC mutation calls existing `chat()` (collect-and-return). The SSE endpoint calls a new `chatStream()` that yields events. Both share the same service infrastructure. Do NOT copy-paste the agent setup code.
+**Confidence:** HIGH -- standard code reuse concern, verified against the existing architecture split between agent-router.ts and agent-service.ts.
 
-**Prevention:** This is acceptable for a single-user home server app -- just update the list when deploying. Do not over-engineer with dynamic model discovery from the Anthropic API. A simple array constant in a config file is sufficient and easy to update.
+### Pitfall 16: Compression Middleware Added Later Breaks SSE
+
+**What goes wrong:** The project does not currently use Express compression middleware (verified by searching the codebase). But if compression is added in a future milestone, it will silently buffer and break SSE streaming.
+**Prevention:** Add a defensive comment on the SSE endpoint explaining that it is incompatible with global compression middleware. Set `Cache-Control: no-cache, no-transform` on SSE responses -- the `no-transform` directive causes compression middleware to skip the response automatically.
+**Confidence:** HIGH -- documented Express issue (expressjs/compression#17).
 
 ## Phase-Specific Warnings
 
 | Phase Topic | Likely Pitfall | Mitigation |
 |-------------|---------------|------------|
-| Model selector endpoint | Pitfall 4: Client sends raw model string | Server-side allowlist, client sends short ID only |
-| Model selector UI | Pitfall 8: Mobile layout breakage | Native `<select>`, inside existing input bar container |
-| Model switching behavior | Pitfall 1: Session bound to old model | Clear sessionId on model change |
-| Model switching behavior | Pitfall 7: Opus timeout | Scale timeout per model or use generous default |
-| Category creation tool | Pitfall 2: Duplicate names | Validate in tool handler, case-insensitive check |
-| Category creation tool | Pitfall 6: Wrong group assignment | Require groupId parameter, prompt guides agent to look up groups first |
-| Category creation confirmation | Pitfall 5: No confirmation for creates | Extend existing confirmation pattern to new tools |
-| System prompt updates | Pitfall 9: Prompt bloat | Minimal additions, lean on tool descriptions |
-| System prompt updates | Pitfall 3: ID tracking across tool calls | Clear return values, brief prompt guidance |
-| Post-creation UX | Pitfall 10: Stale cache on other pages | Invalidate category queries after chat responses |
-
-## "Looks Done But Isn't" Checklist
-
-- [ ] **Session reset on model change:** Verify switching the dropdown clears sessionId and starts a fresh conversation
-- [ ] **Timeout scaling:** Verify Opus queries do not hit the 30s timeout on multi-tool requests
-- [ ] **Duplicate category rejection:** Call create_category with an existing name and verify error response (not a second row)
-- [ ] **Case-insensitive duplicate check:** "groceries" vs "Groceries" should be caught as duplicate
-- [ ] **Group-scoped duplicate check:** Same category name in different groups is valid (e.g., "Other" in multiple groups)
-- [ ] **Confirmation flow for creates:** Verify the agent emits a confirmation JSON block before creating a category
-- [ ] **New category ID propagation:** Create category then use it in same conversation -- verify correct ID used
-- [ ] **Mobile layout:** Test model selector on mobile Safari with keyboard open -- no layout shift or overlap
-- [ ] **Cache invalidation:** Create category via chat, navigate to Categories page, verify it appears without manual refresh
-- [ ] **Model allowlist enforcement:** Send an invalid model ID from client, verify server rejects with clear error
+| SSE protocol definition | Over-engineering event types | Start with 6 event types from spec (session, text-delta, tool-start, tool-end, done, error). Do not add more until needed. |
+| Server SSE endpoint | Route registration order (Pitfall 12) | Register before static middleware and catch-all in index.ts |
+| Server SSE endpoint | Response header flushing (Pitfall 6) | Call `res.flushHeaders()` immediately after writing headers |
+| Server stream processing | Timeout architecture mismatch (Pitfall 2) | Replace monolithic timeout with first-token + idle timeouts |
+| Server stream processing | Client disconnect leak (Pitfall 3) | Listen for `req.on('close')` and break the Agent SDK iterator |
+| Server stream processing | Duplicate message (Pitfall 11) | Only emit text from stream_event, ignore AssistantMessage text |
+| Client stream consumer | EventSource API trap (Pitfall 1) | Use fetch + ReadableStream from day one, never EventSource |
+| Client stream consumer | SSE parse edge cases (Pitfall 9) | Use TextDecoder with `{ stream: true }`, maintain line buffer |
+| Client stream consumer | Mid-stream error handling (Pitfall 10) | Handle error SSE events, show error state on partial message |
+| Incremental text rendering | react-markdown partial content (Pitfall 4) | Evaluate streamdown or add markdown healer |
+| Incremental text rendering | State update storms (Pitfall 8) | Use requestAnimationFrame batching with ref buffer |
+| Incremental text rendering | Confirmation flow breakage (Pitfall 5) | Parse confirmations only on stream completion |
+| Incremental text rendering | Auto-scroll fighting (Pitfall 13) | Stick-to-bottom logic with scroll position tracking |
+| Tool activity indicators | Silent tool execution gaps (Pitfall 7) | Emit tool-start/tool-end SSE events, show indicator in UI |
+| Migration path | Code duplication (Pitfall 15) | Share service layer between tRPC and SSE endpoints |
+| Migration path | Session ID timing (Pitfall 14) | Emit session as first SSE event, client captures immediately |
 
 ## Sources
 
-- Direct code analysis: `packages/server/src/agent/agent-service.ts` -- session handling (line 33: `resume: sessionId`), model config (line 23: hardcoded model), timeout (line 42: 30s)
-- Direct code analysis: `packages/server/src/agent/tools/action-tools.ts` -- existing tool patterns, validation approach, `categoryExists` helper
-- Direct code analysis: `packages/server/src/categories/category-service.ts` -- `createCategory` and `createGroup` have no duplicate checking
-- Direct code analysis: `packages/server/migrations/001-initial-schema.sql` -- no UNIQUE constraint on category/group names
-- Direct code analysis: `packages/client/src/pages/ChatPage.tsx` -- confirmation parsing (`parseConfirmation`), session state, layout structure, safe-area handling
-- Direct code analysis: `packages/server/src/agent/system-prompt.ts` -- current prompt size (~47 lines), confirmation pattern for budget changes
-- Claude Agent SDK behavior: session-model binding is based on training knowledge (MEDIUM confidence -- verify with SDK docs during implementation)
-- Opus latency characteristics: based on general knowledge of model speed differences (HIGH confidence)
+- [Claude Agent SDK Streaming Output Docs](https://platform.claude.com/docs/en/agent-sdk/streaming-output) -- HIGH confidence, official docs on `includePartialMessages`, `StreamEvent` types, message flow, and known limitations
+- [MDN: Using Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events) -- HIGH confidence, EventSource GET-only limitation
+- [expressjs/compression#17](https://github.com/expressjs/compression/issues/17) -- HIGH confidence, SSE incompatibility with compression middleware
+- [remarkjs Discussion #1262](https://github.com/orgs/remarkjs/discussions/1262) -- HIGH confidence, streaming markdown rendering issues in Safari
+- [remarkjs Discussion #1342](https://github.com/orgs/remarkjs/discussions/1342) -- HIGH confidence, react-markdown with streaming AI responses
+- [Vercel Streamdown](https://github.com/vercel/streamdown) -- MEDIUM confidence, drop-in react-markdown replacement for streaming
+- [SitePoint: Streaming Backends and React Re-render Chaos](https://www.sitepoint.com/streaming-backends-react-controlling-re-render-chaos/) -- MEDIUM confidence, requestAnimationFrame batching pattern
+- [Express #2248: Memory Leak with EventSource Stream](https://github.com/expressjs/express/issues/2248) -- HIGH confidence, server-side stream cleanup
+- [SSE POST via Fetch ReadableStream](https://medium.com/@david.richards.tech/sse-server-sent-events-using-a-post-request-without-eventsource-1c0bd6f14425) -- MEDIUM confidence, fetch-based SSE client pattern
+- Direct code analysis: `packages/server/src/agent/agent-service.ts` -- timeout architecture (lines 43-49), session extraction (line 74), collect-and-return pattern
+- Direct code analysis: `packages/client/src/pages/ChatPage.tsx` -- react-markdown usage (line 156), confirmation parsing (lines 27-47), auto-scroll (lines 78-80)
+- Direct code analysis: `packages/server/src/index.ts` -- route registration order, no compression middleware
 
 ---
-*Pitfalls research for: Chat enhancements -- model selector and category creation tools (v2.5)*
+*Pitfalls research for: SSE streaming chat (v2.6)*
 *Researched: 2026-03-24*
