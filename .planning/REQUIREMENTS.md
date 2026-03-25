@@ -15,8 +15,8 @@ Requirements for streaming chat milestone. Each maps to roadmap phases.
 
 ### Server Streaming
 
-- [x] **SRVR-01**: Server exposes POST /api/chat/stream endpoint that accepts message, sessionId, and model in JSON body
-- [x] **SRVR-02**: Server validates input with Zod and returns standard error response before SSE headers if validation fails
+- [ ] **SRVR-01**: Server exposes POST /api/chat/stream endpoint that accepts message, sessionId, and model in JSON body
+- [ ] **SRVR-02**: Server validates input with Zod and returns standard error response before SSE headers if validation fails
 - [ ] **SRVR-03**: Server iterates the Agent SDK async iterable with `includePartialMessages: true` and emits SSE events for each SDK message
 - [ ] **SRVR-04**: Server emits `tool-start` events when the agent begins a tool call and `tool-end` when it completes
 - [ ] **SRVR-05**: Server handles client disconnect by cleaning up the Agent SDK iterator to prevent memory leaks
@@ -69,23 +69,23 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PROTO-01 | Phase 38 | Pending |
 | PROTO-02 | Phase 38 | Pending |
 | PROTO-03 | Phase 38 | Pending |
-| SRVR-01 | Phase 40 | Complete |
-| SRVR-02 | Phase 40 | Complete |
-| SRVR-03 | Phase 39 | Complete |
-| SRVR-04 | Phase 39 | Complete |
-| SRVR-05 | Phase 39 | Complete |
-| SRVR-06 | Phase 39 | Complete |
+| SRVR-01 | Phase 43 | Pending |
+| SRVR-02 | Phase 43 | Pending |
+| SRVR-03 | Phase 43 | Pending |
+| SRVR-04 | Phase 43 | Pending |
+| SRVR-05 | Phase 43 | Pending |
+| SRVR-06 | Phase 43 | Pending |
 | CLNT-01 | Phase 41 | Pending |
 | CLNT-02 | Phase 41 | Pending |
 | CLNT-03 | Phase 41 | Pending |
 | CLNT-04 | Phase 41 | Pending |
 | CLNT-05 | Phase 41 | Pending |
-| UI-01 | Phase 42 | Pending |
-| UI-02 | Phase 42 | Pending |
-| UI-03 | Phase 42 | Pending |
-| UI-04 | Phase 42 | Pending |
-| UI-05 | Phase 42 | Pending |
-| UI-06 | Phase 42 | Pending |
+| UI-01 | Phase 43 | Pending |
+| UI-02 | Phase 43 | Pending |
+| UI-03 | Phase 43 | Pending |
+| UI-04 | Phase 43 | Pending |
+| UI-05 | Phase 43 | Pending |
+| UI-06 | Phase 43 | Pending |
 
 **Coverage:**
 - v2.6 requirements: 20 total
@@ -94,4 +94,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-03-24*
-*Last updated: 2026-03-24 after roadmap creation*
+*Last updated: 2026-03-25 after gap closure phase creation*

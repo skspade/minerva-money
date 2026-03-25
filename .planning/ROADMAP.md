@@ -115,6 +115,7 @@ Full details: [milestones/v2.5-ROADMAP.md](milestones/v2.5-ROADMAP.md)
 - [x] **Phase 40: Express SSE Endpoint** - HTTP handler that wires the stream generator to POST /api/chat/stream with validation and SSE headers (completed 2026-03-25)
 - [x] **Phase 41: Client Stream Hook** - React hook that consumes the SSE stream via fetch/ReadableStream and exposes reactive streaming state (completed 2026-03-25)
 - [x] **Phase 42: ChatPage Streaming UI** - Incremental text rendering, tool activity indicators, smart auto-scroll, and graceful fallback in ChatPage (completed 2026-03-25)
+- [ ] **Phase 43: Verification and Session Fix** - Fix session ID continuity bug, add missing verification docs, update requirement checkboxes [Gap Closure]
 
 ## Phase Details
 
@@ -188,6 +189,22 @@ Plans:
 
 Plans:
 - [ ] 42-01: Wire streaming hook into ChatPage with live bubble, tool indicator, smart scroll
+
+### Phase 43: Verification and Session Fix
+**Goal**: All v2.6 requirements are verified, documented, and the session ID continuity bug is fixed
+**Depends on**: Phases 39, 40, 42
+**Requirements**: SRVR-01, SRVR-02, SRVR-03, SRVR-04, SRVR-05, SRVR-06, UI-01, UI-02, UI-03, UI-04, UI-05, UI-06
+**Gap Closure:** Closes gaps from audit
+**Success Criteria** (what must be TRUE):
+  1. Session ID fallback in `useStreamingChat.ts` prevents empty session on resumed turns
+  2. 40-VERIFICATION.md exists and confirms SRVR-01, SRVR-02 pass
+  3. 42-VERIFICATION.md exists and confirms UI-01 through UI-06 pass
+  4. All SUMMARY.md files have correct `requirements-completed` YAML frontmatter
+  5. All v2.6 requirement checkboxes in REQUIREMENTS.md are checked
+**Plans**: TBD
+
+Plans:
+- [ ] 43-01: Fix session ID bug, create verification docs, update requirements
 
 ## Progress
 
