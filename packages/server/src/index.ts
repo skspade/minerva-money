@@ -9,6 +9,7 @@ import { createRateLimiter } from './sync/rate-limiter.js';
 import { startSyncScheduler, stopSyncScheduler } from './sync/sync-scheduler.js';
 import { startBudgetScheduler, stopBudgetScheduler } from './budget/budget-scheduler.js';
 import type { Context } from './sync/trpc.js';
+import { createChatStreamHandler } from './agent/chat-stream-handler.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -26,11 +27,15 @@ if (process.env.NODE_ENV !== 'test') {
   const rateLimiter = createRateLimiter();
   const client = getSimpleFINClient();
 
+  const ctx: Context = { db, rateLimiter, client };
+
+  app.post('/api/chat/stream', createChatStreamHandler(db, ctx));
+
   app.use(
     '/trpc',
     trpcExpress.createExpressMiddleware({
       router: appRouter,
-      createContext: (): Context => ({ db, rateLimiter, client }),
+      createContext: (): Context => ctx,
     }),
   );
 
