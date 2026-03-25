@@ -54,9 +54,10 @@ None.
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 2 | Add a UI button to trigger manual sync and backup | 2026-03-24 | 6fdfae6 | [2-add-a-ui-button-to-trigger-manual-sync-a](./quick/2-add-a-ui-button-to-trigger-manual-sync-a/) |
+| 3 | Add local backup fallback when iCloud Drive unavailable | 2026-03-24 | 71b6913 | [3-add-local-backup-fallback-when-icloud-di](./quick/3-add-local-backup-fallback-when-icloud-di/) |
 
 ## Session Continuity
 
 Last session: 2026-03-24
-Stopped at: v2.5 milestone archived
+Stopped at: Completed quick task 3
 Resume file: None
