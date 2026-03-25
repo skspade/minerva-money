@@ -153,10 +153,10 @@ Plans:
   1. A model dropdown is visible above the chat input bar with Haiku, Sonnet, and Opus options
   2. Switching models clears the conversation history and starts a fresh session
   3. The model dropdown is disabled and unclickable while a chat response is loading
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 36-01: TBD
+- [ ] 36-01-PLAN.md — Model selector dropdown, state reset on change, disabled during pending
 
 ## Progress
 
