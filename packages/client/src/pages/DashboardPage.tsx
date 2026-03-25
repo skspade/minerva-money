@@ -33,6 +33,7 @@ export default function DashboardPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: trpc.sync.status.queryKey() });
       queryClient.invalidateQueries({ queryKey: trpc.accounts.list.queryKey() });
+      queryClient.invalidateQueries({ queryKey: trpc.backup.status.queryKey() });
     },
   }));
 
@@ -50,6 +51,10 @@ export default function DashboardPage() {
 
   const { data: syncStatus, isLoading: syncLoading } = useQuery(
     trpc.sync.status.queryOptions(),
+  );
+
+  const { data: backupStatus } = useQuery(
+    trpc.backup.status.queryOptions(),
   );
 
   // Group accounts by type
@@ -225,6 +230,33 @@ export default function DashboardPage() {
               )}
             </div>
           )}
+
+          {/* Backup Status */}
+          <div className="border-t border-gray-200 pt-2 mt-2">
+            <div className="text-xs text-gray-400 uppercase mb-1">Backup</div>
+            {backupStatus?.lastBackup ? (
+              <div className="space-y-1">
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-600">Last backup</span>
+                  <span className="text-sm">{new Date(backupStatus.lastBackup.timestamp).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-600">Size</span>
+                  <span className="text-sm font-medium">{(backupStatus.lastBackup.sizeBytes / 1024 / 1024).toFixed(1)} MB</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-600">Storage</span>
+                  {backupStatus.lastBackup.isCloud ? (
+                    <span className="text-sm font-medium text-green-600">iCloud</span>
+                  ) : (
+                    <span className="text-sm font-medium text-yellow-600">Local only</span>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <p className="text-gray-500 text-sm">No backups found</p>
+            )}
+          </div>
         </div>
       </div>
     </div>
