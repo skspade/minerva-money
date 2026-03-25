@@ -127,7 +127,7 @@ Full details: [milestones/v2.6-ROADMAP.md](milestones/v2.6-ROADMAP.md)
 
 - [x] **Phase 44: Schema Migration and Sync Safety** - Add source column to accounts table and protect sync pipeline from manual accounts (completed 2026-03-25)
 - [x] **Phase 45: Account CRUD Service and Import Integration** - Server-side account management with balance computation and post-import recalculation (completed 2026-03-25)
-- [ ] **Phase 46: Client UI and Agent Tools** - Inline account creation in import wizard, dashboard visual distinction, and agent account creation
+- [x] **Phase 46: Client UI and Agent Tools** - Inline account creation in import wizard, dashboard visual distinction, and agent account creation (completed 2026-03-25)
 
 ## Phase Details
 
@@ -192,4 +192,4 @@ Plans:
 | 38-43 | v2.6 | 6/6 | Complete | 2026-03-25 |
 | 44. Schema Migration and Sync Safety | 1/1 | Complete    | 2026-03-25 | - |
 | 45. Account CRUD Service and Import Integration | 2/2 | Complete    | 2026-03-25 | - |
-| 46. Client UI and Agent Tools | v2.7 | 0/TBD | Not started | - |
+| 46. Client UI and Agent Tools | v2.7 | Complete    | 2026-03-25 | - |
