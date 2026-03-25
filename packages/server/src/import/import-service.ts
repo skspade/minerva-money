@@ -6,6 +6,7 @@ import type { Cents } from '@minerva/shared';
 import { generateDedupHash } from '../sync/simplefin-client.js';
 import { categorizeNewTransactions } from '../rules/rules-service.js';
 import { detectTransferCandidates } from '../transfers/transfer-service.js';
+import { recalculateBalance } from '../accounts/accounts-service.js';
 
 // --- Types ---
 
@@ -231,6 +232,7 @@ export interface ExecuteResult {
   skippedByAccountFilter: number;
   categorizedByRules: number;
   categorizedFromCsv: number;
+  recalculatedAccounts: number;
 }
 
 // --- Preview ---
@@ -437,7 +439,23 @@ export function executeImport(
       detectTransferCandidates(db, newTransactionIds);
     }
 
-    return { importedCount, skippedCount, skippedByAccountFilter, categorizedByRules, categorizedFromCsv };
+    // 4. Recalculate balance for manual accounts that received transactions
+    const importedAccountIds = new Set(
+      validTransformed
+        .map(row => accountMappings[row.accountName])
+        .filter((id): id is string => id !== undefined),
+    );
+
+    let recalculatedAccounts = 0;
+    for (const accountId of importedAccountIds) {
+      const account = db.prepare('SELECT source FROM accounts WHERE id = ?').get(accountId) as { source: string } | undefined;
+      if (account?.source === 'manual') {
+        recalculateBalance(db, accountId);
+        recalculatedAccounts++;
+      }
+    }
+
+    return { importedCount, skippedCount, skippedByAccountFilter, categorizedByRules, categorizedFromCsv, recalculatedAccounts };
   })();
 
   return result;

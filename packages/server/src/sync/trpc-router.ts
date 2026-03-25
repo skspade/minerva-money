@@ -2,6 +2,7 @@ import { router, publicProcedure } from './trpc.js';
 import { agentRouter } from '../agent/agent-router.js';
 import { importRouter } from '../import/import-router.js';
 import { runSync } from './sync-service.js';
+import { createAccount, updateAccount, deleteAccount } from '../accounts/accounts-service.js';
 import { resolveBackupDir } from '../backup/backup.js';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
@@ -169,6 +170,34 @@ const accountsRouter = router({
       source: a.source,
     }));
   }),
+
+  create: publicProcedure
+    .input(z.object({
+      name: z.string().min(1),
+      institution: z.string().min(1),
+      type: z.enum(['banking', 'credit']).default('banking'),
+    }))
+    .mutation(({ ctx, input }) => {
+      return createAccount(ctx.db, input);
+    }),
+
+  update: publicProcedure
+    .input(z.object({
+      id: z.string(),
+      name: z.string().min(1).optional(),
+      institution: z.string().min(1).optional(),
+      type: z.enum(['banking', 'credit']).optional(),
+    }))
+    .mutation(({ ctx, input }) => {
+      const { id, ...fields } = input;
+      return updateAccount(ctx.db, id, fields);
+    }),
+
+  delete: publicProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(({ ctx, input }) => {
+      deleteAccount(ctx.db, input.id);
+    }),
 });
 
 const categoriesGroupsRouter = router({

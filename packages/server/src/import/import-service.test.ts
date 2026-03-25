@@ -552,4 +552,54 @@ describe('executeImport', () => {
     const txn = db.prepare('SELECT category_id FROM transactions').get() as { category_id: number | null };
     expect(txn.category_id).toBeNull();
   });
+
+  it('recalculates balance for manual accounts after import', () => {
+    // Create a manual account
+    db.prepare(`INSERT INTO accounts (id, name, institution, type, balance, currency, source) VALUES (?, ?, ?, ?, ?, ?, ?)`).run('manual_test', 'Manual Checking', 'Local Bank', 'banking', 0, 'USD', 'manual');
+
+    const csv = makeCsv(
+      makeCsvRow('2024-01-15', 'Coffee Shop', 'Food & Drink', 'Manual Acct', 'COFFEE SHOP 123', '', '-4.50'),
+      makeCsvRow('2024-01-16', 'Deposit', 'Income', 'Manual Acct', 'DEPOSIT', '', '100.00'),
+    );
+
+    const result = executeImport(db, csv, { 'Manual Acct': 'manual_test' }, {});
+
+    expect(result.recalculatedAccounts).toBe(1);
+
+    const account = db.prepare('SELECT balance FROM accounts WHERE id = ?').get('manual_test') as { balance: number };
+    expect(account.balance).toBe(9550); // $100.00 - $4.50 = $95.50 = 9550 cents
+  });
+
+  it('records balance snapshot for manual accounts after import', () => {
+    db.prepare(`INSERT INTO accounts (id, name, institution, type, balance, currency, source) VALUES (?, ?, ?, ?, ?, ?, ?)`).run('manual_snap', 'Manual Snap', 'Bank', 'banking', 0, 'USD', 'manual');
+
+    const csv = makeCsv(makeCsvRow('2024-01-15', 'Coffee Shop', 'Food & Drink', 'Snap Acct', 'COFFEE SHOP', '', '-10.00'));
+
+    executeImport(db, csv, { 'Snap Acct': 'manual_snap' }, {});
+
+    const today = new Date().toISOString().split('T')[0];
+    const snapshot = db.prepare('SELECT * FROM balance_snapshots WHERE account_id = ? AND date = ?').get('manual_snap', today) as { balance: number } | undefined;
+
+    expect(snapshot).toBeDefined();
+    expect(snapshot!.balance).toBe(-1000);
+  });
+
+  it('does not recalculate balance for SimpleFIN accounts', () => {
+    // The default test account 'acct-checking' has no source set, so it defaults to 'simplefin'
+    const csv = makeCsv(makeCsvRow('2024-01-15', 'Coffee Shop', 'Food & Drink', 'Checking', 'COFFEE SHOP 123', '', '-4.50'));
+
+    const result = executeImport(db, csv, { Checking: 'acct-checking' }, {});
+
+    expect(result.recalculatedAccounts).toBe(0);
+
+    // Balance should remain unchanged (0) since SimpleFIN accounts are not recalculated
+    const account = db.prepare('SELECT balance FROM accounts WHERE id = ?').get('acct-checking') as { balance: number };
+    expect(account.balance).toBe(0);
+  });
+
+  it('returns recalculatedAccounts of 0 when no manual accounts receive transactions', () => {
+    const csv = makeCsv(makeCsvRow('2024-01-15', 'Coffee Shop', 'Food & Drink', 'Checking', 'COFFEE SHOP 123', '', '-4.50'));
+    const result = executeImport(db, csv, { Checking: 'acct-checking' }, {});
+    expect(result.recalculatedAccounts).toBe(0);
+  });
 });
