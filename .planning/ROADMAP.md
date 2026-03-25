@@ -201,7 +201,7 @@ Plans:
   3. 42-VERIFICATION.md exists and confirms UI-01 through UI-06 pass
   4. All SUMMARY.md files have correct `requirements-completed` YAML frontmatter
   5. All v2.6 requirement checkboxes in REQUIREMENTS.md are checked
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
 - [ ] 43-01: Fix session ID bug, create verification docs, update requirements
