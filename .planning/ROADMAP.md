@@ -189,5 +189,5 @@ Plans:
 | 33-37 | v2.5 | 5/5 | Complete | 2026-03-24 |
 | 38-43 | v2.6 | 6/6 | Complete | 2026-03-25 |
 | 44. Schema Migration and Sync Safety | 1/1 | Complete    | 2026-03-25 | - |
-| 45. Account CRUD Service and Import Integration | 2/2 | Complete   | 2026-03-25 | - |
+| 45. Account CRUD Service and Import Integration | 2/2 | Complete    | 2026-03-25 | - |
 | 46. Client UI and Agent Tools | v2.7 | 0/TBD | Not started | - |
