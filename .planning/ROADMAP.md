@@ -171,10 +171,12 @@ Plans:
   3. Manual accounts are included in net worth calculations, daily balance snapshots, and all spending reports
   4. Sync Now button is not shown for manual accounts on the dashboard
   5. Agent can create manual accounts with confirmation flow and `list_accounts` response includes the `source` field
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 46-01: TBD
+- [ ] 46-01-PLAN.md — Agent create_account tool and system prompt updates
+- [ ] 46-02-PLAN.md — Dashboard and AccountsPage manual account visual distinction
+- [ ] 46-03-PLAN.md — Import wizard inline account creation
 
 ## Progress
 
