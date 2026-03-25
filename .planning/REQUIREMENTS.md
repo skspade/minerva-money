@@ -19,13 +19,13 @@ Requirements for Chat Enhancements milestone. Each maps to roadmap phases.
 
 ### Category Creation
 
-- [ ] **CAT-01**: Agent can create a category group via `create_category_group` tool with name parameter
-- [ ] **CAT-02**: Agent can create a category via `create_category` tool with groupId and name parameters
-- [ ] **CAT-03**: Category group creation validates for case-insensitive duplicate group names
-- [ ] **CAT-04**: Category creation validates for case-insensitive duplicate names within the same group
-- [ ] **CAT-05**: Category creation validates that the target group exists
-- [ ] **CAT-06**: Both creation tools require user confirmation via existing JSON confirmation block pattern
-- [ ] **CAT-07**: Newly created categories are immediately usable by the agent in the same conversation turn
+- [x] **CAT-01**: Agent can create a category group via `create_category_group` tool with name parameter
+- [x] **CAT-02**: Agent can create a category via `create_category` tool with groupId and name parameters
+- [x] **CAT-03**: Category group creation validates for case-insensitive duplicate group names
+- [x] **CAT-04**: Category creation validates for case-insensitive duplicate names within the same group
+- [x] **CAT-05**: Category creation validates that the target group exists
+- [x] **CAT-06**: Both creation tools require user confirmation via existing JSON confirmation block pattern
+- [x] **CAT-07**: Newly created categories are immediately usable by the agent in the same conversation turn
 
 ### System Prompt
 
@@ -63,13 +63,13 @@ Requirements for Chat Enhancements milestone. Each maps to roadmap phases.
 | MOD-05 | Phase 36 | Pending |
 | MOD-06 | Phase 36 | Pending |
 | MOD-07 | Phase 33 | Done |
-| CAT-01 | Phase 34 | Pending |
-| CAT-02 | Phase 34 | Pending |
-| CAT-03 | Phase 34 | Pending |
-| CAT-04 | Phase 34 | Pending |
-| CAT-05 | Phase 34 | Pending |
-| CAT-06 | Phase 34 | Pending |
-| CAT-07 | Phase 34 | Pending |
+| CAT-01 | Phase 34 | Done |
+| CAT-02 | Phase 34 | Done |
+| CAT-03 | Phase 34 | Done |
+| CAT-04 | Phase 34 | Done |
+| CAT-05 | Phase 34 | Done |
+| CAT-06 | Phase 34 | Done |
+| CAT-07 | Phase 34 | Done |
 | SYS-01 | Phase 35 | Pending |
 | SYS-02 | Phase 35 | Pending |
 | SYS-03 | Phase 35 | Pending |

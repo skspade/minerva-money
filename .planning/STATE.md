@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v2.5
 milestone_name: Chat Enhancements
-status: active
-last_updated: "2026-03-24T21:30:00.000Z"
+status: unknown
+last_updated: "2026-03-25T00:28:01.436Z"
 progress:
-  total_phases: 4
-  completed_phases: 1
-  total_plans: 4
-  completed_plans: 1
+  total_phases: 12
+  completed_phases: 10
+  total_plans: 14
+  completed_plans: 14
 ---
 
 # Project State

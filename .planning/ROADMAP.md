@@ -97,7 +97,7 @@ Full details: [milestones/v2.4-ROADMAP.md](milestones/v2.4-ROADMAP.md)
 **Milestone Goal:** Add model selector and category creation to the Claude chat agent
 
 - [x] **Phase 33: Model Selector Server** - Server-side model list endpoint, chat mutation model parameter, and model-specific timeout scaling (completed 2026-03-24)
-- [ ] **Phase 34: Category Creation Tools** - Agent tools for creating categories and category groups with duplicate validation and confirmation flow
+- [x] **Phase 34: Category Creation Tools** - Agent tools for creating categories and category groups with duplicate validation and confirmation flow (completed 2026-03-25)
 - [ ] **Phase 35: System Prompt Updates** - Behavioral guidance for category creation tools and add-only policy
 - [ ] **Phase 36: Model Selector UI** - Client-side model dropdown, session reset on model change, and disabled state during pending requests
 
@@ -172,6 +172,6 @@ Phases 33 and 34 are independent and can execute in parallel. Phase 35 depends o
 | 26-28 | v2.3 | 5/5 | Complete | 2026-03-24 |
 | 29-32 | v2.4 | 4/4 | Complete | 2026-03-24 |
 | 33. Model Selector Server | 1/1 | Complete   | 2026-03-24 | - |
-| 34. Category Creation Tools | v2.5 | 0/1 | Not started | - |
+| 34. Category Creation Tools | 1/1 | Complete    | 2026-03-25 | - |
 | 35. System Prompt Updates | v2.5 | 0/1 | Not started | - |
 | 36. Model Selector UI | v2.5 | 0/1 | Not started | - |
