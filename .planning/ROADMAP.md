@@ -203,7 +203,7 @@ Phases execute in numeric order: 38 → 39 → 40 → 41 → 42
 | 26-28 | v2.3 | 5/5 | Complete | 2026-03-24 |
 | 29-32 | v2.4 | 4/4 | Complete | 2026-03-24 |
 | 33-37 | v2.5 | 5/5 | Complete | 2026-03-24 |
-| 38. SSE Event Protocol | 1/1 | Complete   | 2026-03-25 | - |
+| 38. SSE Event Protocol | 1/1 | Complete    | 2026-03-25 | - |
 | 39. Server Stream Processing | v2.6 | 0/1 | Not started | - |
 | 40. Express SSE Endpoint | v2.6 | 0/1 | Not started | - |
 | 41. Client Stream Hook | v2.6 | 0/1 | Not started | - |
