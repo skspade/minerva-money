@@ -1,205 +1,176 @@
-# Technology Stack
+# Stack Research
 
-**Project:** Minerva Money v2.6 - Streaming Chat (SSE)
-**Researched:** 2026-03-24
+**Domain:** Manual Account CRUD + CSV Import Integration (Minerva Money v2.7)
+**Researched:** 2026-03-25
 **Confidence:** HIGH
 
-## Core Finding: No New Dependencies Required
+## Core Finding: Zero New Dependencies Required
 
-SSE streaming for this project requires **zero new npm packages**. Everything needed is already available through Express 4.x native capabilities, the Claude Agent SDK's existing `includePartialMessages` option, and the browser Fetch API with ReadableStream.
-
----
-
-## Server-Side: Express Native SSE
-
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| Express `res.write()` | 4.21.x (existing) | SSE event stream | Express supports SSE natively via `res.writeHead()` + `res.write()`. Set three headers (`Content-Type: text/event-stream`, `Cache-Control: no-cache`, `Connection: keep-alive`) and write `data:` lines. No middleware needed. |
-| `@anthropic-ai/claude-agent-sdk` | ^0.2.81 (existing) | Stream SDK messages | The `query()` function returns `AsyncGenerator<SDKMessage>`. Adding `includePartialMessages: true` to options causes emission of `SDKPartialAssistantMessage` events (type `"stream_event"`) containing `BetaRawMessageStreamEvent` from the Anthropic SDK. This provides token-by-token text deltas and tool use events. |
-| Zod | ^4.3.6 (existing) | Validate SSE request body | Validate the POST body on `/api/chat/stream` (message, sessionId, model). |
-
-## Client-Side: Fetch + ReadableStream
-
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| `fetch()` + `ReadableStream` | Browser native | Consume SSE stream | The Fetch API's `response.body` exposes a `ReadableStream`. Use `getReader()` + `TextDecoder` to read SSE chunks. Preferred over `EventSource` because `EventSource` only supports GET requests -- the chat endpoint needs POST with a JSON body. |
-| React `useState` + `useRef` | 19.x (existing) | Accumulate streamed text | Standard React state management for building up the response string as text deltas arrive. |
-| `react-markdown` | 10.1.0 (existing) | Render partial markdown | Already used for chat responses. Works with incrementally growing strings -- React re-renders as state updates. |
+Manual account CRUD, schema migration, UUID generation, and balance recalculation all use capabilities already present in the codebase. No new npm packages are needed.
 
 ---
 
-## Agent SDK Streaming Integration
+## Recommended Stack
 
-### The `includePartialMessages` Option
+### Core Technologies (All Existing)
 
-The **only** change to agent SDK usage is adding `includePartialMessages: true` to the options object passed to `query()`. This causes the async generator to yield `SDKPartialAssistantMessage` events between the existing `SDKSystemMessage` (init) and `SDKResultMessage` (done) events.
+| Technology | Version | Purpose | Why Recommended |
+|------------|---------|---------|-----------------|
+| `node:crypto` `randomUUID()` | Node 22 built-in | Generate `manual_<uuid>` account IDs | Already used in `import-service.ts` (line 390) and `category-service.ts` (line 142). Same pattern: `import { randomUUID } from 'node:crypto'`. Zero-cost, no library required. |
+| better-sqlite3 `ALTER TABLE` | ^11.7.0 (existing) | Schema migration via `006-manual-accounts.sql` | The existing migration runner in `migrate.ts` reads numbered SQL files in sequence and applies them transactionally. Adding `ALTER TABLE accounts ADD COLUMN source TEXT NOT NULL DEFAULT 'simplefin'` as `006-manual-accounts.sql` follows the established pattern exactly. |
+| better-sqlite3 `db.prepare().run()` | ^11.7.0 (existing) | Balance recalculation via `SUM(amount)` | Balance computation is `SELECT SUM(amount) FROM transactions WHERE account_id = ?`. The result updates `accounts.balance`. Same pattern used throughout `sync-service.ts` and `import-service.ts`. |
+| tRPC mutations | ^11.14.1 (existing) | `accounts.create`, `accounts.update`, `accounts.delete` router additions | New mutations added to the existing `accountsRouter`. Input validated with Zod schemas. Pattern is identical to the existing `categories.create` and `rules.create` mutations. |
+| Zod | ^4.3.6 (existing) | Input validation for account CRUD mutations | Already used for all tRPC input validation. New schemas: `createAccountInput`, `updateAccountInput`, `deleteAccountInput`. |
 
-**Confidence: HIGH** -- Verified in official Claude Agent SDK TypeScript reference (2026-03-24).
+### Supporting Libraries (All Existing)
 
-### SDKPartialAssistantMessage Structure
+| Library | Version | Purpose | When to Use |
+|---------|---------|---------|-------------|
+| TanStack Query (client) | existing | Cache invalidation after account creation | `trpc.useUtils().accounts.invalidate()` after `accounts.create` mutation completes — same pattern as category creation. |
+| React `useState` | 19.x (existing) | Inline account creation form state in CSV import wizard | The "+ Create New Account" inline form in `ImportPage` step 2 needs local state for `name`, `institution`, `type` fields and a `creating` boolean. No form library needed. |
+
+---
+
+## Schema Migration: `006-manual-accounts.sql`
+
+The only schema change is one `ALTER TABLE` statement. SQLite's `ALTER TABLE ... ADD COLUMN` is supported and safe — it adds the column with a default value without a table rewrite.
+
+```sql
+-- 006-manual-accounts.sql
+ALTER TABLE accounts ADD COLUMN source TEXT NOT NULL DEFAULT 'simplefin';
+```
+
+**Why `DEFAULT 'simplefin'`:** All existing accounts are SimpleFIN-synced. The default backfills existing rows correctly. Manual accounts are created with explicit `source = 'manual'`.
+
+**Why NOT a separate `is_manual` boolean:** A `source` text column is more extensible (future sources like `plaid` or `manual-crypto`) and matches the design spec. The tradeoff is that queries use `WHERE source = 'manual'` instead of `WHERE is_manual = 1` — negligible difference for SQLite.
+
+**Migration runner compatibility:** The existing `migrate.ts` reads files sorted by name. File `006-manual-accounts.sql` will be applied after `005-budget-funding-step.sql` (current user_version = 5). The runner sets `PRAGMA user_version = 6` after applying it. Verified in `migrate.ts` lines 8-23.
+
+---
+
+## UUID Generation Pattern
+
+Use `node:crypto` `randomUUID()` with a `manual_` prefix to namespace manual account IDs:
 
 ```typescript
-type SDKPartialAssistantMessage = {
-  type: "stream_event";
-  event: BetaRawMessageStreamEvent; // From Anthropic SDK
-  parent_tool_use_id: string | null;
-  uuid: UUID;
-  session_id: string;
-};
+import { randomUUID } from 'node:crypto';
+
+const id = `manual_${randomUUID()}`;
+// e.g. "manual_f47ac10b-58cc-4372-a567-0e02b2c3d479"
 ```
 
-### Relevant BetaRawMessageStreamEvent Types
+**Why the prefix:** SimpleFIN IDs are opaque strings. The `manual_` prefix guarantees no collision and makes the source visually identifiable in logs. The `accounts.id` column is `TEXT PRIMARY KEY` with no format constraint — the prefix is valid.
 
-The `event` field contains Anthropic streaming events. The relevant ones for SSE:
-
-| Event Type | Key Fields | Maps To SSE Event | Purpose |
-|------------|------------|-------------------|---------|
-| `content_block_start` | `content_block.type === "text"` | (internal) | Text block starting, bookkeeping only |
-| `content_block_delta` | `delta.type === "text_delta"`, `delta.text` | `text-delta` | Token-by-token text. This is the core streaming payload. |
-| `content_block_start` | `content_block.type === "tool_use"`, `content_block.name` | `tool-start` | MCP tool invocation beginning |
-| `content_block_stop` | (after a tool_use content block) | `tool-end` | Tool execution finished |
-
-Additionally, the existing message types already handled by `collectResponse()`:
-
-| SDK Message Type | Maps To SSE Event | Purpose |
-|------------------|-------------------|---------|
-| `SDKSystemMessage` (subtype `init`) | `session` | Session ID for resume capability |
-| `SDKResultMessage` (subtype `success`) | `done` | Final result, cost, usage |
-| `SDKResultMessage` (subtype `error_*`) | `error` | Error during execution |
-
-**Confidence: HIGH** -- `content_block_delta` with `text_delta` is the standard Anthropic streaming format, documented in official API reference.
+**Why NOT the `uuid` npm package:** `crypto.randomUUID()` is available in Node 15+, is cryptographically secure, and requires no import of third-party code. The codebase already uses it in two places.
 
 ---
 
-## SSE Protocol Design (Hand-Rolled, ~10 Lines)
+## Balance Recalculation
 
-### Wire Format
+Balance for manual accounts is computed from the transaction sum. No external source of truth exists.
 
-The SSE wire format is trivially simple. Each event:
-
-```
-event: session
-data: {"sessionId":"abc-123"}
-
-event: text-delta
-data: {"text":"Hello"}
-
-event: tool-start
-data: {"tool":"get_account_balances","id":"toolu_123"}
-
-event: tool-end
-data: {"tool":"get_account_balances","id":"toolu_123"}
-
-event: done
-data: {"sessionId":"abc-123"}
-
+```sql
+SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE account_id = ?
 ```
 
-### Server Helper
+**Why `COALESCE(SUM(...), 0)`:** `SUM` returns `NULL` for empty result sets. `COALESCE` ensures the balance is 0 (integer cents) for accounts with no transactions.
 
-```typescript
-function sendSSE(res: Response, event: string, data: unknown): void {
-  res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-}
-```
+**When to call:** After each `executeImport()` call, for every manual account that received transactions in that import batch. The import service already tracks `accountId` per row — filter for `source = 'manual'` accounts in that set and call `recalculateBalance()` for each.
 
-### Client Parser
-
-SSE line parsing is ~30 lines: split on `\n\n`, extract `event:` and `data:` lines, `JSON.parse()` the data. No library needed for a single endpoint with a controlled event format.
+**Balance snapshot:** The daily snapshot job reads `accounts.balance` column directly. After `recalculateBalance()` updates the column, the next snapshot captures it automatically — no changes to the snapshot scheduler needed.
 
 ---
 
-## Express Route Placement
+## Service Module Structure
 
-The SSE endpoint is a plain Express POST route, registered **before** the tRPC middleware and the SPA catch-all in `index.ts`:
+New service at `packages/server/src/accounts/accounts-service.ts`. This follows the established per-feature module pattern (`sync/`, `categories/`, `rules/`, `budget/`, etc.).
 
 ```
-app.post('/api/chat/stream', streamHandler);  // NEW - SSE endpoint
-app.use('/trpc', trpcMiddleware);              // EXISTING
-app.use(express.static(clientDist));           // EXISTING
-app.get('*', spaFallback);                     // EXISTING
+packages/server/src/accounts/
+  accounts-service.ts    # createAccount, updateAccount, deleteAccount, recalculateBalance
+  accounts-router.ts     # tRPC mutations wiring to service functions
 ```
 
-It does NOT go through tRPC. SSE's long-lived connection model is incompatible with tRPC's request-response pattern.
+The tRPC router is added to the main router at `packages/server/src/sync/trpc-router.ts` (which already aggregates all sub-routers).
 
 ---
 
-## Client Hook Design
+## Agent Tool Integration
 
-The streaming endpoint uses `fetch()` directly, **not** TanStack Query or tRPC. TanStack Query mutations expect a single response, not a stream. A custom `useStreamingChat` hook manages its own state (accumulated text, tool activity, loading/error) and calls `fetch('/api/chat/stream', ...)` directly.
+The `create_account` agent tool wraps `accounts.create()`. It follows the existing confirmation flow pattern used by budget mutations:
 
-The existing tRPC mutation path (`agent.chat`) remains functional as a fallback during migration.
+- Parameters: `name: string`, `institution: string`, `type: string` (default `'banking'`)
+- Requires confirmation (like `set_budget_amount`)
+- The existing `list_accounts` tool needs the `source` field added to its response shape so the agent can distinguish manual vs synced accounts
+
+No new SDK integration patterns needed — this is identical to the existing `create_category` tool added in v2.5.
 
 ---
 
-## Timeout Handling Change
+## Import Wizard Integration
 
-The existing per-model timeout scaling (Haiku 15s, Sonnet 30s, Opus 60s) needs adjustment for streaming:
+The inline account creation form in `ImportPage` (step 2) needs:
 
-- **Collect-and-return:** Timeout covers the entire request (appropriate since nothing visible happens until done)
-- **Streaming:** Timeout should cover time-to-first-event, since streaming responses take longer overall but the user sees progress immediately
+1. A `"+ Create New Account"` sentinel option in the mapping dropdown (mirrors the existing `"__skip__"` sentinel pattern from v2.4)
+2. A conditional inline form rendered below the dropdown when that option is selected
+3. A call to the `accounts.create` tRPC mutation
+4. On success: add the new account to the local dropdown options and auto-select it
 
-Use an `AbortController` with signal passed to both the SDK's `query()` and the client's `fetch()`.
+**State management:** Local `useState` in the mapping component. No global state needed — the created account is immediately available via the tRPC mutation response and can be inserted into the local options array.
+
+**Pattern reference:** The `"__skip__"` sentinel in `ImportPage` (v2.4) shows the exact pattern for special dropdown values. The new sentinel can be `"__create__"`.
 
 ---
 
 ## Alternatives Considered
 
-| Category | Recommended | Alternative | Why Not |
-|----------|-------------|-------------|---------|
-| Server SSE | Express native `res.write()` | `express-sse` npm | Adds dependency for ~5 lines of header setup. Last published 2019. |
-| Server SSE | Express native `res.write()` | WebSocket (`ws`) | SSE is simpler, unidirectional, works through proxies. WebSocket adds bidirectional complexity for one-way data flow. |
-| Server SSE | Express native `res.write()` | tRPC subscription (WebSocket) | Requires WebSocket adapter and wsLink. Major reconfiguration for one endpoint. |
-| Client SSE | `fetch` + `ReadableStream` | `EventSource` API | `EventSource` only supports GET. Chat endpoint needs POST with JSON body. |
-| Client SSE | `fetch` + `ReadableStream` | `eventsource-parser` (v3.0.6) | Solid library, overkill for one endpoint with simple format. 30 lines of hand-rolled parsing is clearer. |
-| Client SSE | `fetch` + `ReadableStream` | `@microsoft/fetch-event-source` | Abandoned (last publish 2022). Unnecessary with modern fetch. |
-| Streaming source | `includePartialMessages: true` | Anthropic Messages API directly | Bypasses Agent SDK, losing MCP tool integration, sessions, and existing tool infrastructure. |
+| Recommended | Alternative | Why Not |
+|-------------|-------------|---------|
+| `node:crypto` `randomUUID()` | `uuid` npm package | Unnecessary dependency. `crypto.randomUUID()` is built-in, already used in the codebase, and cryptographically equivalent. |
+| `ALTER TABLE ADD COLUMN` migration | New migration with table rebuild | SQLite ALTER TABLE ADD COLUMN is safe and non-destructive. A full table rebuild (CREATE new + INSERT SELECT + DROP old) would be needed only for column type changes or adding NOT NULL without a default — neither applies here. |
+| `source TEXT DEFAULT 'simplefin'` | `is_manual INTEGER DEFAULT 0` | Text enum is more extensible and self-documenting. Adds no query complexity for SQLite. |
+| Separate `accounts-service.ts` module | Adding to `sync-service.ts` | `sync-service.ts` is already large and focused on SimpleFIN sync. CRUD for manual accounts is a distinct concern. The existing module-per-feature pattern (`categories/`, `rules/`, etc.) is consistent. |
+| Local `useState` for inline form | Form library (react-hook-form) | Three fields, no complex validation. The existing codebase uses zero form libraries. Consistent with how all other forms are implemented. |
 
-## Libraries Explicitly NOT Needed
+## What NOT to Use
 
-| Library/Tool | Why Not |
-|--------------|---------|
-| `express-sse` | Dead package (2019), trivial to do natively |
-| `eventsource-parser` | Overkill for one endpoint with simple format |
-| `@microsoft/fetch-event-source` | Abandoned, unnecessary with modern fetch |
-| `ws` / WebSocket | Wrong tool for unidirectional streaming |
-| `socket.io` | Massive overkill for single-user app |
-| tRPC subscriptions | Requires WebSocket transport reconfiguration |
-| Any SSE polyfill | Not using `EventSource` API; all target browsers support ReadableStream |
-
----
-
-## Compatibility
-
-| Concern | Status | Notes |
-|---------|--------|-------|
-| Browser ReadableStream | Supported | All modern browsers (Chrome 43+, Firefox 65+, Safari 10.1+). Home iMac Safari is well within range. |
-| Express 4.x SSE | Supported | Native `res.write()` works. Express 4 does not buffer responses. |
-| HTTP/1.1 SSE connection limit | Non-issue | Single user, single connection at a time. The 6-connection-per-domain limit only matters for multi-tab/multi-user. |
-| Vite dev proxy | Needs config | Vite's dev server proxy needs the `/api/chat/stream` path proxied to port 3001. May need `changeOrigin: true` and response buffering disabled. |
+| Avoid | Why | Use Instead |
+|-------|-----|-------------|
+| `uuid` npm package | Already have `crypto.randomUUID()` built-in, used in 2 existing files | `import { randomUUID } from 'node:crypto'` |
+| `drizzle-orm` or `knex` for migrations | The custom migration runner is minimal, tested, and sufficient for this schema change | Add `006-manual-accounts.sql` to `/migrations/` |
+| `react-hook-form` or `formik` | Three-field inline form doesn't warrant a form library. Zero form libraries used in the codebase. | `useState` with controlled inputs |
+| Separate balance snapshot on account creation | Manual accounts start with balance 0, which is accurate (no transactions yet). | Snapshot job captures balance on next scheduled run. |
 
 ---
 
 ## Installation
 
 ```bash
-# Nothing to install. Zero new dependencies.
-# Verify current SDK version:
-cd /Users/seanspade/Documents/Source/minerva-money && npm ls @anthropic-ai/claude-agent-sdk express
+# Nothing to install. Zero new dependencies for this milestone.
 ```
+
+---
+
+## Version Compatibility
+
+| Component | Current Version | Notes |
+|-----------|-----------------|-------|
+| `node:crypto` `randomUUID` | Node 22 (runtime) | Available since Node 15. Node 22 is the current runtime. No version concerns. |
+| `better-sqlite3` ALTER TABLE | 11.7.0 | SQLite ALTER TABLE ADD COLUMN has been supported since SQLite 3.0. No compatibility concerns. |
+| tRPC mutations | 11.14.1 | New mutations follow identical patterns to existing ones. No API changes required. |
 
 ---
 
 ## Sources
 
-- [Claude Agent SDK TypeScript Reference](https://platform.claude.com/docs/en/agent-sdk/typescript) -- HIGH confidence. Official docs confirming `includePartialMessages`, `SDKPartialAssistantMessage`, `BetaRawMessageStreamEvent` types.
-- [Anthropic Streaming Messages API](https://docs.anthropic.com/en/api/messages-streaming) -- HIGH confidence. Official docs for `content_block_delta`, `text_delta`, `message_stop` event types.
-- [MDN Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events) -- HIGH confidence. SSE wire format specification.
-- [Express SSE patterns](https://masteringjs.io/tutorials/express/server-sent-events) -- MEDIUM confidence. Confirms Express 4 native SSE with `res.writeHead()` + `res.write()`.
-- [eventsource-parser on npm](https://www.npmjs.com/package/eventsource-parser) -- HIGH confidence. v3.0.6 confirmed, determined unnecessary for this use case.
-- [Agent SDK streaming vs single mode](https://platform.claude.com/docs/en/agent-sdk/streaming-vs-single-mode) -- HIGH confidence. Official docs on streaming input mode.
-- Existing codebase `agent-service.ts` -- HIGH confidence. Verified `query()` returns `AsyncIterable<SDKMessage>`, `collectResponse()` pattern.
+- Codebase `packages/server/src/import/import-service.ts` line 390 -- HIGH confidence. Verified `randomUUID` from `node:crypto` in use.
+- Codebase `packages/server/src/categories/category-service.ts` line 142 -- HIGH confidence. Verified `crypto.randomUUID()` pattern for ID generation.
+- Codebase `packages/server/src/db/migrate.ts` -- HIGH confidence. Verified migration runner reads numbered SQL files, applies transactionally, sets `user_version`.
+- Codebase `packages/server/migrations/001-initial-schema.sql` -- HIGH confidence. Verified `accounts` table schema: `id TEXT PRIMARY KEY`, `simplefin_id TEXT UNIQUE`, `balance INTEGER`, no `source` column (confirms migration needed).
+- Design doc `.planning/designs/2026-03-25-manual-accounts-csv-import-design.md` -- HIGH confidence. Authoritative spec for `manual_<uuid>` ID format, `source` column name/values, `recalculateBalance` function, sentinel `__create__` pattern.
+- [SQLite ALTER TABLE documentation](https://www.sqlite.org/lang_altertable.html) -- HIGH confidence. Confirms ADD COLUMN is safe without table rebuild when column has a DEFAULT value.
+- [Node.js crypto.randomUUID() docs](https://nodejs.org/api/crypto.html#cryptorandomuuidoptions) -- HIGH confidence. Available since Node 14.17.0; cryptographically random UUID v4.
 
 ---
-*Stack research for: Minerva Money v2.6 Streaming Chat*
-*Researched: 2026-03-24*
+*Stack research for: Minerva Money v2.7 Manual Accounts*
+*Researched: 2026-03-25*

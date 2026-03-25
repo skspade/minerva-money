@@ -1,230 +1,258 @@
-# Domain Pitfalls
+# Pitfalls Research
 
-**Domain:** Adding SSE streaming to an Express/React chat app with Claude Agent SDK
-**Researched:** 2026-03-24
+**Domain:** Manual account management + CSV import integration in an existing budgeting app with auto-sync
+**Researched:** 2026-03-25
+**Confidence:** HIGH (based on direct codebase analysis of existing service layer, schema, and sync pipeline)
+
+---
 
 ## Critical Pitfalls
 
-Mistakes that cause rewrites or major issues.
+### Pitfall 1: Sync Trigger Iterates All Accounts Including Manual Ones
 
-### Pitfall 1: Using EventSource API for POST Requests
+**What goes wrong:**
+The `sync.trigger` mutation (trpc-router.ts line 60-64) fetches ALL accounts from the DB and checks the rate limiter for every one. When manual accounts exist, their IDs will appear in this list. The rate limiter has no record of them (they've never been incremented), but they may fail `canManualSync()` depending on how the limiter handles unknown IDs. The real problem: SimpleFIN's `fetchAccounts()` returns only SimpleFIN accounts, so iterating manual accounts in the rate-limit check is incorrect and creates confusing error messages ("Rate limit: insufficient quota for accounts: My Mortgage").
 
-**What goes wrong:** The browser `EventSource` API only supports GET requests. The chat endpoint needs `message`, `sessionId`, and `model` in a request body. Attempting to use EventSource forces encoding all parameters in query strings, which is fragile, has URL length limits, and leaks conversation content into server logs.
-**Why it happens:** EventSource is the "obvious" SSE client API, but it was designed for subscription-style GET endpoints, not request-response patterns like chat.
-**Consequences:** Either you hack parameters into query strings or you abandon EventSource mid-implementation and rewrite the client.
-**Prevention:** Use `fetch()` with `ReadableStream` from the start. The pattern is: `fetch('/api/chat/stream', { method: 'POST', body: JSON.stringify(payload) })` then read from `response.body.getReader()` with a `TextDecoder`. Parse SSE format manually (split on `\n\n`, extract `data:` lines).
-**Detection:** If you find yourself building a GET endpoint for chat, stop -- you are on the wrong path.
-**Confidence:** HIGH -- EventSource GET-only limitation is a spec constraint (MDN, WHATWG spec).
+**Why it happens:**
+The sync infrastructure was built when all accounts were SimpleFIN accounts. The accounts list query has no filter. Adding manual accounts to the DB makes them visible to every code path that queries `FROM accounts` without a `WHERE source = 'simplefin'` filter.
 
-### Pitfall 2: Agent SDK Timeout Race Condition with Streaming
+**How to avoid:**
+In the `sync.trigger` mutation, filter the accounts list to SimpleFIN accounts before rate-limit checking: `WHERE source = 'simplefin'` (or `WHERE simplefin_id IS NOT NULL` as a safe fallback during the migration period). Apply the same filter anywhere the sync pipeline queries accounts.
 
-**What goes wrong:** The current `agent-service.ts` (lines 43-49) uses `Promise.race()` with a monolithic timeout (15s/30s/60s per model). With streaming, the first token may arrive within the timeout, but the full response takes much longer. If the timeout fires mid-stream, the server aborts the Agent SDK iterator while the client is still reading SSE events.
-**Why it happens:** The existing collect-and-return pattern treats the entire agent response as one unit. Streaming breaks this assumption -- the "response" is now a long-lived stream with tokens spread over the full duration.
-**Consequences:** Partial responses cut off abruptly. The client receives an error mid-sentence. The Agent SDK async iterator may not be properly cleaned up, leaking resources. Opus responses (which are slower) get cut off more frequently than Haiku responses.
-**Prevention:** Replace the monolithic timeout with two timeouts: (a) a **first-token timeout** (e.g., 15s) that fires if no events arrive at all, and (b) an **idle timeout** (e.g., 10s between events) that fires if the stream stalls mid-response. Reset the idle timeout on each received event. Do NOT use a total wall-clock timeout for streaming.
-**Detection:** Send a complex multi-tool query with Opus selected and observe whether it completes or gets truncated.
-**Confidence:** HIGH -- this is a direct consequence of the existing timeout architecture in `agent-service.ts`.
+**Warning signs:**
+- Manual sync returning rate-limit errors for accounts that were never synced
+- Sync log showing `accounts_synced` count that includes manual accounts
+- Rate limiter `increment()` being called with `manual_*` IDs
 
-### Pitfall 3: Memory Leak from Unclosed Server-Side Streams
+**Phase to address:**
+Schema migration phase (the phase that adds the `source` column). The filter must be added to the sync trigger in the same phase that introduces manual accounts to the DB, not in a later cleanup phase.
 
-**What goes wrong:** If the client disconnects (navigates away, closes tab, network drop) while the Agent SDK is still iterating, the server-side `for await` loop keeps running, consuming API tokens and memory. The response object is closed but the Agent SDK async iterator is not.
-**Why it happens:** Express does not automatically abort async iterators when the client disconnects. The `for await` loop on `query()` continues until the iterator completes or throws.
-**Consequences:** Wasted Anthropic API credits. Memory accumulates from orphaned iterators. Under repeated disconnects, the server process grows unbounded.
-**Prevention:** Listen for the `close` event on the Express request object:
-```typescript
-let aborted = false;
-req.on('close', () => { aborted = true; });
+---
 
-for await (const msg of queryStream) {
-  if (aborted) break;
-  // ... process message
-}
-```
-Additionally, call `.return()` on the async iterator after breaking to signal the Agent SDK to stop cleanly.
-**Detection:** Monitor server memory over time during development. Navigate away from ChatPage mid-response repeatedly and check if memory grows.
-**Confidence:** HIGH -- standard server-side streaming issue (Express #2248), directly applicable to the existing `collectResponse` pattern.
+### Pitfall 2: Balance Column Goes Stale for Manual Accounts
 
-### Pitfall 4: react-markdown Rendering Incomplete Markdown During Streaming
+**What goes wrong:**
+Manual account balance is computed from transaction sums (`recalculateBalance()`), but the `balance` column on the `accounts` table is the authoritative value read by the dashboard, net worth chart, and the `accounts.list` query. If `recalculateBalance()` is not called after every operation that adds transactions, the displayed balance diverges from reality. The net worth chart reads `balance_snapshots` which are populated from the `balance` column — so a stale balance column produces a permanently incorrect net worth history for that day.
 
-**What goes wrong:** `react-markdown` (currently used in ChatPage.tsx line 156) is designed for complete markdown documents. When fed partial streaming content, it produces visual artifacts: unclosed `**bold**` shows literal asterisks, partial code blocks show raw backticks, incomplete tables resize chaotically, and partial links show bracket soup.
-**Why it happens:** Markdown is context-sensitive -- `**` means bold only when the closing `**` arrives. During streaming, the closing delimiter has not arrived yet.
-**Consequences:** The UI looks broken and janky during streaming. Users see raw markdown syntax flickering until each element completes.
-**Prevention:** Two options:
-1. **Use `streamdown`** -- Vercel's drop-in replacement for react-markdown, purpose-built for streaming AI content. It auto-completes unclosed markdown syntax before rendering using the `remend` package. This is the recommended approach.
-2. **Add a markdown "healer" function** that detects and closes unclosed markdown elements before passing to react-markdown. This is more fragile and requires maintaining the healer logic.
-Both approaches should be combined with a stable container width to prevent layout shifts as table/code content streams in.
-**Detection:** Stream a response that includes a code block or table -- watch for visual jank as it renders incrementally.
-**Confidence:** HIGH -- documented issue (remarkjs/discussions#1262, remarkjs/discussions#1342, markedjs/marked#3657).
+**Why it happens:**
+The existing pattern for SimpleFIN accounts is that the sync upsert writes `balance` directly from the bank API — an external source of truth. For manual accounts there is no external source; the balance must be derived. Developers often implement `recalculateBalance()` after CSV import but forget that: (1) the scheduled snapshot job reads the current `balance` column — if import and the snapshot run in the wrong order on the same day, the snapshot captures the pre-import balance; (2) there is currently no "delete transaction" flow for manual accounts — if one is added later, balance recalculation must be wired there too.
 
-### Pitfall 5: Confirmation Flow Breaks During Streaming
+**How to avoid:**
+Call `recalculateBalance()` inside the same SQLite transaction as the operation that changes transactions. For CSV import, `recalculateBalance()` must be the last step inside `db.transaction()` in `executeImport()`, after all inserts. Consider also inserting a balance snapshot for the import date at the end of `executeImport()` rather than waiting for the scheduled snapshot job.
 
-**What goes wrong:** The current ChatPage has a confirmation flow for budget changes (lines 27-47). The `parseConfirmation()` regex looks for a JSON code block with `"type": "confirmation"`. During streaming, this JSON block arrives incrementally. The parser either fails to match the partial content or triggers prematurely on incomplete JSON.
-**Why it happens:** The `parseConfirmation()` regex runs against incomplete markdown. A partial JSON block like ````json\n{"type": "conf` matches nothing, but the regex is designed for complete content.
-**Consequences:** Confirmation buttons never appear (regex does not match partial content), or they flicker as the JSON block streams in.
-**Prevention:** Only run confirmation parsing on the **final complete message**, not on the streaming text. During streaming, display text as-is. When the `done` SSE event arrives, run `parseConfirmation()` on the full accumulated text and update the message in place. This is a clean separation: streaming = display text, done = parse structure.
-**Detection:** Test with a budget change request that triggers the confirmation flow while streaming is active.
-**Confidence:** HIGH -- directly derived from examining the existing `parseConfirmation()` implementation in ChatPage.tsx.
+**Warning signs:**
+- Dashboard shows balance 0 for a manual account that has imported transactions
+- Net worth chart shows no change on the day of a CSV import
+- `SELECT balance FROM accounts WHERE id = 'manual_...'` returns 0 after a successful import
 
-## Moderate Pitfalls
+**Phase to address:**
+The account CRUD service phase. The `recalculateBalance()` function must be defined there, and the import service must be updated in the same or immediately subsequent phase to call it.
 
-### Pitfall 6: Not Flushing Response Headers Immediately
+---
 
-**What goes wrong:** Node.js/Express may buffer response writes internally. Calling `res.write()` for each SSE event does not guarantee immediate delivery to the client. Without explicit header flushing, the client's fetch call may not resolve `response.body` until enough data accumulates.
-**Why it happens:** Node.js HTTP response streams have internal buffering. Without explicit flushing, small writes may be held.
-**Consequences:** Events arrive in unpredictable batches. Text appears to "jump" forward in chunks rather than streaming token-by-token. The client may hang waiting for the response to start.
-**Prevention:** Call `res.flushHeaders()` immediately after writing SSE headers:
-```typescript
-res.writeHead(200, {
-  'Content-Type': 'text/event-stream',
-  'Cache-Control': 'no-cache, no-transform',
-  'Connection': 'keep-alive',
-  'X-Accel-Buffering': 'no',
-});
-res.flushHeaders();
-```
-The `X-Accel-Buffering: no` header is forward-compatible if a reverse proxy is ever added. The `no-transform` directive also prevents any future compression middleware from buffering (the project does not currently use compression middleware).
-**Detection:** Text arrives in bursts of 5-10 tokens instead of individual tokens.
-**Confidence:** HIGH -- standard SSE implementation requirement.
+### Pitfall 3: Inline Account Creation Leaves Preview Stats Stale
 
-### Pitfall 7: Tool Execution Gaps Appear as Stream Freezes
+**What goes wrong:**
+The import wizard uses a stateless preview/execute pattern: the client sends the CSV text to `previewImport()` at step 2, which auto-suggests account matches against the current DB. If the user then creates a new account inline (still on step 2), the client has the new account ID from the `accounts.create` response — but the preview stats (dedup counts, sample rows, row counts by account) were computed before the account existed. The user sees "0 duplicates" for a second import of the same data to a newly-created account, even when duplicates exist.
 
-**What goes wrong:** The Agent SDK yields `content_block_start` with `tool_use` type, then the tool executes (potentially taking seconds for DB queries), then streaming resumes. During tool execution, no text events arrive. Without a tool activity indicator, the user sees the stream "freeze" and thinks it is broken.
-**Why it happens:** Tool execution is a server-side gap with no text output. It is easy to forget this is a visible UX gap that needs its own UI treatment.
-**Prevention:** Emit dedicated `tool-start` and `tool-end` SSE events when the Agent SDK yields `content_block_start` with type `tool_use` and when the corresponding content block stops. The client should display a tool activity indicator (e.g., "Looking up account balances...") using the tool name from `content_block.name`. The project spec already calls for this (PROJECT.md line 55).
-**Detection:** Ask a question that requires tool use (e.g., "What is my checking account balance?"). The stream should show the tool indicator, not just freeze.
-**Confidence:** HIGH -- directly informed by Agent SDK streaming docs showing the tool_use content block flow.
+**Why it happens:**
+The preview is a one-shot server call. The client patches `accountMappings` locally when a new account is created, which is correct for the execute step. But the dedup stats shown in the UI are the server's original preview response, which used `suggestedId: null` for that account (treating its rows as "new" by the conservative default in `previewImport()`). This is a safe failure mode in that no wrong data is written, but it creates a UX trust gap and can mask real duplicate problems.
 
-### Pitfall 8: State Update Storms from High-Frequency Token Deltas
+**How to avoid:**
+After inline account creation, re-run `previewImport()` with the updated mappings, or accept that the dedup stats shown may be conservative and add an explicit disclaimer in the UI ("Duplicate check not available for newly created accounts — will be enforced at import."). The execute step is always authoritative; the preview is advisory.
 
-**What goes wrong:** Each `text_delta` event from the Agent SDK triggers a React state update. With fast models (Haiku), tokens can arrive every 10-30ms. Even with React 18's automatic batching, the rendering cost of re-rendering the entire message list plus markdown parsing on every single token is significant.
-**Why it happens:** The streaming reader loop runs asynchronously. Each iteration appends text to state. Markdown parsing and DOM reconciliation on every token adds up.
-**Consequences:** UI becomes sluggish. Scroll jank. High CPU usage, especially on mobile devices.
-**Prevention:** Use `requestAnimationFrame` batching: accumulate text deltas in a `ref` and flush to state on each animation frame (~16ms intervals). This naturally throttles updates to 60fps:
-```typescript
-const bufferRef = useRef('');
-const rafRef = useRef<number>();
+**Warning signs:**
+- Dedup stats show "0 duplicates" for a second import of the same data to a newly-created account
+- The confirm page row count differs from what actually gets imported
 
-function appendText(chunk: string) {
-  bufferRef.current += chunk;
-  if (!rafRef.current) {
-    rafRef.current = requestAnimationFrame(() => {
-      setStreamingText(prev => prev + bufferRef.current);
-      bufferRef.current = '';
-      rafRef.current = undefined;
-    });
-  }
-}
-```
-This reduces re-renders by 80-95% while maintaining smooth visual streaming.
-**Detection:** Profile the ChatPage with React DevTools during a streaming response. If you see 100+ renders per second, you need batching.
-**Confidence:** HIGH -- well-documented React streaming performance pattern.
+**Phase to address:**
+The import wizard UI phase. Either add a "refresh preview" call after inline account creation, or add a disclaimer note to the preview stats for accounts created mid-wizard.
 
-### Pitfall 9: SSE Event Parsing Edge Cases with Chunk Boundaries
+---
 
-**What goes wrong:** When reading from `ReadableStream` via `TextDecoder`, chunk boundaries can split multi-byte UTF-8 characters or split SSE events mid-line. A naive parser that splits on `\n\n` may produce malformed events when a chunk boundary falls inside an event.
-**Why it happens:** Network chunks are arbitrary byte boundaries. A single SSE event like `data: Hello\n\n` may arrive as `data: Hel` in one chunk and `lo\n\n` in the next. Multi-byte characters (e.g., currency symbols) can split mid-byte.
-**Consequences:** Garbled text, missed events, or parser errors that silently drop tokens.
-**Prevention:** Use `TextDecoder` with `{ stream: true }` to handle multi-byte splitting. Maintain a line buffer across chunks -- only process complete lines (ending in `\n`). Hold incomplete lines until the next chunk arrives:
-```typescript
-const decoder = new TextDecoder();
-let buffer = '';
+### Pitfall 4: Cascade Delete Removes Budget-Relevant Transaction History
 
-// In the read loop:
-buffer += decoder.decode(chunk, { stream: true });
-const lines = buffer.split('\n');
-buffer = lines.pop() ?? '';  // Last element may be incomplete
-// Process complete lines...
-```
-**Detection:** Test with non-ASCII content. Also test by asking questions that produce long responses where chunk boundaries are more likely to fall mid-event.
-**Confidence:** HIGH -- fundamental streaming text parsing issue.
+**What goes wrong:**
+The schema uses `ON DELETE CASCADE` on `transactions.account_id`. Deleting a manual account deletes all its transactions. For a personal budgeting app, this destroys historical spending data — past budget periods can no longer show what was spent, and the net worth chart loses historical balance data points for that account.
 
-### Pitfall 10: Error Handling Mid-Stream (HTTP 200 Already Sent)
+**Why it happens:**
+Cascade delete is the correct choice for referential integrity. The pitfall is not the cascade itself — it's that `deleteAccount()` as described in the design does not require explicit confirmation at the service layer about what will be lost. If a `delete_account` agent tool is ever added, it could silently destroy months of transaction history without the user understanding the scope.
 
-**What goes wrong:** If the Agent SDK throws an error after streaming has started, the server has already sent SSE headers with status 200. It cannot change the HTTP status code. If the error is silently swallowed, the client sees an incomplete response with no indication of failure.
-**Why it happens:** HTTP status codes are set before the response body begins. SSE responses commit to 200 immediately. Errors during streaming (API rate limit, network failure to Anthropic, tool execution crash) cannot change the status code.
-**Consequences:** Silent data loss. The user sees a partial response and thinks it is complete.
-**Prevention:** Define an `error` SSE event type in the protocol. When the server catches an error during streaming, emit `event: error\ndata: {"message": "..."}\n\n` before closing the stream. The client must handle this event by displaying an error indicator on the partial message. The `done` event should include a status field so the client knows whether the stream completed successfully or was terminated by error.
-**Detection:** Simulate an API error mid-stream and verify the client shows an error state, not a truncated response.
-**Confidence:** HIGH -- fundamental SSE error handling pattern.
+**How to avoid:**
+The `deleteAccount()` service function should: (1) count the transactions that will be deleted and include that count in the return value, (2) expose this count via the tRPC mutation so the UI can show a warning ("This will permanently delete 847 transactions"), (3) never be exposed as an agent tool without a confirmation flow identical to the budget-change confirmation pattern already in the system. Add a `dryRun: true` option to `deleteAccount()` that returns the count without deleting.
 
-### Pitfall 11: Duplicate Message on Stream Completion
+**Warning signs:**
+- A "Delete Account" UI button with no transaction count in the confirmation dialog
+- `deleteAccount()` function that does not return the count of affected transactions before deleting
 
-**What goes wrong:** The Agent SDK yields both `stream_event` deltas (text chunks) AND a final `AssistantMessage` with the complete text after all stream events. If the server emits both the streamed deltas and then the complete text from AssistantMessage, the client receives the response content twice.
-**Why it happens:** The Agent SDK streaming docs show that `AssistantMessage` follows all `StreamEvent` messages for each turn. This is useful for collect-and-return but dangerous for streaming where the client has already accumulated the text.
-**Consequences:** The response appears duplicated in the chat, or the final message replaces the streamed one causing a visual flash.
-**Prevention:** On the server, only emit `text-delta` SSE events from `stream_event` messages. When the `AssistantMessage` arrives, do NOT emit its content. When the `ResultMessage` arrives, emit the `done` SSE event. The client has already accumulated the full text from deltas.
-**Detection:** Watch for a flash or duplication at the end of each streamed response.
-**Confidence:** HIGH -- directly from Agent SDK streaming docs showing that AssistantMessage follows StreamEvent messages.
+**Phase to address:**
+Account CRUD service phase. Build the safeguard into the service function itself, not as a UI-only concern.
 
-## Minor Pitfalls
+---
 
-### Pitfall 12: tRPC Route Conflict with Raw Express SSE Endpoint
+### Pitfall 5: Sync Upsert Can Overwrite Manual Account Data on ID Collision
 
-**What goes wrong:** The new SSE endpoint (`POST /api/chat/stream`) is a raw Express route, not a tRPC procedure. The current server setup (index.ts) mounts tRPC at `/trpc` then has a catch-all `app.get('*')` for SPA routing. If the SSE route is registered after the catch-all or static middleware, it could be shadowed.
-**Prevention:** Register the SSE route BEFORE the static file middleware and catch-all route in `index.ts`. The registration order should be: (1) health check, (2) JSON body parser, (3) tRPC middleware, (4) SSE streaming endpoint, (5) static files, (6) SPA catch-all. Since the SSE endpoint is POST and the catch-all is GET, there is no strict conflict, but maintaining correct order prevents future confusion.
-**Detection:** If the SSE endpoint returns HTML content or 404, check route registration order.
-**Confidence:** HIGH -- directly observed from index.ts route setup.
+**What goes wrong:**
+The sync upsert (sync-service.ts line 94-105) uses `INSERT INTO accounts ... ON CONFLICT(id) DO UPDATE SET name = ..., balance = ...`. The DO UPDATE clause has no guard on the `source` column. The design uses `manual_<uuid>` IDs which are collision-resistant, but the upsert would update any row whose `id` matches an incoming SimpleFIN account ID — including a manual account if an ID ever collided. More practically: the upsert also sets `simplefin_id = excluded.id` for every row it touches. A manual account correctly has `simplefin_id = NULL`. If a SimpleFIN account ID ever matched a manual account ID (essentially impossible with UUID, but not architecturally prevented), the manual account's `source` value and `simplefin_id` would be silently overwritten.
 
-### Pitfall 13: Auto-Scroll Fighting User During Streaming
+**Why it happens:**
+The sync upsert was written when all accounts came from SimpleFIN. The DO UPDATE clause does not check the current row's `source` value before updating.
 
-**What goes wrong:** The current ChatPage scrolls to bottom on message changes (lines 78-80). During streaming, content updates continuously. If `scrollIntoView` fires on every state update, it fights with the user trying to scroll up to read earlier messages.
-**Prevention:** Only auto-scroll if the user is already near the bottom. Track scroll position and set a "stick to bottom" flag. If the user scrolls up more than ~100px from bottom, stop auto-scrolling. Resume when they scroll back down.
-**Confidence:** MEDIUM -- UX concern, not a correctness bug. But very noticeable during streaming.
+**How to avoid:**
+Add `WHERE source = 'simplefin'` (or equivalently check that `simplefin_id IS NOT NULL`) to the upsert's DO UPDATE clause. This is cheap to add in the migration phase and makes the invariant architecturally enforced rather than relying on UUID collision-resistance.
 
-### Pitfall 14: Session ID Timing with Streaming
+**Warning signs:**
+- Manual account `source` value becomes `'simplefin'` after a sync
+- Manual account `simplefin_id` is no longer NULL after a sync
 
-**What goes wrong:** The Agent SDK's `session_id` arrives in the `system` init message at the very start of the stream. If the server does not extract and emit it as the first SSE event, the client cannot store it. If the user sends a second message before the first stream completes, there is no session ID to send, breaking conversation continuity.
-**Prevention:** Emit the session ID as the very first SSE event (`event: session\ndata: {"sessionId": "..."}\n\n`). The client hook must capture and store this before processing any text events. This aligns with the existing pattern in `collectResponse()` (agent-service.ts line 74) and the PROJECT.md spec (line 55: "session" event type).
-**Confidence:** HIGH -- directly from the existing session_id extraction pattern.
+**Phase to address:**
+Schema migration phase. Update the sync upsert's DO UPDATE clause at the same time the `source` column is added.
 
-### Pitfall 15: Keeping Both tRPC and SSE Paths Functional
+---
 
-**What goes wrong:** The PROJECT.md spec requires both tRPC mutation and SSE working during migration (line 60). If the SSE endpoint duplicates logic from the tRPC agent router without sharing the service layer, bug fixes and model validation changes must be applied in two places.
-**Prevention:** Extract shared logic (model validation, MCP server creation, system prompt loading) into `agent-service.ts`. The tRPC mutation calls existing `chat()` (collect-and-return). The SSE endpoint calls a new `chatStream()` that yields events. Both share the same service infrastructure. Do NOT copy-paste the agent setup code.
-**Confidence:** HIGH -- standard code reuse concern, verified against the existing architecture split between agent-router.ts and agent-service.ts.
+### Pitfall 6: `accounts.list` Query Missing `source` Column Breaks Downstream Features
 
-### Pitfall 16: Compression Middleware Added Later Breaks SSE
+**What goes wrong:**
+The existing `accounts.list` tRPC procedure (trpc-router.ts line 119-134) selects `id, name, institution, type, balance, last_synced` — no `source` column. After adding `source` to the schema, any code that needs to distinguish manual vs. synced accounts (dashboard visual badge, agent `list_accounts` tool, import wizard auto-suggest, sync trigger filter in the UI) must consume `source`. If the `accounts.list` query is not updated in the same phase as the migration, every downstream consumer silently receives objects without the field it needs, TypeScript types will not reflect the new column, and developers will add one-off queries in multiple places instead of using the canonical list procedure.
 
-**What goes wrong:** The project does not currently use Express compression middleware (verified by searching the codebase). But if compression is added in a future milestone, it will silently buffer and break SSE streaming.
-**Prevention:** Add a defensive comment on the SSE endpoint explaining that it is incompatible with global compression middleware. Set `Cache-Control: no-cache, no-transform` on SSE responses -- the `no-transform` directive causes compression middleware to skip the response automatically.
-**Confidence:** HIGH -- documented Express issue (expressjs/compression#17).
+**Why it happens:**
+Column added by migration, query not updated in the same phase. This is the classic "migration without query update" failure pattern — the DB has the data but the API does not expose it.
 
-## Phase-Specific Warnings
+**How to avoid:**
+Update `accounts.list` to include `source` in the same commit as the migration. Update the TypeScript return type. All downstream consumers (dashboard, agent tools, import wizard auto-suggest) will then have access without additional queries.
 
-| Phase Topic | Likely Pitfall | Mitigation |
-|-------------|---------------|------------|
-| SSE protocol definition | Over-engineering event types | Start with 6 event types from spec (session, text-delta, tool-start, tool-end, done, error). Do not add more until needed. |
-| Server SSE endpoint | Route registration order (Pitfall 12) | Register before static middleware and catch-all in index.ts |
-| Server SSE endpoint | Response header flushing (Pitfall 6) | Call `res.flushHeaders()` immediately after writing headers |
-| Server stream processing | Timeout architecture mismatch (Pitfall 2) | Replace monolithic timeout with first-token + idle timeouts |
-| Server stream processing | Client disconnect leak (Pitfall 3) | Listen for `req.on('close')` and break the Agent SDK iterator |
-| Server stream processing | Duplicate message (Pitfall 11) | Only emit text from stream_event, ignore AssistantMessage text |
-| Client stream consumer | EventSource API trap (Pitfall 1) | Use fetch + ReadableStream from day one, never EventSource |
-| Client stream consumer | SSE parse edge cases (Pitfall 9) | Use TextDecoder with `{ stream: true }`, maintain line buffer |
-| Client stream consumer | Mid-stream error handling (Pitfall 10) | Handle error SSE events, show error state on partial message |
-| Incremental text rendering | react-markdown partial content (Pitfall 4) | Evaluate streamdown or add markdown healer |
-| Incremental text rendering | State update storms (Pitfall 8) | Use requestAnimationFrame batching with ref buffer |
-| Incremental text rendering | Confirmation flow breakage (Pitfall 5) | Parse confirmations only on stream completion |
-| Incremental text rendering | Auto-scroll fighting (Pitfall 13) | Stick-to-bottom logic with scroll position tracking |
-| Tool activity indicators | Silent tool execution gaps (Pitfall 7) | Emit tool-start/tool-end SSE events, show indicator in UI |
-| Migration path | Code duplication (Pitfall 15) | Share service layer between tRPC and SSE endpoints |
-| Migration path | Session ID timing (Pitfall 14) | Emit session as first SSE event, client captures immediately |
+**Warning signs:**
+- Dashboard cannot show "Manual" badge because the list response has no `source` field
+- Agent `list_accounts` tool returns objects without a `source` field despite the DB having it
+- TypeScript type for the accounts list does not include `source`
+
+**Phase to address:**
+Schema migration phase. Treat the query update as part of the same atomic change as the migration SQL.
+
+---
+
+## Technical Debt Patterns
+
+Shortcuts that seem reasonable but create long-term problems.
+
+| Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
+|----------|-------------------|----------------|-----------------|
+| Skipping `recalculateBalance()` in tests | Faster test setup | Tests don't verify balance accuracy; balance bugs ship silently | Never — balance is core output |
+| Using `simplefin_id IS NOT NULL` as the source filter instead of `source` column | No migration needed | Fragile — assumes all SimpleFIN accounts have a non-null simplefin_id (currently true but not schema-enforced) | Only as a temporary fallback during the migration period |
+| Not re-running preview after inline account creation | Simpler UI code | Dedup stats are incorrect for newly-created accounts; misleads user on second import | Acceptable only if a disclaimer is shown in the preview |
+| Hard-coding `type = 'banking'` as the only option for manual accounts | Reduces form complexity | Investment account type is needed for net-worth-only balance display; adding it later requires UI change | Only if investment manual accounts are explicitly out of scope for this milestone |
+| Exposing account delete in the agent without a confirmation flow | Faster agent implementation | Can silently destroy months of transaction history | Never |
+
+---
+
+## Integration Gotchas
+
+Common mistakes when connecting the new feature to existing services.
+
+| Integration | Common Mistake | Correct Approach |
+|-------------|----------------|------------------|
+| SimpleFIN sync trigger | Querying all accounts for rate-limit check, including manual accounts | Filter to `WHERE source = 'simplefin'` before passing to rate limiter |
+| CSV import execute | Calling `recalculateBalance()` after the transaction instead of inside it | Call inside the same `db.transaction()` as the inserts |
+| Balance snapshots | Waiting for the scheduled snapshot job to capture post-import balance | Insert a `balance_snapshots` row for the import date at the end of `executeImport()` |
+| tRPC accounts router | Not adding `source` to `accounts.list` query after migration | Update the query and TypeScript types in the same phase as the migration |
+| Transfer detection on import | Adding a duplicate `detectTransferCandidates()` call to account creation flow | Transfer detection already runs inside `executeImport()` — no change needed at account creation time |
+| Dedup hash for manual accounts | Assuming `manual_` prefix in account ID breaks hash generation | `generateDedupHash()` takes `accountId` as an opaque string — the `manual_` prefix is irrelevant |
+| Agent `list_accounts` tool | Not including `source` field in tool response after schema migration | Update the query inside the tool helper to include `source` alongside the existing fields |
+
+---
+
+## Performance Traps
+
+Patterns that work at small scale but have hidden costs.
+
+| Trap | Symptoms | Prevention | When It Breaks |
+|------|----------|------------|----------------|
+| Full table scan in `recalculateBalance()` | Slow balance update for accounts with large transaction history | `SELECT SUM(amount) FROM transactions WHERE account_id = ?` is a single indexed scan — already has `idx_transactions_account_id` index | Not a real issue at personal finance scale (< 50k total transactions) |
+| Re-parsing the entire CSV on preview refresh after inline account creation | Slow step-2 interaction for large CSV files | Cache parsed rows client-side in component state; only re-run the dedup check portion | Only relevant for CSV files > 5MB — unlikely in practice |
+
+---
+
+## Security Mistakes
+
+Domain-specific security issues beyond general web security.
+
+| Mistake | Risk | Prevention |
+|---------|------|------------|
+| Allowing `updateAccount()` or `deleteAccount()` on SimpleFIN accounts via the tRPC API | User could delete a synced account; next sync would re-create it, but transaction history between deletion and re-sync is gone | Service functions must check `source = 'manual'` before any modification and throw a typed TRPCError |
+| Not sanitizing manual account name/institution in agent responses | Stored values appear in agent chat — if they contain prompt-injection sequences, they could influence agent behavior | The existing XML-wrapping pattern already handles transaction payee/memo fields; apply the same wrapping to account name and institution in the `create_account` and `list_accounts` tool responses |
+
+---
+
+## UX Pitfalls
+
+Common user experience mistakes in this domain.
+
+| Pitfall | User Impact | Better Approach |
+|---------|-------------|-----------------|
+| Showing "Last synced: never" for manual accounts | Confusing — manual accounts are never "synced" | Show "Last imported: {date}" using `last_synced` column (repurposed for import timestamp), or hide the field if no imports yet |
+| "Sync Now" button or sync status applies to manual accounts | User tries to sync a manual account and gets an error or silent no-op | Grey out or hide sync affordances for rows where `source = 'manual'` in the dashboard accounts list |
+| Import wizard showing "Create New Account" for every unmapped account without pre-filling the name | User must type the name manually even though it came from the CSV | Pre-fill the Name field from the CSV account name; leave Institution blank but auto-focused |
+| No transaction count in the delete confirmation dialog | User accidentally deletes an account with 2 years of imported history with no indication of scope | Show count in dialog: "This will permanently delete 847 transactions and cannot be undone." |
+| Preview stats unchanged after inline account creation | User does not realize the dedup check was not run for the newly-created account | Add a note: "Duplicate check not available for newly created accounts — will be enforced at import time." |
+
+---
+
+## "Looks Done But Isn't" Checklist
+
+Things that appear complete but are missing critical pieces.
+
+- [ ] **Balance recalculation:** `recalculateBalance()` is called inside the import transaction — verify with a test that queries `accounts.balance` after `executeImport()` and confirms it matches `SUM(transactions.amount)` for that account
+- [ ] **Sync isolation:** Rate-limit check in `sync.trigger` filters to `source = 'simplefin'` — verify by inserting a manual account and running sync, confirming no rate-limit error and `accounts_synced` excludes the manual account
+- [ ] **Source column in list query:** `accounts.list` tRPC response includes `source` field — verify by calling the endpoint and checking the TypeScript response shape
+- [ ] **Cascade delete protection:** `deleteAccount()` returns transaction count — verify the UI shows this count before confirming deletion
+- [ ] **Balance snapshot on import:** A `balance_snapshots` row is inserted for the import date at the end of `executeImport()` — verify the net worth chart reflects updated data on the day of import without waiting for the scheduled snapshot
+- [ ] **Manual accounts in dashboard:** Manual accounts appear in the accounts list with a "Manual" badge — verify the `source` field drives the badge and SimpleFIN accounts do not show it
+- [ ] **Agent list_accounts includes source:** Verify in a test that the tool output includes `"source": "manual"` for a manual account
+- [ ] **Sync button hidden for manual accounts:** Verify the UI hides or disables sync affordance for rows where `source = 'manual'`
+- [ ] **Type guard on CRUD mutations:** `update` and `delete` mutations reject attempts to modify SimpleFIN accounts — verify with a test that sends a SimpleFIN account ID to `accounts.update` and expects a TRPCError
+
+---
+
+## Recovery Strategies
+
+When pitfalls occur despite prevention, how to recover.
+
+| Pitfall | Recovery Cost | Recovery Steps |
+|---------|---------------|----------------|
+| Balance column stale for manual accounts | LOW | Run `recalculateBalance()` for all manual accounts as a one-time repair query; add the call to import going forward |
+| Sync trigger failing due to manual accounts in rate-limit check | LOW | Add `WHERE source = 'simplefin'` filter to the accounts query in the trigger; deploy |
+| Manual account deleted accidentally (no soft delete) | HIGH | Restore from iCloud Drive backup (SQLite .backup snapshots run every 6 hours); re-run CSV import if backup is older than the import |
+| Preview stats stale after inline account creation | LOW | Add "Refresh preview" button or disclaimer; execute step always re-checks dedup |
+| Balance snapshot missing for import day | LOW | Manually insert a `balance_snapshots` row for today via a one-off SQL query on the server |
+| Sync upsert overwrote manual account data | MEDIUM | Restore from iCloud backup; add the `WHERE source = 'simplefin'` guard to the upsert DO UPDATE clause |
+
+---
+
+## Pitfall-to-Phase Mapping
+
+How roadmap phases should address these pitfalls.
+
+| Pitfall | Prevention Phase | Verification |
+|---------|------------------|--------------|
+| Sync trigger iterates manual accounts | Schema migration phase (add `source` column + update sync trigger filter) | Test: insert manual account, trigger sync, confirm no rate-limit error and `accounts_synced` excludes it |
+| Balance column goes stale | Account CRUD service phase (define `recalculateBalance()`) + import service update phase | Test: call `executeImport()`, then query `accounts.balance` and compare to `SUM(transactions.amount)` |
+| Inline account creation leaves preview stats stale | Import wizard UI phase | Acceptance: add disclaimer note; test confirms execute produces correct imported count regardless |
+| Cascade delete destroys history | Account CRUD service phase (add `dryRun` option + return count) | Test: `deleteAccount({ id, dryRun: true })` returns correct count; UI shows count in confirmation |
+| Sync upsert overwrites manual account | Schema migration phase (update DO UPDATE clause) | Test: sync with a manual account present, confirm `source` column unchanged after sync |
+| `accounts.list` missing `source` | Schema migration phase (update query in same commit) | Test: `accounts.list` response includes `source` field with value `"manual"` or `"simplefin"` |
+
+---
 
 ## Sources
 
-- [Claude Agent SDK Streaming Output Docs](https://platform.claude.com/docs/en/agent-sdk/streaming-output) -- HIGH confidence, official docs on `includePartialMessages`, `StreamEvent` types, message flow, and known limitations
-- [MDN: Using Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events) -- HIGH confidence, EventSource GET-only limitation
-- [expressjs/compression#17](https://github.com/expressjs/compression/issues/17) -- HIGH confidence, SSE incompatibility with compression middleware
-- [remarkjs Discussion #1262](https://github.com/orgs/remarkjs/discussions/1262) -- HIGH confidence, streaming markdown rendering issues in Safari
-- [remarkjs Discussion #1342](https://github.com/orgs/remarkjs/discussions/1342) -- HIGH confidence, react-markdown with streaming AI responses
-- [Vercel Streamdown](https://github.com/vercel/streamdown) -- MEDIUM confidence, drop-in react-markdown replacement for streaming
-- [SitePoint: Streaming Backends and React Re-render Chaos](https://www.sitepoint.com/streaming-backends-react-controlling-re-render-chaos/) -- MEDIUM confidence, requestAnimationFrame batching pattern
-- [Express #2248: Memory Leak with EventSource Stream](https://github.com/expressjs/express/issues/2248) -- HIGH confidence, server-side stream cleanup
-- [SSE POST via Fetch ReadableStream](https://medium.com/@david.richards.tech/sse-server-sent-events-using-a-post-request-without-eventsource-1c0bd6f14425) -- MEDIUM confidence, fetch-based SSE client pattern
-- Direct code analysis: `packages/server/src/agent/agent-service.ts` -- timeout architecture (lines 43-49), session extraction (line 74), collect-and-return pattern
-- Direct code analysis: `packages/client/src/pages/ChatPage.tsx` -- react-markdown usage (line 156), confirmation parsing (lines 27-47), auto-scroll (lines 78-80)
-- Direct code analysis: `packages/server/src/index.ts` -- route registration order, no compression middleware
+- Direct codebase analysis: `packages/server/migrations/001-initial-schema.sql` — schema structure, ON DELETE CASCADE rules, account ID format, `simplefin_id` UNIQUE constraint
+- Direct codebase analysis: `packages/server/src/sync/sync-service.ts` — upsert pattern (lines 94-105), how `simplefin_id` is set, balance update, balance snapshot insertion
+- Direct codebase analysis: `packages/server/src/sync/trpc-router.ts` — rate-limit check queries all accounts (lines 60-64), `accounts.list` column selection (lines 119-134)
+- Direct codebase analysis: `packages/server/src/import/import-service.ts` — stateless preview/execute pattern, dedup hash computation, post-import hooks (categorize + transfer detect), account auto-match logic
+- Direct codebase analysis: `packages/server/src/reports/reports-service.ts` — net worth chart reads `balance_snapshots`, which reads the `balance` column
+- Direct codebase analysis: `packages/server/src/sync/rate-limiter.ts` — rate limiter behavior for unknown account IDs
+- Design document: `.planning/designs/2026-03-25-manual-accounts-csv-import-design.md` — `manual_<uuid>` ID convention, `recalculateBalance()` placement, `last_synced` column reuse, `source = 'manual'` guard on mutations
 
 ---
-*Pitfalls research for: SSE streaming chat (v2.6)*
-*Researched: 2026-03-24*
+*Pitfalls research for: Manual account management + CSV import integration in budgeting app with auto-sync (v2.7)*
+*Researched: 2026-03-25*

@@ -1,175 +1,164 @@
-# Feature Landscape: Streaming Chat Responses
+# Feature Research
 
-**Domain:** AI chat streaming for personal finance assistant
-**Researched:** 2026-03-24
-**Confidence:** HIGH (verified against Claude Agent SDK official docs and established SSE patterns)
+**Domain:** Manual account management + CSV import integration for personal budgeting app
+**Researched:** 2026-03-25
+**Confidence:** HIGH (design doc is authoritative; web research confirms patterns match industry standard)
 
-## Table Stakes
+## Context
 
-Features users expect from a streaming AI chat interface. Missing = the chat feels broken or outdated compared to ChatGPT/Claude.ai.
+This is a subsequent milestone research file for v2.7. The features below describe ONLY what is new:
+manual accounts and CSV import integration. Existing features (SimpleFIN sync, envelope budgeting,
+categorization rules, transfer detection, agent, streaming chat) are fully shipped and out of scope.
 
-| Feature | Why Expected | Complexity | Depends On |
-|---------|--------------|------------|------------|
-| Token-by-token text streaming | ChatGPT normalized this; a 15-60s blank wait feels broken | Med | SSE endpoint, Agent SDK `includePartialMessages: true` |
-| Incremental markdown rendering | Text must render as markdown while streaming, not raw text then sudden format | Low | Existing `react-markdown` + accumulating text state |
-| Tool activity indicator | Users need to know the agent is working, not stalled, when tools execute silently | Low | `content_block_start` / `content_block_stop` events from SDK |
-| Auto-scroll during streaming | New tokens must keep the latest text visible without manual scrolling | Low | Scroll anchor at bottom of message list |
-| Smart scroll pause on user scroll-up | If user scrolls up to read earlier messages, stop auto-scrolling until they return to bottom | Med | `isAtBottom` state derived from scroll position |
-| Error display mid-stream | If the stream fails partway, show what was received plus an error indicator | Low | SSE `error` event type, client error state |
-| Input disabled during streaming | Prevent sending new messages while a response streams | Low | Existing pattern (already done with `chatMutation.isPending`) |
-| Session continuity | Streaming must preserve the sessionId flow for multi-turn conversations | Low | Already implemented; pass sessionId through SSE endpoint |
-| Graceful degradation to non-streaming | If SSE connection fails to establish, fall back to existing tRPC collect-and-return | Med | Keep existing tRPC mutation alongside new SSE path |
+---
 
-## Differentiators
+## Feature Landscape
 
-Features that go beyond baseline. Not required for v2.6 but worth noting.
+### Table Stakes (Users Expect These)
+
+Features users assume exist in a manual account feature set. Missing these makes the feature feel
+half-baked or creates data integrity problems.
+
+| Feature | Why Expected | Complexity | Notes |
+|---------|--------------|------------|-------|
+| Create manual account (name, institution, type) | Without this the entire feature doesn't exist. Monarch Money and YNAB both support this. | LOW | `manual_<uuid>` ID prefix avoids SimpleFIN ID collisions. Type defaults to `'banking'`. |
+| Edit manual account metadata | Users make typos; institutions rename. | LOW | Name, institution, type only. Editing SimpleFIN accounts is explicitly blocked — their data comes from sync. |
+| Delete manual account with cascade cleanup | Users want a clean undo. Missing cascade = orphaned budget allocations and splits. | MEDIUM | Must delete transactions, splits, budget allocations referencing those transactions atomically. Requires destructive-action confirmation dialog in UI. |
+| Balance computed from transaction sums | Manual accounts have no external balance source; transactions ARE the source of truth. Standard pattern across Goodbudget and Monarch manual accounts. | LOW | `recalculateBalance()` called after each CSV import. No manual balance entry field needed. |
+| Visual distinction from synced accounts | Users need to know which accounts are manual vs auto-synced. No "Last synced" timestamp should appear for manual accounts or users will think sync is broken. | LOW | "Manual" badge or label next to account name. "Last imported: {date}" instead of sync timestamp. No Sync Now button shown. |
+| Source column in DB schema | All downstream features (reports, agent, dashboard, service guards) need to distinguish manual vs synced. | LOW | Migration: `ALTER TABLE accounts ADD COLUMN source TEXT NOT NULL DEFAULT 'simplefin'`. One-way, backward-compatible. |
+| Manual accounts in dashboard and net worth | Users expect all accounts in one place. Invisible accounts break the net worth picture. | LOW | No new query logic needed — dashboard already reads `balance` column, balance snapshots already work against the column. |
+| Manual account transactions in reports | Category spending, spending over time, and net worth reports must include manual transactions or the data picture is wrong. | LOW | No new query logic needed — reports already query all transactions. Manual transactions go through the same pipeline. |
+
+### Differentiators (Competitive Advantage)
+
+Features that go beyond the baseline and make manual accounts feel integrated rather than bolted on.
 
 | Feature | Value Proposition | Complexity | Notes |
 |---------|-------------------|------------|-------|
-| Human-readable tool name display | Shows "Looking up transactions..." instead of generic spinner -- builds trust | Low | Map MCP tool names to labels (e.g., `get_transactions` -> "Looking up transactions") |
-| Multi-tool progress chain | Show sequential tool calls as compact activity log ("Checked balances -> Found transactions -> Calculated") | Med | Track array of tool events, render as collapsible list below message |
-| Stop/cancel generation button | Let user abort a long streaming response mid-generation | High | Requires AbortController integration with Agent SDK, partial state handling |
-| Streaming confirmation blocks | Parse confirmation JSON from partial stream and show buttons before stream completes | High | Fragmented JSON during streaming makes this very fragile; defer to post-stream |
-| Typing speed normalization | Buffer tokens and release at consistent visual speed to avoid jerky fast/slow bursts | Med | requestAnimationFrame batching; not necessary in practice |
-| Reconnection with resume | If SSE drops mid-stream, reconnect and resume from last event | High | Requires server-side event buffering, Last-Event-ID tracking |
+| Inline account creation during CSV import wizard | Users hit "no account exists yet" at exactly the moment they're mapping. Forcing them to leave the wizard, create the account, and return breaks flow. Monarch Money supports account creation during import. | MEDIUM | "+" option at top of mapping dropdown triggers inline form. Client calls `accounts.create` mutation, gets back new ID, auto-selects it in the dropdown. No wizard step changes needed. |
+| Post-import balance recalculation (automatic) | Without this, manual account balances are stale after every import. Users should not need to trigger a separate recalculate action. | LOW | `executeImport()` calls `recalculateBalance()` for each manual account that received transactions. Transparent to user. |
+| Agent `create_account` tool | Power users can create accounts via chat ("Create a manual account for Freedom Mortgage as a loan"). Consistent with existing add-only agent safety pattern (category creation already works this way). | LOW | Wraps `accounts.create()`. Requires confirmation flow matching budget change pattern. System prompt guides agent to ask for institution name before creating. |
+| `source` field exposed in `list_accounts` agent tool | Agent can answer "which of my accounts are manual vs synced?" and provide useful context about data freshness. | LOW | One-field addition to existing query tool response. No new tool needed. |
+| Transfer detection across manual and synced accounts | A mortgage payment as a bank debit is a transfer to the loan account. Manual accounts should participate in the same transfer detection logic as synced ones. | LOW | No new code — `detectTransferCandidates` already operates on all transactions by account + amount + date. Works automatically once manual account transactions exist. |
 
-## Anti-Features
+### Anti-Features (Commonly Requested, Often Problematic)
 
-Features to explicitly NOT build for this milestone.
+| Feature | Why Requested | Why Problematic | Alternative |
+|---------|---------------|-----------------|-------------|
+| Manual balance entry (override computed balance) | "I want to set the starting balance without importing transactions" | Creates balance drift — computed vs manually entered balances diverge on every import. Two sources of truth break net worth accuracy and make recalculate logic unreliable. | Import a CSV with a single opening-balance transaction. Document this pattern in the UI tooltip or help text. |
+| Edit or delete SimpleFIN accounts | "I want to rename a synced account or hide one I don't use" | SimpleFIN re-creates accounts on next sync. Deletions reappear. Renames are overwritten. This creates confusion and silent data loss. | Restrict CRUD to `source = 'manual'` only at the service layer. Synced accounts are read-only by design. |
+| Import CSV to a synced account | "I want to backfill history for a bank I already have connected" | Duplicate risk is elevated: transactions already synced via SimpleFIN collide with imported ones. Dedup hash helps but date+amount+payee ambiguity causes edge cases that are hard to diagnose. | The app already allows importing to existing accounts — this works. Do not add UI language suggesting it is risk-free. Keep current behavior (dedup prevents exact duplicates) without special promotion. |
+| Bulk CSV re-import in replace mode | "I want to re-import and overwrite everything" | Destroys manual categorizations and rule-applied categories. Hard to undo. Dedup already makes additive re-import safe and idempotent. | Dedup makes re-import additive and safe by default. Communicate this to the user instead of offering a destructive replace path. |
+| Manual account type beyond banking | "I want a manual investment account" | Investment account balances are tracked as balance-only (not summed from transactions). The computed-from-transactions model does not apply to investments and the design would require branching logic throughout the service. Scope explosion. | Restrict manual account type to `'banking'` for this milestone. Investment accounts come from SimpleFIN only. |
 
-| Anti-Feature | Why Avoid | What to Do Instead |
-|--------------|-----------|-------------------|
-| WebSocket transport | Overkill for unidirectional server-to-client streaming; SSE is simpler, works over HTTP, auto-reconnects natively | Use SSE (`text/event-stream`) -- industry standard for LLM streaming |
-| `EventSource` API on client | Cannot send POST body (need message + sessionId + model); requires GET with query params which leaks data in URLs and server logs | Use `fetch()` with `ReadableStream` for POST-based SSE |
-| Client-side token buffering/debouncing | Adds complexity, makes responses feel artificially slow, solves a non-problem | Render tokens as they arrive; browsers handle rapid DOM updates fine |
-| Extended thinking with streaming | Claude Agent SDK explicitly does NOT emit StreamEvents when `maxThinkingTokens` is set -- incompatible | Do not enable extended thinking if streaming is on |
-| Structured output streaming | JSON result only appears in final `ResultMessage`, not as deltas per SDK docs | Parse confirmation blocks from completed messages only (existing pattern) |
-| Persistent stream history/replay | Not needed for single-user app; session continuity handles multi-turn | Keep in-memory message state as-is |
-| Server-Sent Events `id` field / `Last-Event-ID` resumption | Over-engineered for local network single-user; connection drops are rare | On failure, show error with partial text and let user retry |
-| Streaming the tool input JSON to the user | Agent SDK streams `input_json_delta` for tool arguments; showing raw JSON to users is useless | Only show tool name and running/done status |
+---
 
 ## Feature Dependencies
 
 ```
-SSE event protocol definition (types/contract)
-  -> Server SSE endpoint (POST /api/chat/stream)
-    -> Server stream processing (Agent SDK includePartialMessages: true)
-      -> Client stream consumer hook (useStreamingChat)
-        -> Incremental text rendering in ChatPage
-        -> Tool activity indicators in ChatPage
-        -> Smart auto-scroll behavior
+[DB migration: source column]
+    └──required by──> [Account CRUD service (createAccount, updateAccount, deleteAccount, recalculateBalance)]
+                          └──required by──> [tRPC mutations: accounts.create, accounts.update, accounts.delete]
+                                                ├──required by──> [Inline account creation in ImportPage dropdown]
+                                                └──required by──> [Agent create_account tool]
 
-Existing tRPC mutation (keep unchanged as fallback)
-  -> Graceful degradation (try SSE first, fall back to tRPC on failure)
+[Account CRUD service: recalculateBalance()]
+    └──required by──> [Post-import balance recalculation inside executeImport()]
 
-Post-stream confirmation parsing (existing parseConfirmation)
-  -> Triggered by SSE 'done' event carrying full response text
+[tRPC accounts.create mutation]
+    └──required by──> [Inline creation flow in ImportPage Step 2]
+                          └──enhances──> [Existing 3-step import wizard — no step count changes needed]
+
+[source column returned in accounts.list response]
+    └──required by──> [Visual distinction on AccountsPage (Manual badge, Last imported label)]
+    └──enhances──> [Agent list_accounts query tool (add source field to output)]
 ```
 
 ### Dependency Notes
 
-- **SSE protocol must be defined first** because both server and client depend on the event type contract
-- **Server endpoint before client hook** because the client needs a real endpoint to consume
-- **Text rendering before tool indicators** because tool indicators overlay the streaming flow
-- **Auto-scroll is independent** of streaming implementation but must be wired after text rendering works
-- **Fallback path requires zero new work** -- existing tRPC mutation already works; just need a toggle in `useStreamingChat` to detect SSE failure and fall through
-- **Confirmation flow is unchanged** -- `parseConfirmation()` runs on the completed response text delivered by the `done` SSE event, same as today's `onSuccess` callback
+- **DB migration must be first.** Every other feature reads or writes the `source` column. The migration runs before any service code is wired up.
+- **Account CRUD service before tRPC.** Service functions are the contract; the tRPC router wraps them. Consistent with every other module in this codebase (categories, rules, budget, etc.).
+- **`accounts.create` tRPC mutation before inline import creation.** ImportPage calls the mutation, receives the new account ID, and injects it into `accountMappings`. The wizard itself does not change step structure.
+- **Post-import recalculation is internal to `executeImport`.** No client change needed. It is a transparent side effect triggered inside the existing execute path.
+- **Agent tool depends on service, not tRPC.** Consistent with existing action tools (action-tools.ts calls service functions directly, not through tRPC).
+- **Visual distinction on AccountsPage depends on `source` being in the `accounts.list` response.** The tRPC router already returns the full account row; adding `source` to the returned shape is the only change needed.
 
-## MVP Recommendation
+---
 
-### Must Have (v2.6 scope)
+## MVP Definition
 
-1. **SSE event protocol** -- typed event contract shared between server and client:
+### Launch With (v2.7)
 
-   | Event | Data | When |
-   |-------|------|------|
-   | `session` | `{ sessionId: string }` | SDK system/init message |
-   | `text-delta` | `{ text: string }` | `content_block_delta` with `text_delta` |
-   | `tool-start` | `{ tool: string }` | `content_block_start` with `tool_use` type |
-   | `tool-end` | `{ tool: string }` | `content_block_stop` after tool block |
-   | `done` | `{ response: string }` | SDK `result` message; full text for confirmation parsing |
-   | `error` | `{ message: string }` | Any error; includes partial text if available |
+All items confirmed in `.planning/designs/2026-03-25-manual-accounts-csv-import-design.md`.
 
-2. **Server SSE endpoint** -- `POST /api/chat/stream` on Express (not tRPC; tRPC does not natively support SSE). Validates input with Zod, sets SSE headers (`Content-Type: text/event-stream`, `Cache-Control: no-cache`, `Connection: keep-alive`), iterates Agent SDK async iterable with `includePartialMessages: true`, maps SDK events to SSE events.
+- [ ] DB migration: `source` column with `'simplefin'` default on existing rows
+- [ ] `accounts-service.ts`: createAccount, updateAccount, deleteAccount, recalculateBalance
+- [ ] tRPC mutations: `accounts.create`, `accounts.update`, `accounts.delete` (added to existing accountsRouter)
+- [ ] `executeImport()` calls `recalculateBalance()` for each manual account that received transactions
+- [ ] ImportPage Step 2: "+" option in account mapping dropdown, inline creation form (name pre-filled, institution input, type dropdown), auto-selects newly created account
+- [ ] AccountsPage: "Manual" badge, "Last imported" label for manual accounts, no Sync Now button shown for manual accounts
+- [ ] `accounts.list` tRPC response includes `source` field
+- [ ] Agent `create_account` tool with confirmation flow
+- [ ] Agent `list_accounts` tool response includes `source` field
+- [ ] System prompt update: guidance that agent can create manual accounts for institutions not in SimpleFIN
 
-3. **Client stream hook** -- `useStreamingChat` using `fetch()` + `ReadableStream` + `TextDecoderStream` to consume SSE from POST endpoint. Manages streaming state (idle/streaming/error), accumulates text deltas, tracks active tools.
+### Add After Validation (future milestone)
 
-4. **Incremental text rendering** -- Accumulate `text-delta` events into growing string, feed to existing `react-markdown` + `remarkGfm`. Message bubble appears immediately on first token.
+- [ ] Opening balance transaction pattern documented in UI help text — trigger: user asks how to set a starting balance without CSV data
+- [ ] AccountsPage edit/rename/delete actions for manual accounts in the UI (currently CRUD is agent + tRPC only) — trigger: user wants to modify without going through agent
 
-5. **Tool activity indicator** -- On `tool-start`: show compact indicator below streaming text (e.g., spinner + "Looking up transactions..."). On `tool-end`: mark as complete. Simple implementation -- not a collapsible log.
+### Future Consideration (v3+)
 
-6. **Smart auto-scroll** -- Track `isAtBottom` via scroll event listener. Auto-scroll on new tokens only when user is at bottom. When user scrolls up, pause auto-scroll. Optionally show "scroll to bottom" button.
+- [ ] Multiple CSV format support beyond Monarch (OFX, QFX, bank-specific CSV) — depends on whether SimpleFIN coverage gaps justify the parsing investment
+- [ ] Manual account type expansion to HELOC or loan (balance = negative sum of transactions) — depends on Freedom Mortgage use case maturing beyond current out-of-scope status
 
-7. **Graceful degradation** -- Primary path: SSE streaming. If `fetch` fails to establish SSE connection (network error, non-200 response), fall back to existing `agent.chat` tRPC mutation transparently.
+---
 
-### Defer to Future
+## Feature Prioritization Matrix
 
-- **Stop/cancel button**: AbortController + Agent SDK abort adds complexity; low value for single-user with fast local network
-- **Multi-tool collapsible log**: Simple "Using [tool]..." indicator is sufficient for v2.6
-- **Reconnection with resume**: Over-engineered for local network; retry on failure is fine
-- **Streaming confirmation parsing**: Too fragile with partial JSON; parse from completed message
+| Feature | User Value | Implementation Cost | Priority |
+|---------|------------|---------------------|----------|
+| DB schema migration (source column) | HIGH | LOW | P1 |
+| Account CRUD service | HIGH | LOW | P1 |
+| tRPC create/update/delete mutations | HIGH | LOW | P1 |
+| Post-import balance recalculation | HIGH | LOW | P1 |
+| Inline account creation in import wizard | HIGH | MEDIUM | P1 |
+| source field in accounts.list response | HIGH | LOW | P1 |
+| Visual distinction on AccountsPage | MEDIUM | LOW | P1 |
+| Agent create_account tool | MEDIUM | LOW | P1 |
+| source field in agent list_accounts response | LOW | LOW | P1 |
+| AccountsPage edit/delete UI for manual accounts | MEDIUM | LOW | P2 |
+| Opening balance UI guidance | LOW | LOW | P2 |
 
-## Existing Assets to Leverage
+---
 
-| Existing | Reuse Strategy |
-|----------|---------------|
-| `ChatPage.tsx` message rendering | Add streaming message type (`role: 'streaming'`) alongside existing types |
-| `react-markdown` + `remarkGfm` | Same renderer, fed incrementally growing text string |
-| `parseConfirmation()` | Run on completed message text from `done` event |
-| `chatMutation` (tRPC) | Keep as fallback; `useStreamingChat` is primary path |
-| `messagesEndRef` scroll anchor | Enhance with `isAtBottom` detection for smart scroll |
-| Agent SDK `query()` async iterable | Already used in `collectResponse()`; add `includePartialMessages: true` |
-| `models.ts` / model selector | Pass selected model through SSE endpoint identically |
-| Confirmation flow (Confirm/Cancel) | Unchanged; triggered after stream `done` event |
-| Express `app` instance | Add SSE route directly; already serves health check and static files |
+## Competitor Feature Analysis
 
-## Agent SDK Streaming Details (from official docs)
+| Feature | Monarch Money | YNAB | Minerva v2.7 |
+|---------|--------------|------|--------------|
+| Manual account creation | Yes — "+ Add Account" flow, separate from import | Yes — Add Account first, then import file to it | Inline during CSV import AND standalone via tRPC mutation and agent tool |
+| Account creation during import | Yes — can create or select account while mapping CSV | No — must create account first, then import separately | Yes — "+" option at top of mapping dropdown, no wizard step change |
+| Balance source for manual accounts | User sets balance manually OR imports transactions | User sets opening balance, transactions update it | Computed entirely from transaction sums; no manual entry field |
+| Visual distinction from synced accounts | "Manual" label on account tiles | Account list shows connection status indicator | "Manual" badge + "Last imported" instead of sync timestamp |
+| Delete manual account | Yes, with data removal | Yes | Yes — cascade deletes transactions and related data atomically |
+| Restrict edits to synced accounts | Yes — synced accounts are read-only | Yes | Yes — service enforces `source = 'manual'` check before allowing mutation |
+| Agent-based account creation | No | No | Yes — `create_account` tool with confirmation flow |
 
-The Claude Agent SDK's `query()` returns an `AsyncIterable<SDKMessage>`. With `includePartialMessages: true`, it yields `stream_event` messages containing raw Claude API streaming events. The message flow is:
-
-```
-StreamEvent (message_start)
-StreamEvent (content_block_start) -- text block
-StreamEvent (content_block_delta) -- text chunks (accumulate these)
-StreamEvent (content_block_stop)
-StreamEvent (content_block_start) -- tool_use block (tool name here)
-StreamEvent (content_block_delta) -- tool input JSON chunks (ignore for UI)
-StreamEvent (content_block_stop)  -- tool execution begins
-StreamEvent (message_delta)
-StreamEvent (message_stop)
-AssistantMessage -- complete message with all content
-... tool executes ...
-... more streaming events for next turn ...
-ResultMessage -- final result (extract full text here)
-```
-
-TypeScript type for stream events:
-```typescript
-type SDKPartialAssistantMessage = {
-  type: "stream_event";
-  event: RawMessageStreamEvent; // from @anthropic-ai/sdk
-  parent_tool_use_id: string | null;
-  uuid: string;
-  session_id: string;
-};
-```
-
-Key event types to handle:
-- `event.type === "content_block_start"` + `event.content_block.type === "tool_use"` -> tool-start
-- `event.type === "content_block_delta"` + `event.delta.type === "text_delta"` -> text-delta
-- `event.type === "content_block_stop"` (when in tool) -> tool-end
-- `message.type === "system"` with `subtype === "init"` -> session ID
-- `message.type === "result"` with `subtype === "success"` -> done with full text
-
-**Known limitation**: Streaming is incompatible with `maxThinkingTokens`. Do not enable extended thinking.
+---
 
 ## Sources
 
-- [Claude Agent SDK - Stream responses in real-time](https://platform.claude.com/docs/en/agent-sdk/streaming-output) -- HIGH confidence, official docs, verified TypeScript types and event flow
-- [Claude Agent SDK - TypeScript reference](https://platform.claude.com/docs/en/agent-sdk/typescript) -- HIGH confidence, official docs
-- [MDN - Using Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events) -- HIGH confidence, official docs
-- [Streaming AI with SSE - Technical Case Study](https://akanuragkumar.medium.com/streaming-ai-agents-responses-with-server-sent-events-sse-a-technical-case-study-f3ac855d0755) -- MEDIUM confidence
-- [SSE Backbone of LLMs 2025/2026](https://procedure.tech/blogs/the-streaming-backbone-of-llms-why-server-sent-events-(sse)-still-wins-in-2025) -- MEDIUM confidence
-- [AI UI Patterns - patterns.dev](https://www.patterns.dev/react/ai-ui-patterns/) -- MEDIUM confidence
-- [Intuitive Scrolling for Chatbot Streaming](https://tuffstuff9.hashnode.dev/intuitive-scrolling-for-chatbot-message-streaming) -- MEDIUM confidence
-- [SSE Deep Dive - Agent Factory](https://agentfactory.panaversity.org/docs/TypeScript-Language-Realtime-Interaction/async-patterns-streaming/server-sent-events-deep-dive) -- MEDIUM confidence
+- `.planning/designs/2026-03-25-manual-accounts-csv-import-design.md` — authoritative design spec (HIGH confidence)
+- `.planning/PROJECT.md` — existing feature inventory, constraints, key decisions (HIGH confidence)
+- `packages/client/src/pages/ImportPage.tsx` — existing import wizard code, account mapping flow (HIGH confidence)
+- `packages/server/src/import/import-router.ts` and `import-service.ts` — existing import API contract (HIGH confidence)
+- `packages/server/src/agent/tools/action-tools.ts` — existing agent tool patterns (HIGH confidence)
+- [Monarch Money CSV import help](https://help.monarch.com/hc/en-us/articles/4409682789908-Import-Transaction-Data-Manually-from-Banks-or-Other-Finance-Apps) — competitor pattern reference; page 403 on fetch but search result summary confirms account creation during import is supported (MEDIUM confidence)
+- [Monarch Money CSV import announcement](https://www.monarch.com/whats-new/tags-csv-import) — confirms assign-or-create-account pattern during import (MEDIUM confidence)
+- [YNAB file-based import](https://support.ynab.com/en_us/file-based-import-a-guide-Bkj4Sszyo) — competitor pattern reference; page not accessible but YNAB's create-account-first pattern is well known (MEDIUM confidence)
+- Web search: budgeting app manual account UX patterns 2025 — general UX validation (LOW confidence, used for corroboration only)
+
+---
+*Feature research for: Minerva Money v2.7 Manual Accounts + CSV Import Integration*
+*Researched: 2026-03-25*

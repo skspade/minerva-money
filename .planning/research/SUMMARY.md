@@ -1,183 +1,189 @@
 # Project Research Summary
 
-**Project:** Minerva Money v2.6 — Streaming Chat (SSE)
-**Domain:** SSE streaming integration for LLM chat in Express + React monorepo
-**Researched:** 2026-03-24
+**Project:** Minerva Money v2.7 — Manual Accounts & CSV Import Integration
+**Domain:** Manual account CRUD + CSV import integration in an existing personal budgeting app with SimpleFIN auto-sync
+**Researched:** 2026-03-25
 **Confidence:** HIGH
 
 ## Executive Summary
 
-Adding real-time token streaming to the existing Minerva chat feature is a well-bounded problem with a clear implementation path that requires zero new npm dependencies. The Claude Agent SDK already supports streaming via `includePartialMessages: true` on the `query()` call, Express natively supports SSE via `res.write()`, and the browser Fetch API with `ReadableStream` handles the client side. The correct architecture is a standalone `POST /api/chat/stream` Express route that sits alongside the existing tRPC middleware — not a replacement for it.
+Minerva Money v2.7 adds manual account management to a mature single-user budgeting app. The research is unusually high-confidence because this milestone extends an existing, well-understood codebase: all four research areas converged on findings derived directly from code inspection rather than speculation. No new dependencies are required. The recommended approach is a strict layered build — migration first, then service, then router, then import integration, then client, then agent — with every downstream consumer able to assume the schema change is in place before they run.
 
-The recommended approach is a 6-step build sequence: define the shared SSE event type contract first, then add the server-side `chatStream()` async generator, wire it to an Express handler, build the `useStreamingChat` client hook, integrate it into `ChatPage`, and finish with hardening (cancellation, timeouts, fallback). This order ensures each step is independently testable and the existing tRPC mutation path remains functional throughout as a fallback.
+The key architectural insight is that the existing module-per-feature pattern (categories, rules, budget, etc.) maps cleanly onto a new `src/accounts/` module. All business logic lives in service functions called identically by the tRPC router and the agent tools. The only substantial complexity is the inline account creation form inside the import wizard, which requires careful local state management and TanStack Query cache invalidation, but follows precedents already established in the codebase.
 
-The key risks are not architectural — they are operational details that silently produce broken behavior if missed: the existing monolithic timeout will cut off streaming responses mid-sentence, unclosed server-side iterators leak memory on client disconnect, `react-markdown` renders visual artifacts on partial content during streaming, and the confirmation parsing flow will never fire unless explicitly deferred to stream completion. All five critical pitfalls have clear prevention strategies documented in the research.
+The most serious risks cluster around the schema migration phase, not the feature work. Manual accounts silently contaminate three existing system paths the moment they appear in the database: the SimpleFIN sync rate-limit check iterates all accounts, the sync upsert has no source guard in its DO UPDATE clause, and the `accounts.list` query does not yet include the `source` column. All three must be fixed in the same phase as the migration itself. Balance staleness is the other critical risk: `recalculateBalance()` must execute inside the same SQLite transaction as any insert that modifies a manual account's transactions.
 
 ## Key Findings
 
 ### Recommended Stack
 
-No new dependencies are needed. The entire implementation uses existing tooling: Express 4.x `res.write()` for SSE headers and event emission, the Agent SDK's `includePartialMessages: true` option for token-by-token stream events, `fetch()` + `ReadableStream` on the client instead of the GET-only `EventSource` API, and existing `react-markdown` (with the option to swap for `streamdown` if partial-markdown rendering artifacts become unacceptable).
+All required capabilities exist in the current stack. Zero new npm packages are needed. `node:crypto` `randomUUID()` (already used in two files) generates `manual_<uuid>` IDs. The existing migration runner applies `006-manual-accounts.sql` automatically. The existing tRPC + Zod pattern handles new mutations. The existing TanStack Query pattern handles cache invalidation.
 
 Full details: `.planning/research/STACK.md`
 
 **Core technologies:**
-- `Express res.write()` (existing, 4.21.x): SSE event emission — native capability, no middleware needed
-- `@anthropic-ai/claude-agent-sdk` (existing, ^0.2.81): Streaming via `includePartialMessages: true` — one option change enables token-by-token output
-- `fetch()` + `ReadableStream` (browser native): SSE client — required because `EventSource` is GET-only and cannot send the message body
-- `Zod` (existing): Validate POST body on the stream endpoint — same pattern used everywhere else
-- `react-markdown` (existing, 10.1.0): Incremental rendering of growing text — works today, may need `streamdown` swap for cleaner partial-markdown handling
+- `node:crypto` `randomUUID()`: Account ID generation — already in use in two files, zero cost, collision-resistant `manual_` prefix
+- `better-sqlite3` `ALTER TABLE ADD COLUMN`: Schema migration via `006-manual-accounts.sql` — safe, non-destructive, handled by existing migration runner
+- `better-sqlite3` `SUM(amount)`: Balance recalculation — single indexed query, no performance concern at personal finance scale
+- tRPC mutations + Zod: `accounts.create`, `accounts.update`, `accounts.delete` — identical pattern to existing `categories.create`
+- `useState` (React): Inline account creation form — three controlled fields, no form library needed or warranted
 
 ### Expected Features
 
+The design doc is the authoritative specification. Every v2.7 feature maps cleanly to low or medium complexity. No table-stakes features require architectural invention.
+
 Full details: `.planning/research/FEATURES.md`
 
-**Must have (table stakes — without these, streaming feels broken):**
-- Token-by-token text streaming — the blank-wait UX is what this milestone replaces
-- Incremental markdown rendering — text must render as markdown while streaming, not as raw syntax
-- Tool activity indicator — users need visual feedback during tool execution gaps (which can be multiple seconds)
-- Auto-scroll during streaming — new tokens must stay visible without user action
-- Smart scroll pause — stop auto-scrolling when the user deliberately scrolls up to read earlier content
-- Error display mid-stream — show partial text plus error indicator when stream fails
-- Input disabled during streaming — prevent concurrent messages (already done for tRPC, must carry forward)
-- Session continuity — streaming must thread the sessionId through for multi-turn conversation
-- Graceful degradation — fall back to existing tRPC mutation if SSE connection cannot establish
+**Must have (table stakes):**
+- DB migration: `source TEXT NOT NULL DEFAULT 'simplefin'` column — required by every downstream feature
+- Account CRUD service (`createAccount`, `updateAccount`, `deleteAccount`, `recalculateBalance`) — foundation of the milestone
+- tRPC mutations: `accounts.create`, `accounts.update`, `accounts.delete` — API surface for UI and agent
+- Post-import balance recalculation — without this, manual account balances are permanently stale after every CSV import
+- `source` field in `accounts.list` tRPC response — required by visual distinction, agent tools, and import wizard
+- Visual distinction on AccountsPage: "Manual" badge, "Last imported" label, no Sync Now button for manual accounts
 
-**Should have (differentiators, within scope but lower priority):**
-- Human-readable tool name display ("Looking up transactions..." not raw tool ID)
+**Should have (differentiators):**
+- Inline account creation during CSV import wizard — eliminates flow interruption; Monarch Money supports this pattern
+- Agent `create_account` tool with confirmation flow — consistent with existing add-only agent safety model
+- `source` field in agent `list_accounts` tool response — low cost, high value for agent context
 
-**Defer to future:**
-- Stop/cancel generation button — AbortController + Agent SDK abort adds complexity, low value for single-user
-- Multi-tool collapsible progress log — simple "Using [tool]..." indicator is sufficient for v2.6
-- Reconnection with resume (Last-Event-ID) — over-engineered for local network; show error and retry
-- Streaming confirmation block parsing — too fragile with partial JSON; parse after `done` event only
+**Defer (v2+):**
+- AccountsPage edit/delete UI for manual accounts — CRUD is available via agent and tRPC; UI affordance is a polish step
+- Opening balance UI guidance (tooltip/help text) — acceptable to add after user asks how to do this
+- Multiple CSV format support (OFX, QFX, bank-specific CSV) — scope expansion dependent on SimpleFIN coverage gaps
+- Manual account type expansion to HELOC/loan — requires branching balance logic throughout the service
+
+**Explicitly out of scope (anti-features):**
+- Manual balance entry field — creates two sources of truth; correct pattern is an opening-balance transaction via CSV
+- Edit or delete SimpleFIN accounts — synced accounts are read-only by design; service-layer guard enforces this
+- CSV import to synced accounts with "replace mode" — destructive and unsafe; additive dedup is already safe
 
 ### Architecture Approach
 
-The SSE endpoint is a pure Express POST route, not a tRPC procedure. It is registered at `POST /api/chat/stream` between the health check and tRPC middleware in `index.ts`. A new `chatStream()` async generator in `agent-service.ts` runs alongside the existing `chat()` collect-and-return function — both share the same MCP server setup and system prompt loading. The shared package gains a `sse-events.ts` type definition file that both server (emit) and client (parse) import, enforcing the protocol contract at compile time.
+The architecture is an additive extension of the existing layered pattern. One new module (`src/accounts/accounts-service.ts`) provides all manual account business logic. The tRPC `accountsRouter` (already exists in `trpc-router.ts`) gains three mutations. The import service gains approximately 10 lines at the end of its transaction loop. Client pages receive conditional rendering based on the `source` field. The dependency chain is strictly linear: schema → service → router → import → client → agent.
 
 Full details: `.planning/research/ARCHITECTURE.md`
 
 **Major components:**
-1. `packages/shared/src/sse-events.ts` (NEW) — TypeScript union type for the 6-event SSE protocol (session, text-delta, tool-start, tool-end, done, error); zero dependencies; everything else imports from here
-2. `packages/server/src/agent/agent-service.ts` (MODIFIED) — adds `chatStream()` async generator alongside existing `chat()`; passes `includePartialMessages: true` to SDK, maps SDK stream events to typed `SSEEvent` objects
-3. `packages/server/src/agent/stream-handler.ts` (NEW) — Express handler: Zod validation, SSE headers + `res.flushHeaders()`, iterates `chatStream()`, writes events, handles client disconnect via `req.on('close')`
-4. `packages/server/src/index.ts` (MODIFIED) — mounts `POST /api/chat/stream` before tRPC middleware
-5. `packages/client/src/hooks/useStreamingChat.ts` (NEW) — custom React hook: `fetch` POST, `ReadableStream` consumer, line buffer with `TextDecoder({ stream: true })`, `requestAnimationFrame` batching for state updates, tool activity state
-6. `packages/client/src/pages/ChatPage.tsx` (MODIFIED) — replaces `chatMutation` with `useStreamingChat`; adds tool indicator UI; defers `parseConfirmation()` to `done` event
+1. `migrations/006-manual-accounts.sql` (NEW) — adds `source` column; unblocks every subsequent step
+2. `src/accounts/accounts-service.ts` (NEW) — createAccount, updateAccount, deleteAccount, recalculateBalance; called by both tRPC router and agent tools directly
+3. `src/sync/trpc-router.ts` accountsRouter (MODIFIED) — adds CRUD mutations; extends list to return `source`; filters sync trigger to SimpleFIN accounts only
+4. `src/import/import-service.ts` executeImport (MODIFIED) — calls recalculateBalance for each touched manual account after insert loop; writes balance_snapshots for import date
+5. `client/pages/AccountsPage.tsx` (MODIFIED) — Manual badge, "Last imported" label, conditional sync affordances
+6. `client/pages/ImportPage.tsx` PreviewStep (MODIFIED) — inline account creation form with `__create__` sentinel, cache invalidation on create
+7. `src/agent/tools/action-tools.ts` (MODIFIED) — `create_account` tool with confirmation flow
 
 ### Critical Pitfalls
 
 Full details: `.planning/research/PITFALLS.md`
 
-1. **EventSource API trap** — EventSource is GET-only; cannot send message body. Use `fetch()` + `ReadableStream` from day one. Never EventSource.
-2. **Monolithic timeout cuts off streaming** — existing `Promise.race()` with 15/30/60s timeouts fires mid-stream on longer responses. Replace with first-token timeout + per-event idle timeout that resets on each received event.
-3. **Memory leak on client disconnect** — Express does not abort async iterators when client disconnects. Add `req.on('close', () => { aborted = true; })` and check `aborted` in the `for await` loop.
-4. **react-markdown partial rendering artifacts** — unclosed `**bold**`, raw backticks, chaotic table resizing during streaming. Evaluate `streamdown` (Vercel's drop-in) or add a markdown healer; combine with fixed container width to prevent layout shifts.
-5. **Confirmation flow never fires** — `parseConfirmation()` runs on the full `onSuccess` response today. During streaming it must be deferred to run only when the `done` SSE event arrives with the complete text.
+1. **Sync trigger iterates manual accounts in rate-limit check** — Add `WHERE source = 'simplefin'` filter to the accounts query in `sync.trigger` in the same phase as the migration. Manual accounts have never been synced and confuse the rate limiter with rate-limit errors for accounts it has never seen.
+
+2. **Balance column goes stale for manual accounts** — Call `recalculateBalance()` inside the same `db.transaction()` as the insert loop in `executeImport()`. Also insert a `balance_snapshots` row for the import date at the end of `executeImport()` rather than waiting for the scheduled snapshot job. Otherwise net worth history is wrong for that day.
+
+3. **Sync upsert can overwrite manual account data** — Add `WHERE source = 'simplefin'` to the DO UPDATE clause of the sync upsert in `sync-service.ts`. UUID collision is near-impossible, but this makes the invariant architecturally enforced rather than probabilistically safe.
+
+4. **`accounts.list` missing `source` column breaks all downstream features** — Update the `accounts.list` SELECT query and TypeScript return type in the same commit as the migration SQL. Every downstream consumer (UI badge, agent tools, import wizard) needs this field; missing it produces silent failures not TypeScript errors.
+
+5. **Cascade delete destroys transaction history without warning** — `deleteAccount()` must count affected transactions and include that count in its return value. The UI delete dialog must show the count. The agent delete path must use the confirmation pattern. Never expose destructive account delete without scope disclosure.
 
 ## Implications for Roadmap
 
-Based on combined research, the natural build sequence groups into 6 phases that follow a strict dependency order. Each phase is fully testable before the next begins.
+Based on research, the work decomposes into three phases. The strict dependency chain (migration → service → router → import → client → agent) means Phase 1 unblocks everything else, and Phase 3 can be parallelized internally once Phase 2 is complete.
 
-### Phase 1: SSE Event Protocol (Shared Types)
+### Phase 1: Schema Migration + Sync Safety
 
-**Rationale:** Zero dependencies — everything else imports from here. Defining the contract first prevents interface drift between server and client.
-**Delivers:** `packages/shared/src/sse-events.ts` with the 6-event union type; re-exported from `packages/shared/src/index.ts`. TypeScript build passes with type-only validation.
-**Addresses:** Session continuity (session event type), tool visibility (tool-start/tool-end types), error handling (error event type)
-**Avoids:** Protocol drift between server emitter and client parser (Pitfall 9 — chunk boundary parsing is simpler when the event shape is locked first)
+**Rationale:** The `source` column is required by every feature in this milestone. More critically, the sync trigger and upsert have latent bugs that activate the moment any manual account exists in the DB. These bugs must be fixed in the same atomic change as the migration. This phase has no UI and no new service functions — it is infrastructure only, but it is the highest-risk phase because mistakes here affect the live sync pipeline.
+**Delivers:** A safe DB state where manual accounts can exist without contaminating sync, and the `source` field is available to all future queries.
+**Addresses:** Table stakes: `source` column, `accounts.list` returns `source` field.
+**Avoids:** Pitfalls 1 (sync rate-limit check on manual accounts), 5 (sync upsert overwrites manual account), 6 (`accounts.list` missing `source`).
 
-### Phase 2: Server Stream Generator
+**Specific changes:**
+- `migrations/006-manual-accounts.sql`: `ALTER TABLE accounts ADD COLUMN source TEXT NOT NULL DEFAULT 'simplefin'`
+- `sync-service.ts`: Add `WHERE source = 'simplefin'` guard to upsert DO UPDATE clause
+- `trpc-router.ts` sync.trigger: Filter accounts to `source = 'simplefin'` before rate-limit check
+- `trpc-router.ts` accounts.list: Add `source` to SELECT and TypeScript return type
 
-**Rationale:** Core streaming logic; independent of HTTP concerns. Can be unit tested by mocking the Agent SDK `query()` and asserting yielded events match expected sequence.
-**Delivers:** `chatStream()` async generator in `agent-service.ts`; includes `includePartialMessages: true`, maps SDK events to typed SSE events, handles session init, text deltas, tool start/end, and done/error
-**Uses:** Agent SDK `includePartialMessages`, SSE event types from Phase 1
-**Avoids:** Duplicate message (Pitfall 11 — ignore `AssistantMessage` text; use only `stream_event` deltas), timeout mismatch (Pitfall 2 — monolithic timeout does not apply to the generator itself)
+### Phase 2: Account CRUD Service + Import Integration
 
-### Phase 3: Express SSE Endpoint
+**Rationale:** The service layer is the foundation for the tRPC router mutations and the agent tool. The import service change is tightly coupled to `recalculateBalance()` — both should land together to avoid a window where CSV imports do not update balances. This phase completes all server-side work.
+**Delivers:** Full server-side CRUD for manual accounts, correct balance management, and the complete tRPC API surface.
+**Addresses:** Table stakes: account CRUD, post-import balance recalculation, tRPC mutations.
+**Avoids:** Pitfalls 2 (stale balance column), 4 (cascade delete without transaction count).
 
-**Rationale:** Wires the generator to HTTP. Testable with `curl` before any client changes exist.
-**Delivers:** `stream-handler.ts` Express handler + route mount in `index.ts`. Returns `text/event-stream` with correct headers; handles client disconnect; applies stall-based timeout replacing monolithic timeout.
-**Implements:** Stream handler component, Express app modification
-**Avoids:** Response header flushing (Pitfall 6 — call `res.flushHeaders()` immediately), memory leak (Pitfall 3 — `req.on('close')`), route ordering (Pitfall 12 — mount before static middleware), compression future-proofing (Pitfall 16 — `no-transform` in Cache-Control)
+**Specific changes:**
+- `src/accounts/accounts-service.ts` (NEW): createAccount, updateAccount (source guard), deleteAccount (source guard + transaction count + dryRun option), recalculateBalance (updates both `accounts.balance` and `balance_snapshots`)
+- `trpc-router.ts` accountsRouter: accounts.create, accounts.update, accounts.delete mutations with Zod validation
+- `import-service.ts` executeImport: collect unique touched account IDs post-insert, filter to `source = 'manual'`, call recalculateBalance for each, write balance_snapshots for import date inside the same transaction
 
-### Phase 4: Client Stream Hook
+### Phase 3: Client UI + Agent Tools
 
-**Rationale:** Client-side SSE consumer built against the working server endpoint from Phase 3. Isolated from UI concerns; testable independently.
-**Delivers:** `useStreamingChat` hook managing streaming state (streamingText, activeTools, isStreaming, sessionId), fetch-based SSE consumer with proper line buffering, `requestAnimationFrame` batching for state updates
-**Avoids:** EventSource trap (Pitfall 1 — fetch + ReadableStream only), chunk boundary issues (Pitfall 9 — `TextDecoder({ stream: true })` + line buffer), state update storms (Pitfall 8 — RAF batching reduces re-renders 80-95%), mid-stream error handling (Pitfall 10 — handle error SSE event type)
+**Rationale:** All client and agent work depends on the tRPC mutations from Phase 2. AccountsPage, ImportPage, and agent tools are independent of each other and can be implemented in parallel within this phase. Landing them together avoids half-visible UI states in production.
+**Delivers:** Complete user-facing feature: visual distinction on AccountsPage, inline account creation in import wizard, agent `create_account` tool, `source` field in agent `list_accounts`.
+**Addresses:** Differentiators: inline creation during import, agent tool. Table stakes: visual distinction (Manual badge, no Sync Now for manual accounts).
+**Avoids:** Pitfall 3 (stale preview stats — add disclaimer note for newly-created accounts rather than re-running full preview).
 
-### Phase 5: ChatPage Integration
-
-**Rationale:** UI rendering layer; depends on the working hook from Phase 4. All streaming behavior is visible and testable end-to-end.
-**Delivers:** `ChatPage.tsx` updated to use `useStreamingChat`; streaming message bubble that grows token by token; tool activity indicator with human-readable names; smart auto-scroll (stick-to-bottom); `parseConfirmation()` deferred to `done` event; graceful fallback to tRPC mutation on SSE failure
-**Addresses:** All table-stakes features (token streaming, markdown rendering, tool indicator, auto-scroll, smart scroll pause, session continuity, input disabled, graceful degradation)
-**Avoids:** react-markdown artifacts (Pitfall 4 — evaluate streamdown), confirmation flow breakage (Pitfall 5 — parse only on done), auto-scroll fighting (Pitfall 13 — stick-to-bottom logic), session ID timing (Pitfall 14 — capture session from first SSE event), code duplication (Pitfall 15 — share service layer)
-
-### Phase 6: Hardening
-
-**Rationale:** Error handling and edge cases are only meaningful after the happy path works end-to-end. This phase addresses everything that does not block the primary user flow.
-**Delivers:** AbortController for component unmount cleanup, stall timeout tuning across models, network failure testing, non-ASCII content verification, performance profiling confirmation of RAF batching effectiveness, streamdown evaluation if markdown artifacts observed in Phase 5
+**Specific changes:**
+- `client/pages/AccountsPage.tsx`: Manual badge, "Last imported" label (reusing `last_synced` column), hide/grey out Sync Now for `source = 'manual'`
+- `client/pages/ImportPage.tsx` PreviewStep: `__create__` sentinel in mapping dropdown, inline form (name pre-filled from CSV, institution input, type dropdown), `accounts.create` mutation call, `accounts.list` cache invalidation, disclaimer note for dedup stats on newly-created accounts
+- `src/agent/tools/action-tools.ts`: `create_account` tool with confirmation flow (same pattern as `create_category`)
+- `src/agent/tools/query-tools.ts`: `source` field included in `get_account_balances` response
+- `src/agent/system-prompt.ts`: Guidance that agent can create manual accounts for institutions not in SimpleFIN
 
 ### Phase Ordering Rationale
 
-- Phases 1-3 are server-only and independently testable with curl; no client changes required
-- Phases 4-5 build on a working server endpoint; Phase 4 before Phase 5 because ChatPage depends on the hook
-- Phase 6 is hardening; only meaningful after end-to-end happy path is confirmed
-- The shared SSE type contract (Phase 1) must precede all other phases because both server and client import from it
-- The existing tRPC `agent.chat` mutation is preserved throughout all phases as a fallback; it is never touched until Phase 5 adds the SSE-first path alongside it
+- Phase 1 must come first: the `source` column is a hard dependency for everything else, and the sync safety fixes are latent bugs that must not go live without the column in place.
+- Phase 2 must come before Phase 3: all client mutations depend on the tRPC API surface, and the import service fix is tightly coupled to the service function it calls.
+- Phase 3 can be implemented as parallel sub-tasks (AccountsPage, ImportPage, agent tools are independent) once Phase 2 is complete.
+- Each phase is independently deployable and testable before the next begins.
 
 ### Research Flags
 
-Phases with standard, well-documented patterns (no additional research needed):
-- **Phase 1:** Pure TypeScript type definition. Standard discriminated union pattern.
-- **Phase 2:** Agent SDK streaming is fully documented with TypeScript examples.
-- **Phase 3:** SSE over Express is a solved problem. Pattern verified against MDN, official Express docs.
-- **Phase 4:** fetch + ReadableStream SSE client is industry-standard (used by OpenAI, Anthropic APIs). Pattern verified.
-- **Phase 5:** React state management for streaming is well-documented. `requestAnimationFrame` batching is established.
+Phases with standard patterns (research not needed during planning):
+- **Phase 1 (Migration):** SQLite `ALTER TABLE ADD COLUMN` is fully documented and the migration runner pattern is established. The sync filter and upsert guard are straightforward one-line additions.
+- **Phase 2 (Service + Import):** Service-layer CRUD follows the exact pattern of `categories-service.ts`. Import service changes are ~10 lines following an established pattern. `recalculateBalance()` is a single indexed query.
+- **Phase 3 (Client + Agent):** Inline form follows the `__skip__` sentinel pattern from v2.4. Agent tool follows `create_category` pattern exactly. AccountsPage badge is conditional rendering on an existing field.
 
-Phases that may need targeted investigation during implementation:
-- **Phase 5 (streamdown evaluation):** `streamdown` is a relatively new Vercel package (MEDIUM confidence on its drop-in compatibility with existing `remarkGfm` plugins). Test early in Phase 5 before committing to it.
-- **Phase 6 (AbortController + Agent SDK cleanup):** Whether the Agent SDK async iterator terminates cleanly on `AbortController.abort()` needs runtime verification — not confirmed in docs (MEDIUM confidence on cleanup behavior).
+No phases require deeper research. All implementation details are fully specified in the design doc and confirmed by direct codebase inspection.
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | Zero new dependencies confirmed; all tooling verified against official docs and current codebase |
-| Features | HIGH | Feature set derived from official Agent SDK streaming docs + direct ChatPage.tsx code inspection |
-| Architecture | HIGH | Pattern verified against MDN, official tRPC v11 docs, Express behavior, and existing codebase inspection |
-| Pitfalls | HIGH | 12 of 16 pitfalls are HIGH confidence; derived from official docs and direct code analysis |
+| Stack | HIGH | All findings verified by direct code inspection. Two existing uses of `crypto.randomUUID()` confirmed. Migration runner behavior confirmed by reading `migrate.ts`. Zero speculative technology choices. |
+| Features | HIGH | Design doc is the authoritative spec. Feature boundaries confirmed against existing codebase. Competitor analysis provides corroboration for UX patterns (Monarch Money inline creation confirmed). |
+| Architecture | HIGH | All patterns derived from direct codebase inspection. Build order derived from strict dependency analysis. Five anti-patterns documented with specific file references. |
+| Pitfalls | HIGH | All six critical pitfalls identified by tracing actual code paths in the existing system. Specific file and line references provided for each. Recovery strategies confirmed against existing backup infrastructure. |
 
 **Overall confidence:** HIGH
 
 ### Gaps to Address
 
-- **streamdown compatibility:** The `streamdown` package is recommended as a drop-in for `react-markdown` to handle partial-markdown rendering. Its compatibility with the existing `remarkGfm` plugin configuration needs a quick test in Phase 5. If it does not integrate cleanly, fall back to a markdown healer function. Low risk — the fallback is clear.
-- **Agent SDK iterator cleanup on abort:** Documentation does not explicitly state what happens to the `for await` loop in `chatStream()` when `AbortController.abort()` fires on the fetch side. The server-side `req.on('close')` pattern is the reliable path; treat AbortController as client-side cleanup only. Verify in Phase 6.
-- **Stall timeout values:** The first-token and idle timeout values (suggested: 15s first-token, 10s idle) are reasonable starting points but may need tuning based on actual tool execution latency (especially complex multi-tool queries with Opus). Treat Phase 6 as the calibration point.
+- **Preview stats disclaimer vs. full re-run:** Research identified two acceptable approaches to the stale-preview-stats problem after inline account creation: add a disclaimer note ("Duplicate check not available for newly created accounts") or re-run `previewImport()` with updated mappings. The simpler disclaimer approach is recommended. Confirm this with the user before Phase 3 implementation if there is any question.
+- **`last_synced` column reuse for import timestamp:** The design proposes reusing the `last_synced` column to store the import timestamp for manual accounts (displayed as "Last imported: {date}"). This is noted in the design doc but the specific UPDATE call location in `executeImport()` is not spelled out. Phase 2 or Phase 3 implementation should confirm this is the right approach versus adding a separate `last_imported` column.
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- [Claude Agent SDK TypeScript Reference](https://platform.claude.com/docs/en/agent-sdk/typescript) — `includePartialMessages`, `SDKPartialAssistantMessage` type, `BetaRawMessageStreamEvent` types
-- [Claude Agent SDK Streaming Output](https://platform.claude.com/docs/en/agent-sdk/streaming-output) — `stream_event` type, `content_block_delta`/`text_delta` patterns, extended thinking limitation, `AssistantMessage` follows `StreamEvent` sequence
-- [Anthropic Messages Streaming API](https://docs.anthropic.com/en/api/messages-streaming) — `content_block_delta`, `text_delta`, `message_stop` event types
-- [MDN Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events) — SSE wire format, EventSource GET-only limitation
-- [MDN ReadableStream](https://developer.mozilla.org/en-US/docs/Web/API/ReadableStream) — `pipeThrough(TextDecoderStream)` + `getReader()` pattern
-- [tRPC v11 Subscriptions docs](https://trpc.io/docs/server/subscriptions) — subscriptions are GET-based SSE, confirmed incompatibility with POST body
-- [Express #2248](https://github.com/expressjs/express/issues/2248) — server-side stream cleanup on disconnect
-- [expressjs/compression#17](https://github.com/expressjs/compression/issues/17) — SSE incompatibility with compression middleware
-- [remarkjs Discussion #1262](https://github.com/orgs/remarkjs/discussions/1262) and [#1342](https://github.com/orgs/remarkjs/discussions/1342) — react-markdown streaming artifacts
-- Direct code inspection: `agent-service.ts`, `agent-router.ts`, `models.ts`, `mcp-server.ts`, `index.ts`, `ChatPage.tsx`, `packages/client/src/trpc.ts`
+
+- `.planning/designs/2026-03-25-manual-accounts-csv-import-design.md` — authoritative design spec; all feature decisions, ID conventions, `recalculateBalance()` placement, sentinel `__create__` pattern
+- `packages/server/src/sync/trpc-router.ts` — router pattern, existing accountsRouter, `accounts.list` query shape, `sync.trigger` accounts query (lines 60-64, 119-134)
+- `packages/server/src/sync/sync-service.ts` — upsert DO UPDATE clause (lines 94-105), balance snapshot pattern in `syncAccount`
+- `packages/server/src/import/import-service.ts` — `executeImport` structure, dedup hash, stateless preview/execute pattern, post-import hooks
+- `packages/server/src/db/migrate.ts` — migration runner behavior, `user_version` management
+- `packages/server/migrations/001-initial-schema.sql` — accounts schema, ON DELETE CASCADE rules, `simplefin_id` UNIQUE constraint
+- `packages/server/src/categories/category-service.ts` — `randomUUID()` ID generation pattern
+- `packages/server/src/agent/tools/action-tools.ts` — `create_category` tool pattern, confirmation flow
+- `packages/client/src/pages/ImportPage.tsx` — wizard state management, `__skip__` sentinel pattern, PreviewStep structure
+- `packages/client/src/pages/AccountsPage.tsx` — current render structure
 
 ### Secondary (MEDIUM confidence)
-- [Express SSE patterns](https://masteringjs.io/tutorials/express/server-sent-events) — Express 4 native SSE with `res.writeHead()` + `res.write()`
-- [Vercel streamdown](https://github.com/vercel/streamdown) — drop-in react-markdown replacement for streaming AI content
-- [SitePoint: Streaming Backends and React Re-render Chaos](https://www.sitepoint.com/streaming-backends-react-controlling-re-render-chaos/) — requestAnimationFrame batching pattern
-- [SSE POST via Fetch ReadableStream](https://medium.com/@david.richards.tech/sse-server-sent-events-using-a-post-request-without-eventsource-1c0bd6f14425) — POST-based SSE client pattern
-- [tRPC Streaming Mutations Issue #4477](https://github.com/trpc/trpc/issues/4477) — streaming mutations discussion
+
+- [Monarch Money CSV import announcement](https://www.monarch.com/whats-new/tags-csv-import) — confirms assign-or-create-account pattern during import
+- [YNAB file-based import guide](https://support.ynab.com/en_us/file-based-import-a-guide-Bkj4Sszyo) — competitor reference for create-account-first flow
+- [SQLite ALTER TABLE documentation](https://www.sqlite.org/lang_altertable.html) — confirms ADD COLUMN safety without table rebuild when column has a DEFAULT value
+- [Node.js crypto.randomUUID() docs](https://nodejs.org/api/crypto.html#cryptorandomuuidoptions) — availability since Node 14.17.0; cryptographically random UUID v4
 
 ---
-*Research completed: 2026-03-24*
+*Research completed: 2026-03-25*
 *Ready for roadmap: yes*

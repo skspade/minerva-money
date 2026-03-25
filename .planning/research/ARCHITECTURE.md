@@ -1,488 +1,373 @@
-# Architecture Patterns
+# Architecture Research
 
-**Domain:** SSE streaming for LLM chat in Express + tRPC monorepo
-**Researched:** 2026-03-24
+**Domain:** Manual account CRUD + CSV import integration — Minerva Money v2.7
+**Researched:** 2026-03-25
+**Confidence:** HIGH (all findings derived from direct codebase inspection)
 
-## Recommended Architecture
+## Standard Architecture
 
-**Approach:** Add a standalone Express POST endpoint (`/api/chat/stream`) alongside the existing tRPC middleware. Do NOT use tRPC subscriptions or streaming mutations for this -- use raw Express with SSE. The tRPC chat mutation remains as a fallback.
+### System Overview
 
-### Why raw Express SSE, not tRPC streaming
-
-tRPC v11 (currently at 11.14.1 in this project) does support SSE subscriptions and streaming mutations via `httpBatchStreamLink`, but the chat streaming use case is a poor fit for tRPC streaming for three reasons:
-
-1. **POST with body required.** SSE via `EventSource` is GET-only. tRPC subscriptions use GET-based SSE. Our chat needs to send a message body (message text, sessionId, model), which requires a POST request consumed via `fetch` + `ReadableStream` on the client.
-2. **No type-safety benefit.** The SSE event stream is a sequence of typed JSON events parsed client-side. The tRPC type-safety wrapper adds no value over a Zod-validated POST body + typed SSE event parser. Type safety comes from the shared `SSEEvent` union type instead.
-3. **Simpler integration.** A raw Express route avoids coupling streaming lifecycle to tRPC's middleware chain and batch link configuration. The existing tRPC setup stays completely untouched.
-
-**Confidence:** HIGH -- verified tRPC v11 subscription docs (GET-based SSE), confirmed EventSource limitation (MDN), and validated the POST+fetch pattern is the standard approach for LLM streaming (used by OpenAI, Anthropic APIs).
-
-### Component Boundaries
-
-| Component | Location | Responsibility | New/Modified |
-|-----------|----------|----------------|--------------|
-| SSE event types | `packages/shared/src/sse-events.ts` | TypeScript union type for all SSE events | **NEW** |
-| Stream handler | `packages/server/src/agent/stream-handler.ts` | Express handler: validate input, set SSE headers, iterate chatStream generator, write SSE events | **NEW** |
-| Agent service | `packages/server/src/agent/agent-service.ts` | New `chatStream()` async generator alongside existing `chat()` | **MODIFIED** |
-| Express app | `packages/server/src/index.ts` | Mount `POST /api/chat/stream` route before tRPC middleware | **MODIFIED** |
-| Client stream hook | `packages/client/src/hooks/useStreamingChat.ts` | `fetch` POST, read SSE via `ReadableStream`, parse events, manage state | **NEW** |
-| Chat page | `packages/client/src/pages/ChatPage.tsx` | Replace `chatMutation` with `useStreamingChat`, add tool activity indicators, incremental text | **MODIFIED** |
-| Agent router | `packages/server/src/agent/agent-router.ts` | tRPC mutation kept as-is for fallback | **UNCHANGED** |
-| Shared index | `packages/shared/src/index.ts` | Re-export SSE event types | **MODIFIED** |
-
-### Data Flow
-
-**Current flow (collect-and-return):**
 ```
-ChatPage -> tRPC mutation -> agent-router -> chat() -> collectResponse(query()) -> full response -> tRPC response -> ChatPage renders all at once
-```
-
-**New flow (streaming):**
-```
-ChatPage -> fetch POST /api/chat/stream -> stream-handler -> chatStream()
-  -> query({ prompt, options: { includePartialMessages: true } })
-     -> for await (msg of queryStream):
-          system(init)                          -> SSE: session {sessionId}
-          stream_event(content_block_start, tool_use) -> SSE: tool-start {toolName, toolCallId}
-          stream_event(content_block_delta, text_delta) -> SSE: text-delta {text}
-          stream_event(content_block_stop)       -> SSE: tool-end {toolCallId}
-          result(success)                        -> SSE: done {sessionId}
-     -> ChatPage renders incrementally via useStreamingChat state
+┌─────────────────────────────────────────────────────────────────────┐
+│                          Client (React SPA)                          │
+│  ┌─────────────┐  ┌─────────────────────────────┐  ┌─────────────┐  │
+│  │ AccountsPage│  │        ImportPage            │  │  ChatPage   │  │
+│  │  (modified) │  │  PreviewStep (modified)      │  │ (modified)  │  │
+│  │  Manual badge│  │  + inline create form       │  │ create_acct │  │
+│  └──────┬──────┘  └──────────────┬───────────────┘  └──────┬──────┘  │
+│         │                        │                         │          │
+│         └────────────────────────┴─────────────────────────┘          │
+│                           tRPC client (useTRPC)                       │
+└───────────────────────────────┬──────────────────────────────────────┘
+                                │ tRPC over HTTP
+┌───────────────────────────────▼──────────────────────────────────────┐
+│                        Server (Express + tRPC)                        │
+│  ┌─────────────────────────────────────────────────────────────────┐  │
+│  │                    appRouter (trpc-router.ts)                    │  │
+│  │  accountsRouter (modified)    importRouter (modified)           │  │
+│  │  agentRouter (new tool)                                         │  │
+│  └──────────────┬────────────────────────┬──────────────────────── ┘  │
+│                 │                        │                             │
+│  ┌──────────────▼──────────┐  ┌──────────▼──────────────────────┐     │
+│  │   accounts-service.ts   │  │       import-service.ts         │     │
+│  │       (NEW MODULE)      │  │          (modified)             │     │
+│  │  createAccount()        │  │  executeImport() calls          │     │
+│  │  updateAccount()        │  │  recalculateBalance() per       │     │
+│  │  deleteAccount()        │  │  manual account after inserts   │     │
+│  │  recalculateBalance()   │  └─────────────────────────────────┘     │
+│  └──────────────┬──────────┘                                          │
+└─────────────────┼──────────────────────────────────────────────────── ┘
+                  │
+┌─────────────────▼──────────────────────────────────────────────────── ┐
+│                           SQLite Database                               │
+│  accounts (+ source column via migration 006)                           │
+│  transactions, balance_snapshots, budget_allocations, ...              │
+└─────────────────────────────────────────────────────────────────────── ┘
 ```
 
-## SSE Event Protocol
+### Component Responsibilities
 
-Six event types, all sent as `event: <type>\ndata: <json>\n\n`:
+| Component | Responsibility | Status |
+|-----------|---------------|--------|
+| `migrations/006-manual-accounts.sql` | Add `source TEXT NOT NULL DEFAULT 'simplefin'` to accounts table | NEW |
+| `src/accounts/accounts-service.ts` | createAccount, updateAccount, deleteAccount, recalculateBalance — all manual-account business logic | NEW |
+| `src/sync/trpc-router.ts` — accountsRouter | Add accounts.create, accounts.update, accounts.delete mutations; extend accounts.list to return source field | MODIFIED |
+| `src/import/import-service.ts` — executeImport | After transaction insert loop, call recalculateBalance for each touched manual account | MODIFIED |
+| `src/agent/tools/action-tools.ts` | Add create_account tool wrapping createAccount() service function | MODIFIED |
+| `src/agent/tools/query-tools.ts` | Include source field in get_account_balances response | MODIFIED |
+| `src/agent/system-prompt.ts` | Add guidance that agent can create manual accounts for unsupported institutions | MODIFIED |
+| `client/pages/ImportPage.tsx` — PreviewStep | Inline account creation form in account mapping dropdowns; invalidate accounts.list on create | MODIFIED |
+| `client/pages/AccountsPage.tsx` | Render "Manual" badge for source=manual accounts; suppress last-synced timestamp for manual accounts | MODIFIED |
 
-```typescript
-// packages/shared/src/sse-events.ts
+## Recommended Project Structure
 
-type SSESessionEvent = {
-  type: 'session';
-  sessionId: string;
-};
+```
+packages/server/
+├── migrations/
+│   └── 006-manual-accounts.sql     # NEW: ALTER TABLE accounts ADD COLUMN source
+├── src/
+│   ├── accounts/                   # NEW module
+│   │   └── accounts-service.ts     # createAccount, updateAccount, deleteAccount, recalculateBalance
+│   ├── sync/
+│   │   └── trpc-router.ts          # MODIFIED: accountsRouter gains CRUD + list returns source
+│   ├── import/
+│   │   └── import-service.ts       # MODIFIED: executeImport calls recalculateBalance post-insert
+│   └── agent/
+│       └── tools/
+│           ├── action-tools.ts     # MODIFIED: +create_account tool
+│           └── query-tools.ts      # MODIFIED: source in get_account_balances
 
-type SSETextDeltaEvent = {
-  type: 'text-delta';
-  text: string;
-};
-
-type SSEToolStartEvent = {
-  type: 'tool-start';
-  toolName: string;   // e.g. "get_balances", "create_rule"
-  toolCallId: string; // unique ID for matching start/end
-};
-
-type SSEToolEndEvent = {
-  type: 'tool-end';
-  toolCallId: string;
-};
-
-type SSEDoneEvent = {
-  type: 'done';
-  sessionId: string;
-};
-
-type SSEErrorEvent = {
-  type: 'error';
-  message: string;
-};
-
-type SSEEvent =
-  | SSESessionEvent
-  | SSETextDeltaEvent
-  | SSEToolStartEvent
-  | SSEToolEndEvent
-  | SSEDoneEvent
-  | SSEErrorEvent;
+packages/client/src/
+└── pages/
+    ├── ImportPage.tsx              # MODIFIED: inline create form in PreviewStep
+    └── AccountsPage.tsx            # MODIFIED: Manual badge, conditional last-synced label
 ```
 
-**Design rationale:** These six event types map directly to the Claude Agent SDK's `stream_event` subtypes (`content_block_start`, `content_block_delta`, `content_block_stop`) plus the `system` init and `result` messages. No intermediate translation layer needed.
+### Structure Rationale
 
-**Confidence:** HIGH -- event types map directly to Claude Agent SDK stream event types documented at https://platform.claude.com/docs/en/agent-sdk/streaming-output.
+- **`src/accounts/` as new module:** Mirrors the existing module pattern (budget/, categories/, rules/, sync/). One service file, one clear responsibility. The tRPC router stays thin and imports from it.
+- **No new router file for accounts:** The existing `accountsRouter` in `trpc-router.ts` already exists with a `list` procedure. Adding mutations inline there follows the same pattern as every other router in the file. A separate `accounts-router.ts` would add a file for minimal benefit.
+- **Migration as a numbered SQL file:** The migration runner (`migrate.ts`) reads `migrations/*.sql` sorted numerically and applies any file with a version number above `PRAGMA user_version`. Adding `006-manual-accounts.sql` requires zero changes to the runner.
 
-## Patterns to Follow
+## Architectural Patterns
 
-### Pattern 1: POST-based SSE with fetch + ReadableStream
+### Pattern 1: Service-Layer Encapsulation (existing, extended)
 
-**What:** Client sends POST with JSON body, server responds with `text/event-stream`. Client reads via `fetch` + `pipeThrough(TextDecoderStream)` + `getReader()`, not `EventSource` (which is GET-only).
-
-**When:** Any time you need SSE with a request body (LLM chat, search-as-you-type).
-
-**Server side:**
-```typescript
-// packages/server/src/agent/stream-handler.ts
-import type { Request, Response } from 'express';
-import { z } from 'zod';
-
-const StreamRequestSchema = z.object({
-  message: z.string().min(1),
-  sessionId: z.string().optional(),
-  model: z.string().optional(),
-});
-
-export function createStreamHandler(db: Database.Database, ctx: Context) {
-  return async (req: Request, res: Response) => {
-    const parsed = StreamRequestSchema.safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({ error: parsed.error.message });
-      return;
-    }
-
-    // SSE headers
-    res.writeHead(200, {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-      'X-Accel-Buffering': 'no',  // Disable proxy buffering if ever fronted by nginx
-    });
-
-    // Helper to write typed SSE events
-    function sendEvent(event: SSEEvent) {
-      res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
-    }
-
-    try {
-      for await (const sseEvent of chatStream(db, ctx, parsed.data)) {
-        sendEvent(sseEvent);
-      }
-    } catch (err) {
-      sendEvent({ type: 'error', message: err instanceof Error ? err.message : 'Unknown error' });
-    }
-
-    res.end();
-  };
-}
-```
-
-**Client side:**
-```typescript
-// packages/client/src/hooks/useStreamingChat.ts
-async function* readSSEStream(response: Response): AsyncGenerator<SSEEvent> {
-  const reader = response.body!.pipeThrough(new TextDecoderStream()).getReader();
-  let buffer = '';
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += value;
-
-    // Split on double newline (SSE event boundary)
-    const events = buffer.split('\n\n');
-    buffer = events.pop()!; // Keep incomplete last chunk in buffer
-
-    for (const raw of events) {
-      const dataLine = raw.split('\n').find(l => l.startsWith('data: '));
-      if (dataLine) {
-        yield JSON.parse(dataLine.slice(6)) as SSEEvent;
-      }
-    }
-  }
-}
-```
-
-**Confidence:** HIGH -- this is the standard pattern used by OpenAI, Anthropic, and every major LLM API. Verified via MDN ReadableStream docs and multiple production implementations.
-
-### Pattern 2: Agent SDK includePartialMessages for streaming
-
-**What:** Pass `includePartialMessages: true` in Agent SDK options to receive `stream_event` messages containing raw Claude API streaming events (`content_block_start`, `content_block_delta`, `content_block_stop`).
-
-**When:** You need token-by-token text and tool activity from the Agent SDK.
-
-**Key SDK details (from official docs):**
-
-- TypeScript type: `SDKPartialAssistantMessage` with `type: 'stream_event'`
-- Contains `event: RawMessageStreamEvent` from the Anthropic SDK
-- Also includes `session_id: string` and `parent_tool_use_id: string | null`
-- Text arrives as `content_block_delta` events where `delta.type === 'text_delta'`
-- Tool calls arrive as `content_block_start` (with `content_block.type === 'tool_use'` and `content_block.name`)
-- Message flow: `message_start` -> `content_block_start` -> `content_block_delta`(s) -> `content_block_stop` -> `message_delta` -> `message_stop`
-
-**Server-side generator (the core new function in agent-service.ts):**
-```typescript
-export async function* chatStream(
-  db: Database.Database,
-  ctx: Context,
-  input: { message: string; sessionId?: string; model?: string },
-): AsyncGenerator<SSEEvent> {
-  const mcpServer = createMcpServer(db, ctx);
-  const model = (input.model as ModelId) || DEFAULT_MODEL_ID;
-
-  const options = {
-    model,
-    systemPrompt: getSystemPrompt(),
-    mcpServers: { minerva: mcpServer },
-    allowedTools: ['mcp__minerva__*'],
-    tools: [],
-    maxTurns: 10,
-    permissionMode: 'bypassPermissions' as const,
-    allowDangerouslySkipPermissions: true,
-    includePartialMessages: true,  // <-- THE KEY CHANGE: enables streaming
-    ...(input.sessionId ? { resume: input.sessionId } : {}),
-  };
-
-  let currentToolCallId: string | null = null;
-  let inTool = false;
-
-  for await (const msg of query({ prompt: input.message, options })) {
-    // Session init
-    if (msg.type === 'system' && 'subtype' in msg && msg.subtype === 'init') {
-      yield { type: 'session', sessionId: (msg as any).session_id };
-    }
-
-    // Stream events (text deltas, tool calls)
-    if (msg.type === 'stream_event') {
-      const event = msg.event;
-
-      if (event.type === 'content_block_start' && event.content_block.type === 'tool_use') {
-        currentToolCallId = event.content_block.id;
-        inTool = true;
-        yield {
-          type: 'tool-start',
-          toolName: event.content_block.name,
-          toolCallId: currentToolCallId,
-        };
-      }
-
-      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta' && !inTool) {
-        yield { type: 'text-delta', text: event.delta.text };
-      }
-
-      if (event.type === 'content_block_stop' && inTool) {
-        yield { type: 'tool-end', toolCallId: currentToolCallId! };
-        inTool = false;
-        currentToolCallId = null;
-      }
-    }
-
-    // Final result
-    if (msg.type === 'result' && 'subtype' in msg && msg.subtype === 'success') {
-      yield { type: 'done', sessionId: (msg as any).session_id || '' };
-    }
-  }
-}
-```
-
-**Confidence:** HIGH -- verified against official Agent SDK streaming docs at https://platform.claude.com/docs/en/agent-sdk/streaming-output. The `stream_event` type, `content_block_delta`, and `text_delta` patterns are documented with TypeScript examples.
-
-### Pattern 3: Mount Express route before tRPC middleware
-
-**What:** Register the SSE endpoint as a standard Express route in `index.ts` before the tRPC middleware, so it is handled by Express directly.
-
-**Current index.ts structure:**
-```typescript
-app.use(express.json({ limit: '10mb' }));     // line 18
-app.get('/health', ...);                        // line 20
-app.use('/trpc', trpcExpress.createExpressMiddleware(...)); // line 29
-app.use(express.static(clientDist));            // line 38
-app.get('*', ...);                              // line 39 (SPA catch-all)
-```
-
-**New route insertion point -- between health check and tRPC:**
-```typescript
-app.get('/health', ...);
-app.post('/api/chat/stream', createStreamHandler(db, ctx));  // <-- NEW
-app.use('/trpc', trpcExpress.createExpressMiddleware(...));
-```
-
-**Why this position:** The `/api/chat/stream` path does not conflict with `/trpc/*`, but placing it before tRPC makes the intent clear. It MUST be before the SPA catch-all `app.get('*', ...)` which would swallow it.
-
-**Confidence:** HIGH -- standard Express routing behavior, verified by reading the current index.ts.
-
-### Pattern 4: AbortController for client-side cancellation
-
-**What:** Use `AbortController` with the fetch request so the user can cancel a streaming response or the component can clean up on unmount.
+**What:** All business logic lives in service functions. tRPC router procedures are thin: validate with Zod, call service, return result. Agent tools call the same service functions directly (bypassing tRPC), following the exact pattern of `create_category` and `create_category_group`.
+**When to use:** Every new mutation in this codebase — this is the established convention.
+**Trade-offs:** Minor indirection, but the benefit is that service functions remain testable in isolation and reusable by both tRPC and agent tools.
 
 **Example:**
 ```typescript
-// In useStreamingChat hook
-const abortControllerRef = useRef<AbortController | null>(null);
-
-async function sendMessage(message: string) {
-  abortControllerRef.current?.abort(); // Cancel any in-flight request
-  const controller = new AbortController();
-  abortControllerRef.current = controller;
-
-  const response = await fetch('/api/chat/stream', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, sessionId, model }),
-    signal: controller.signal,
-  });
-  // ... read stream
+// accounts-service.ts
+export function createAccount(db: Database.Database, name: string, institution: string, type: string) {
+  const id = `manual_${randomUUID()}`;
+  db.transaction(() => {
+    db.prepare(`INSERT INTO accounts (id, name, institution, type, balance, source)
+                VALUES (?, ?, ?, ?, 0, 'manual')`).run(id, name, institution, type);
+    // Write today's balance snapshot (same pattern as syncAccount in sync-service.ts)
+    const today = new Date().toISOString().split('T')[0];
+    db.prepare(`INSERT OR REPLACE INTO balance_snapshots (account_id, date, balance)
+                VALUES (?, ?, 0)`).run(id, today);
+  })();
+  return db.prepare('SELECT * FROM accounts WHERE id = ?').get(id);
 }
 
-// Cleanup on unmount
-useEffect(() => {
-  return () => abortControllerRef.current?.abort();
-}, []);
+// In trpc-router.ts accountsRouter
+create: publicProcedure
+  .input(z.object({ name: z.string().min(1), institution: z.string().min(1), type: z.string().min(1) }))
+  .mutation(({ ctx, input }) => createAccount(ctx.db, input.name, input.institution, input.type)),
 ```
 
-**Server-side detection:**
+### Pattern 2: Source Guard on Mutations
+
+**What:** `updateAccount` and `deleteAccount` verify `source = 'manual'` before proceeding and throw a descriptive error if called on a SimpleFIN-synced account. The guard lives in the service function, not the tRPC router, so the agent tool path is also protected.
+**When to use:** Any write operation that is only valid for user-managed rows.
+**Trade-offs:** Runtime check only (not a TypeScript compile-time constraint), but this matches how the codebase handles all other runtime preconditions.
+
+**Example:**
 ```typescript
-// In stream-handler.ts
-req.on('close', () => {
-  // Client disconnected -- the for-await loop will naturally end
-  // when res.write() fails on the next iteration
-});
+export function deleteAccount(db: Database.Database, id: string) {
+  const account = db.prepare('SELECT id, source FROM accounts WHERE id = ?')
+    .get(id) as { id: string; source: string } | undefined;
+  if (!account) throw new Error(`Account ${id} not found`);
+  if (account.source !== 'manual') throw new Error('Cannot delete SimpleFIN-synced accounts');
+  // ON DELETE CASCADE handles transactions, balance_snapshots, transfer_links
+  db.prepare('DELETE FROM accounts WHERE id = ?').run(id);
+}
 ```
 
-**Confidence:** MEDIUM -- the fetch AbortController is well-documented. The Agent SDK query generator cleanup on client disconnect needs testing to confirm it terminates cleanly rather than leaking.
+### Pattern 3: Post-Import Balance Recalculation
 
-### Pattern 5: Per-model timeout on streaming
+**What:** After `executeImport()` completes its transaction insert loop, it collects the set of account IDs that actually received new rows, filters to those with `source = 'manual'`, and calls `recalculateBalance()` once per manual account. This happens inside the same DB transaction so balance is consistent on rollback.
+**When to use:** Any write path that inserts transactions for manual accounts.
+**Trade-offs:** Requires one additional query per manual account (SELECT SUM). For typical import sizes (hundreds to thousands of rows across a handful of accounts) this is negligible.
 
-**What:** Apply per-model timeouts matching the existing `TIMEOUT_MS` config in `models.ts` (Haiku: 15s, Sonnet: 30s, Opus: 60s).
-
-**Note:** For streaming, the timeout semantics change. With collect-and-return, timeout means "total time to get complete response." With streaming, timeout should mean "maximum time with no events" (stall detection), since a multi-tool response legitimately takes longer than a single text response.
-
-**Recommended approach:** Use a stall timeout that resets on each received event, rather than a total duration timeout.
+**Key implementation detail:** Collect unique account IDs during the insert loop, not after, to avoid an extra scan. Filter for manual accounts with a single batch query (`WHERE id IN (...) AND source = 'manual'`).
 
 ```typescript
-// In stream-handler.ts
-const STALL_TIMEOUT_MS = TIMEOUT_MS[model]; // Reuse existing per-model config
+// In executeImport() — after the insert loop, inside db.transaction():
+const touchedAccountIds = [...new Set(validTransformed
+  .filter(row => accountMappings[row.accountName])
+  .map(row => accountMappings[row.accountName])
+)];
 
-let stallTimer: NodeJS.Timeout;
-function resetStallTimer() {
-  clearTimeout(stallTimer);
-  stallTimer = setTimeout(() => {
-    sendEvent({ type: 'error', message: `No response for ${STALL_TIMEOUT_MS / 1000}s` });
-    res.end();
-  }, STALL_TIMEOUT_MS);
+if (touchedAccountIds.length > 0) {
+  const placeholders = touchedAccountIds.map(() => '?').join(', ');
+  const manualAccounts = db.prepare(
+    `SELECT id FROM accounts WHERE id IN (${placeholders}) AND source = 'manual'`
+  ).all(...touchedAccountIds) as { id: string }[];
+  for (const { id } of manualAccounts) {
+    recalculateBalance(db, id);
+  }
 }
-
-resetStallTimer();
-for await (const sseEvent of chatStream(db, ctx, parsed.data)) {
-  resetStallTimer();
-  sendEvent(sseEvent);
-}
-clearTimeout(stallTimer);
 ```
 
-**Confidence:** MEDIUM -- the stall-based timeout approach is sound, but the exact timeout values may need tuning. Tool execution (e.g., database queries) adds internal latency between stream events that is not stalling.
+### Pattern 4: Inline Account Creation in Import Wizard
 
-## Anti-Patterns to Avoid
+**What:** In `ImportPage.tsx`, the `PreviewStep` component adds a `"+ Create New Account"` option at the top of each account mapping `<select>`. Selecting it reveals a small inline form (name pre-filled from CSV account name, institution text input, type dropdown). On submit, the component calls `trpc.accounts.create` mutation, then auto-selects the new account in the dropdown and collapses the form.
+**When to use:** Surfacing a quick-create flow without navigating away from a multi-step wizard.
+**Trade-offs:** Adds local state to `PreviewStep` (a `creatingForAccount: string | null` state and an inline form component). The newly created account must appear in the dropdown immediately — achieved by calling `queryClient.invalidateQueries(trpc.accounts.list.queryKey())` on mutation success so the `accounts` prop re-fetches.
 
-### Anti-Pattern 1: Using EventSource for POST requests
-**What:** Trying to use the browser's `EventSource` API to connect to the SSE endpoint.
-**Why bad:** `EventSource` only supports GET requests. Cannot send a JSON body with message, sessionId, model.
-**Instead:** Use `fetch` with `ReadableStream` + `getReader()` as shown in Pattern 1.
+The `PreviewStep` already receives `accounts` as a prop from the `useQuery(trpc.accounts.list.queryOptions())` call in the parent `ImportPage`. After invalidation, the query refetches and the prop updates automatically.
 
-### Anti-Pattern 2: tRPC subscription for chat streaming
-**What:** Using tRPC v11's SSE subscription feature for the chat stream.
-**Why bad:** tRPC subscriptions are GET-based SSE designed for server-push scenarios (live updates, notifications). Chat requires sending a message body. Would need a two-step flow (POST mutation to start, then GET subscription to receive) adding unnecessary complexity and a race condition window.
-**Instead:** Single POST endpoint that returns an SSE stream.
+## Data Flow
 
-### Anti-Pattern 3: Buffering events before sending
-**What:** Collecting stream events into an array then sending them in a batch.
-**Why bad:** Defeats the entire purpose of streaming. User sees the same delay as the current collect-and-return approach.
-**Instead:** Write each SSE event to the response immediately as it arrives from the Agent SDK.
+### Create Manual Account
 
-### Anti-Pattern 4: Parsing SSE events with complex regex
-**What:** Complex regex patterns to parse the SSE text format on the client.
-**Why bad:** Fragile, doesn't handle edge cases (multi-line data, buffered/split chunks across reads).
-**Instead:** Split on `\n\n` boundaries, find `data:` lines, parse JSON. Keep it simple and buffer-aware (see Pattern 1 client example).
+```
+User selects "+ Create New Account" in ImportPage Step 2 dropdown
+    ↓
+Inline form appears (name pre-filled from CSV account name)
+    ↓
+User fills institution, type; submits form
+    ↓
+accounts.create mutation (tRPC)
+    ↓
+accountsRouter.create → createAccount(db, name, institution, type)
+    ↓
+INSERT INTO accounts ... source = 'manual', id = 'manual_<uuid>'
+INSERT OR REPLACE INTO balance_snapshots ... balance = 0
+    ↓
+Returns new account row
+    ↓
+queryClient.invalidateQueries(trpc.accounts.list.queryKey())
+    ↓
+accounts.list query refetches; dropdown re-renders with new account auto-selected
+```
 
-### Anti-Pattern 5: Removing the existing tRPC chat mutation
-**What:** Deleting the tRPC `agent.chat` mutation when adding SSE streaming.
-**Why bad:** Removes fallback path. If streaming fails (network issues, proxy buffering), the user has no way to chat. Also breaks the migration path -- both should work during development.
-**Instead:** Keep both paths. ChatPage uses SSE by default. The tRPC mutation remains available and functional.
+### CSV Import with Manual Account
 
-### Anti-Pattern 6: Using httpBatchStreamLink for the whole app
-**What:** Switching the tRPC client to use `httpBatchStreamLink` to enable streaming across all tRPC calls.
-**Why bad:** Changes the transport for every tRPC call in the app, not just chat. Risk of breaking existing working queries/mutations. Overkill for one streaming endpoint.
-**Instead:** The SSE endpoint is completely separate from tRPC. No tRPC configuration changes needed.
+```
+executeImport mutation fires with accountMappings including 'manual_<uuid>'
+    ↓
+executeImport(db, csvText, accountMappings, categoryMappings) — no parsing changes
+    ↓
+Same INSERT OR IGNORE pipeline (dedup, rules engine, transfer detection unchanged)
+    ↓
+Collect unique touched account IDs
+    ↓
+Batch query: filter to source = 'manual'
+    ↓
+recalculateBalance(db, id) for each manual account:
+  UPDATE accounts SET balance = (SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE account_id = ?)
+  INSERT OR REPLACE INTO balance_snapshots (account_id, date, balance) VALUES (?, today, newBalance)
+    ↓
+Returns ExecuteResult (shape unchanged — no new fields required)
+```
 
-## Integration Points (Detailed)
+### Delete Manual Account
 
-### 1. Shared SSE Event Types
-- **File:** `packages/shared/src/sse-events.ts` (NEW)
-- **Also:** `packages/shared/src/index.ts` (MODIFIED -- add re-export)
-- **What:** Export the `SSEEvent` union type and individual event types
-- **Why shared:** Both server (to emit events) and client (to parse events) import the same type definitions, ensuring the protocol contract is enforced at compile time
-- **Dependency on:** Nothing. This is a pure type definition file.
+```
+User clicks Delete on manual account in AccountsPage
+    ↓
+accounts.delete mutation (tRPC)
+    ↓
+deleteAccount(db, id) — checks source = 'manual'; throws if SimpleFIN account
+    ↓
+DELETE FROM accounts WHERE id = ?
+  (CASCADE: transactions, balance_snapshots, transfer_links auto-deleted)
+    ↓
+queryClient.invalidateQueries(trpc.accounts.list.queryKey())
+    ↓
+AccountsPage re-renders without deleted account
+```
 
-### 2. Server: Agent Service Extension
-- **File:** `packages/server/src/agent/agent-service.ts` (MODIFIED)
-- **What:** Add `chatStream()` async generator function alongside the existing `chat()` function
-- **Key change:** Pass `includePartialMessages: true` to SDK options, iterate stream events, yield typed `SSEEvent` objects
-- **Dependencies:** Same as `chat()` -- `query` from SDK, `createMcpServer`, `getSystemPrompt`, `models.ts`
-- **Existing `chat()` function:** Completely unchanged. Kept as fallback path.
-- **Dependency on:** Shared SSE event types (for `SSEEvent` type)
+### Agent create_account Tool
 
-### 3. Server: Stream Handler
-- **File:** `packages/server/src/agent/stream-handler.ts` (NEW)
-- **What:** Express request handler that validates input with Zod, sets SSE headers, iterates `chatStream()` generator, writes events to response
-- **Responsibilities:** HTTP concerns only -- input validation, SSE header setup, event serialization, error handling, connection cleanup
-- **Dependencies:** `agent-service.chatStream()`, shared SSE event types, Zod, Express types, `isValidModelId` from models.ts
-- **Why separate from agent-service:** Separates HTTP transport concerns from agent logic. `chatStream()` is a pure generator that could be reused by a WebSocket handler or CLI.
+```
+User asks Claude to create an account for an unsupported institution
+    ↓
+Agent requests confirmation (same pattern as create_category)
+    ↓
+User confirms
+    ↓
+create_account tool calls createAccount(db, name, institution, type)
+    ↓
+Same service function as tRPC path — identical DB write
+    ↓
+Returns jsonResult({ success: true, id, name, source: 'manual' })
+```
 
-### 4. Server: Express App Mount
-- **File:** `packages/server/src/index.ts` (MODIFIED)
-- **What:** Import `createStreamHandler` and add `app.post('/api/chat/stream', createStreamHandler(db, ctx))` between health check and tRPC middleware
-- **Lines affected:** ~3 lines (1 import + 1 route registration + maybe 1 blank line)
-- **Critical ordering:** Must be AFTER `express.json()` (needs parsed body) and BEFORE the SPA catch-all `app.get('*', ...)`
+## Integration Points
 
-### 5. Client: Streaming Chat Hook
-- **File:** `packages/client/src/hooks/useStreamingChat.ts` (NEW)
-- **What:** Custom React hook that manages the full streaming lifecycle
-- **State managed:**
-  - `messages: ChatMessage[]` -- complete message history (same type as current ChatPage)
-  - `streamingText: string` -- current partial response being built from text-delta events
-  - `activeTools: { toolName: string; toolCallId: string }[]` -- tools currently executing
-  - `sessionId: string | undefined` -- agent session for multi-turn conversation
-  - `isStreaming: boolean` -- whether a stream is in progress
-- **Returns:** `{ messages, streamingText, activeTools, isStreaming, sendMessage, sessionId }`
-- **No TanStack Query dependency:** Raw `fetch` -- TanStack Query's mutation model (single request/response) does not fit streaming
-- **Dependency on:** Shared SSE event types (for parsing)
+### New vs. Modified Components
 
-### 6. Client: ChatPage Modifications
-- **File:** `packages/client/src/pages/ChatPage.tsx` (MODIFIED)
-- **What:** Replace `chatMutation` usage with `useStreamingChat` hook
-- **Key UI changes:**
-  - Bouncing dots replaced with live streaming text as it arrives
-  - New tool activity indicator (e.g., animated pill showing "Looking up balances...") during tool execution
-  - `streamingText` rendered in an assistant bubble that grows as text arrives
-  - When stream completes (`done` event), `streamingText` is finalized into a `ChatMessage` in the `messages` array
-  - Confirmation flow (JSON block parsing) moves to happen after stream completes, since the full response text is needed to detect confirmation blocks
-- **Preserved:** Model selector, session management, example questions, mobile-friendly layout
+| Component | Type | What Changes |
+|-----------|------|-------------|
+| `migrations/006-manual-accounts.sql` | NEW | Single `ALTER TABLE accounts ADD COLUMN source TEXT NOT NULL DEFAULT 'simplefin'` |
+| `src/accounts/accounts-service.ts` | NEW | Full CRUD service + recalculateBalance |
+| `src/sync/trpc-router.ts` — accountsRouter | MODIFIED | +create/update/delete mutations; list SELECT gains `source` column; return type gains `source` field |
+| `src/import/import-service.ts` — executeImport | MODIFIED | ~10 lines: collect touched account IDs, filter to manual, call recalculateBalance |
+| `src/agent/tools/action-tools.ts` | MODIFIED | +create_account tool (same structure as create_category) |
+| `src/agent/tools/query-tools.ts` | MODIFIED | get_account_balances SELECT includes `source` column |
+| `src/agent/system-prompt.ts` | MODIFIED | +guidance for manual account creation |
+| `client/pages/ImportPage.tsx` | MODIFIED | PreviewStep: inline create form, accounts query invalidation on create |
+| `client/pages/AccountsPage.tsx` | MODIFIED | Manual badge, suppress last-synced for source=manual |
+| `client/pages/DashboardPage.tsx` | UNCHANGED | accounts.list query already renders all accounts regardless of source |
+
+### Internal Boundaries
+
+| Boundary | Communication | Notes |
+|----------|---------------|-------|
+| `accounts-service` ← `trpc-router` | Direct import | Same pattern as all other service modules |
+| `accounts-service` ← `action-tools` | Direct import | Consistent with create_category / create_group precedent |
+| `accounts-service.recalculateBalance` ← `import-service` | Direct import | Called post-insert in executeImport |
+| `sync-service` → `accounts` table | Raw SQL (unchanged) | SimpleFIN sync still writes directly; only manual account mutations go through the service |
+| `AccountsPage` ↔ `accountsRouter.list` | tRPC query | list response must include `source` field for conditional UI rendering |
+| `ImportPage` ↔ `accountsRouter.create` | tRPC mutation | New mutation; invalidates accounts.list cache on success |
+
+### Schema Migration Contract
+
+SQLite `ALTER TABLE ... ADD COLUMN ... DEFAULT 'simplefin'` is safe:
+- All existing rows receive `'simplefin'` as the source value — no data migration needed
+- The `source` column is NOT NULL with a default, so it cannot be omitted on new inserts
+- The migration runner wraps it in a transaction with `PRAGMA user_version` bump
+- No other migration files need to change
+
+```sql
+-- migrations/006-manual-accounts.sql
+ALTER TABLE accounts ADD COLUMN source TEXT NOT NULL DEFAULT 'simplefin';
+```
+
+### Account ID Convention
+
+Manual accounts use `manual_<uuid>` as the primary key. This prefix:
+- Prevents collision with SimpleFIN IDs (which are opaque strings without a known prefix)
+- Makes manual accounts identifiable by ID alone without a DB lookup (useful for the import wizard to distinguish after creation)
+- Does not affect any existing queries (all JOIN on `accounts.id` regardless of format)
+
+The `simplefin_id` column remains nullable; manual accounts leave it NULL.
+
+## Anti-Patterns
+
+### Anti-Pattern 1: Balance Recalculation Inside the Per-Row Insert Loop
+
+**What people do:** Call `recalculateBalance(db, accountId)` for each row inside the `for (const row of validTransformed)` loop.
+**Why it's wrong:** Recalculates N times when only one recalculation per account is needed. A 500-row import touching 3 accounts would trigger 500 recalculations instead of 3.
+**Do this instead:** Collect unique manual account IDs during the loop; call `recalculateBalance` once per account after the loop completes.
+
+### Anti-Pattern 2: Source Guard in the tRPC Router Instead of the Service
+
+**What people do:** Put the `source !== 'manual'` guard inside the tRPC mutation handler.
+**Why it's wrong:** The agent `create_account` tool and any future CLI path call service functions directly, bypassing the tRPC router. Guards at the router level do not protect the service-level path.
+**Do this instead:** Guards in service functions. The router procedure trusts the service to enforce invariants.
+
+### Anti-Pattern 3: Creating a Separate accounts-router.ts File
+
+**What people do:** Create `src/accounts/accounts-router.ts` and register it separately in `appRouter`.
+**Why it's wrong:** The existing `accountsRouter` in `trpc-router.ts` is already a sub-router. Splitting it out adds a file and an import for no functional benefit. All other domain routers are defined inline in `trpc-router.ts` alongside their imports.
+**Do this instead:** Add `create`, `update`, and `delete` procedures to the existing `accountsRouter` in `trpc-router.ts`, importing from `accounts-service.ts`.
+
+### Anti-Pattern 4: Separate Balance Snapshot Write Outside recalculateBalance
+
+**What people do:** After calling `recalculateBalance()`, separately write a `balance_snapshots` record.
+**Why it's wrong:** Creates two code paths for snapshot management. `syncAccount()` in `sync-service.ts` already does both balance column update and snapshot write in a single function. `recalculateBalance()` should follow the same pattern for consistency.
+**Do this instead:** `recalculateBalance()` updates both `accounts.balance` and writes a `balance_snapshots` entry for today, using `INSERT OR REPLACE` (same as `syncAccount`).
+
+### Anti-Pattern 5: Adding `source` Filter to Existing Report/Budget Queries
+
+**What people do:** Add `WHERE a.source = 'simplefin'` or similar conditions to spending reports, net worth queries, or budget queries to exclude manual accounts.
+**Why it's wrong:** The design explicitly requires manual accounts to be treated identically to SimpleFIN accounts in all reports. Filtering them out would defeat the purpose.
+**Do this instead:** Leave all existing query joins unchanged. Manual account transactions participate in reports automatically via the `transactions.account_id` foreign key.
 
 ## Suggested Build Order
 
-Build in this order to enable incremental testing at each step:
+Dependencies flow strictly: schema → service → router → import integration → client → agent.
 
-| Step | What | Files | Why This Order | Testable? |
-|------|------|-------|----------------|-----------|
-| 1 | SSE event types in shared package | `shared/src/sse-events.ts`, `shared/src/index.ts` | Zero dependencies. Everything else imports from here. | `npm run build` passes (type-only) |
-| 2 | `chatStream()` generator in agent-service.ts | `server/src/agent/agent-service.ts` | Core streaming logic. Can be unit tested by mocking the SDK query and verifying yielded events. | Unit test: mock query, check yields |
-| 3 | Stream handler + Express mount | `server/src/agent/stream-handler.ts`, `server/src/index.ts` | Wires generator to HTTP. Testable with curl. | `curl -X POST -H 'Content-Type: application/json' -d '{"message":"test"}' http://localhost:3001/api/chat/stream` |
-| 4 | `useStreamingChat` hook | `client/src/hooks/useStreamingChat.ts` | Client-side SSE consumer. Testable against running server from step 3. | Manual: call hook from console or minimal test page |
-| 5 | ChatPage integration | `client/src/pages/ChatPage.tsx` | UI rendering of streaming text + tool indicators. Requires hook from step 4. | Visual: send message, see streaming text appear |
-| 6 | Polish: cancellation, timeouts, fallback | All files | Error handling and edge cases after happy path works. | Manual: test abort, test timeout, test network failure |
+| Step | What | Files | Dependency |
+|------|------|-------|------------|
+| 1 | Migration | `migrations/006-manual-accounts.sql` | None — unblocks all subsequent steps |
+| 2 | accounts-service | `src/accounts/accounts-service.ts` | Depends on source column existing |
+| 3 | accountsRouter mutations + list update | `src/sync/trpc-router.ts` | Depends on accounts-service |
+| 4 | import-service recalculateBalance integration | `src/import/import-service.ts` | Depends on accounts-service |
+| 5 | AccountsPage visual distinction | `client/pages/AccountsPage.tsx` | Depends on list returning source |
+| 6 | ImportPage inline account creation | `client/pages/ImportPage.tsx` | Depends on accounts.create mutation (step 3) |
+| 7 | create_account agent tool | `src/agent/tools/action-tools.ts` | Depends on accounts-service |
+| 8 | get_account_balances source field | `src/agent/tools/query-tools.ts` | Depends on list returning source (step 3) |
+| 9 | System prompt update | `src/agent/system-prompt.ts` | Depends on create_account tool existing (step 7) |
 
 **Step ordering rationale:**
-- Steps 1-3 are server-only -- fully testable without any client changes
-- Steps 4-5 are client-only -- build on a working server endpoint
-- Step 6 is hardening -- only meaningful after the happy path works end-to-end
-- Steps 2 and 3 must be sequential (handler depends on generator)
-- Steps 4 and 5 must be sequential (ChatPage depends on hook)
-
-## Known Limitation: Extended Thinking
-
-The Agent SDK docs explicitly state that `StreamEvent` messages are **not emitted** when `maxThinkingTokens` is set. Since the current Minerva agent does not use extended thinking (no `maxThinkingTokens` in the options), this is not an issue. If extended thinking is added later, streaming would need to fall back to the collect-and-return path for those requests.
-
-**Confidence:** HIGH -- explicitly documented limitation at https://platform.claude.com/docs/en/agent-sdk/streaming-output.
+- Steps 1-4 are server-only and have a strict linear dependency chain
+- Steps 5-6 are client and can be done in parallel with steps 7-9 once step 3 is complete
+- Step 6 (ImportPage) is the most complex client change and should be done independently from AccountsPage to keep diffs reviewable
+- Agent steps 7-9 can proceed in parallel with client steps once the service is ready
 
 ## Sources
 
-- [Claude Agent SDK streaming output docs](https://platform.claude.com/docs/en/agent-sdk/streaming-output) -- HIGH confidence, official Anthropic documentation. Verified `includePartialMessages`, `stream_event` type, `content_block_delta`/`text_delta` patterns, and the extended thinking limitation.
-- [MDN: Using server-sent events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events) -- HIGH confidence, authoritative web standard reference. Confirmed EventSource is GET-only.
-- [MDN: ReadableStream](https://developer.mozilla.org/en-US/docs/Web/API/ReadableStream) -- HIGH confidence, authoritative. Confirmed `pipeThrough(TextDecoderStream)` + `getReader()` pattern.
-- [tRPC v11 Subscriptions docs](https://trpc.io/docs/server/subscriptions) -- HIGH confidence, official tRPC docs. Confirmed subscriptions use GET-based SSE.
-- [tRPC Streaming Mutations Issue #4477](https://github.com/trpc/trpc/issues/4477) -- MEDIUM confidence, GitHub discussion on streaming mutations.
-- [SSE POST without EventSource](https://medium.com/@david.richards.tech/sse-server-sent-events-using-a-post-request-without-eventsource-1c0bd6f14425) -- MEDIUM confidence, community pattern validation.
-- [Consuming Streamed LLM Responses on the Frontend](https://tpiros.dev/blog/streaming-llm-responses-a-deep-dive/) -- MEDIUM confidence, practical implementation guide for fetch+SSE with LLMs.
-- Direct code inspection of: `packages/server/src/agent/agent-service.ts`, `agent-router.ts`, `models.ts`, `mcp-server.ts`, `index.ts`, `trpc.ts`, `trpc-router.ts`, `packages/client/src/pages/ChatPage.tsx`, `packages/client/src/trpc.ts`
+- Direct inspection of `packages/server/migrations/001-initial-schema.sql` (schema structure and migration pattern)
+- Direct inspection of `packages/server/src/sync/trpc-router.ts` (router pattern, existing accountsRouter)
+- Direct inspection of `packages/server/src/import/import-service.ts` (executeImport structure)
+- Direct inspection of `packages/server/src/sync/sync-service.ts` (balance snapshot pattern in syncAccount)
+- Direct inspection of `packages/server/src/agent/tools/action-tools.ts` (tool creation pattern)
+- Direct inspection of `packages/server/src/db/migrate.ts` (migration runner behavior)
+- Direct inspection of `packages/client/src/pages/ImportPage.tsx` (wizard state management, PreviewStep structure)
+- Direct inspection of `packages/client/src/pages/AccountsPage.tsx` (current render structure)
+- Direct inspection of `packages/client/src/pages/DashboardPage.tsx` (accounts list consumption)
+- Direct inspection of `.planning/designs/2026-03-25-manual-accounts-csv-import-design.md` (authoritative design decisions)
+- Direct inspection of `.planning/PROJECT.md` (milestone requirements and key decisions)
 
 ---
-*Architecture research for: v2.6 Streaming Chat (SSE integration with Express + tRPC)*
-*Researched: 2026-03-24*
+*Architecture research for: Minerva Money v2.7 — Manual Accounts & CSV Import Integration*
+*Researched: 2026-03-25*
