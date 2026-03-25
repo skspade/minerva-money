@@ -140,10 +140,10 @@ Plans:
   1. Agent checks for existing categories before attempting to create a new one
   2. Agent asks for user confirmation before creating a category or group
   3. When asked to delete or rename a category, the agent directs the user to the Categories page instead
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 35-01: TBD
+- [ ] 35-01-PLAN.md — Add Category Management section to system prompt (TDD)
 
 ### Phase 36: Model Selector UI
 **Goal**: User can choose between Haiku, Sonnet, and Opus from the chat interface
