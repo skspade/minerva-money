@@ -229,6 +229,47 @@
 
 ---
 
+## Milestone: v2.5 — Chat Enhancements
+
+**Shipped:** 2026-03-24
+**Phases:** 5 | **Plans:** 5 | **Requirements:** 18/18
+
+### What Was Built
+- Server-side model selection with centralized models.ts config, tRPC query, per-model timeout scaling
+- Category creation tools (create_category_group, create_category) with duplicate validation and confirmation flow
+- System prompt behavioral guidance for category management (add-only policy, check-before-create, UI redirect)
+- Model selector UI dropdown with session reset on model change and disabled during pending
+- Verification gap closure for phases 33, 35, 36
+
+### What Worked
+- Centralized models.ts config constant pattern — single source of truth for IDs, labels, timeouts, validation
+- TDD for category creation tools caught edge cases in duplicate name validation (case-insensitive)
+- Phases 33 and 34 executed in parallel (independent subsystems) — model selection and category tools don't share files
+- Milestone audit identified only procedural gaps (frontmatter, checkboxes) — no real requirement gaps
+
+### What Was Inefficient
+- REQUIREMENTS.md checkboxes for MOD-01–07 and SYS-01–04 left unchecked despite being satisfied — same traceability drift
+- SUMMARY.md frontmatter still missing `requirements-completed` in phases 34, 35, 37 — 5th milestone with this issue
+- Phase 37 gap closure was documentation-only (3 VERIFICATION.md files) — could have been created during phases 33, 35, 36
+
+### Patterns Established
+- Centralized config constant with derived types and validation helpers (models.ts pattern)
+- System prompt numbered rules for behavioral guidance (rules 14-16 for category management)
+- Add-only agent tools with UI redirect for destructive operations
+
+### Key Lessons
+1. Parallel phase execution works when subsystems are truly independent — 33 (model) and 34 (categories) touched zero shared files
+2. SUMMARY.md and REQUIREMENTS.md drift is now a systemic issue — 5 milestones running. Needs automation, not documentation
+3. Small focused milestones (5 phases, 18 requirements) complete cleanly in a single session
+4. Verification gap closure phases are predictable overhead — building VERIFICATION.md during execution would eliminate them entirely
+
+### Cost Observations
+- Model mix: primarily opus for execution, sonnet for research/planning
+- Sessions: autopilot mode
+- Notable: entire milestone completed same day — 5 phases, 373 lines of new code
+
+---
+
 ## Cross-Milestone Trends
 
 ### Process Evolution
@@ -241,6 +282,7 @@
 | v2.2 | 5 | 7 | Mobile-first responsive redesign |
 | v2.3 | 3 | 5 | CSV import reusing existing services |
 | v2.4 | 4 | 4 | Account-level skip filtering for selective import |
+| v2.5 | 5 | 5 | Chat agent model selection and category creation tools |
 
 ### Cumulative Quality
 
@@ -252,6 +294,7 @@
 | v2.2 | 259 | N/A | 0 |
 | v2.3 | 313 | 23/23 | 1 (Phase 28) |
 | v2.4 | 334 | 10/10 | 1 (Phase 32) |
+| v2.5 | 361 | 18/18 | 1 (Phase 37) |
 
 ### Top Lessons (Verified Across Milestones)
 

@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A single-user personal budgeting web app replacing Monarch Money. Built with React, Express, tRPC, and SQLite, hosted on a home iMac server. Pulls financial data from SimpleFIN (MX upstream) and uses envelope budgeting to assign every dollar a job. Ships with a full dashboard, spending/net-worth charts, categorization rules engine, transfer detection, twice-monthly auto-funding, a Claude-powered conversational agent, and CSV import with account-level skip filtering for migrating transaction history from Monarch Money.
+A single-user personal budgeting web app replacing Monarch Money. Built with React, Express, tRPC, and SQLite, hosted on a home iMac server. Pulls financial data from SimpleFIN (MX upstream) and uses envelope budgeting to assign every dollar a job. Ships with a full dashboard, spending/net-worth charts, categorization rules engine, transfer detection, twice-monthly auto-funding, a Claude-powered conversational agent with model selection (Haiku/Sonnet/Opus) and category creation tools, and CSV import with account-level skip filtering for migrating transaction history from Monarch Money.
 
 ## Core Value
 
@@ -43,18 +43,14 @@ Accurate, auto-synced financial data with envelope budgeting that lets you see w
 - ✓ Confirm summary and results page reflect filtered counts — v2.4
 - ✓ "Skip All Unmatched" button and summary banner for import scope visibility — v2.4
 
+- ✓ Server-driven model selector (Haiku/Sonnet/Opus) with centralized model list, tRPC query, and per-model timeout scaling — v2.5
+- ✓ Model selector UI dropdown above chat input bar with session reset on model change — v2.5
+- ✓ Category creation agent tools (create_category_group, create_category) with duplicate validation and confirmation flow — v2.5
+- ✓ System prompt behavioral guidance for category management (add-only policy, duplicate checking, UI redirect for destructive ops) — v2.5
+
 ### Active
 
-**Current Milestone: v2.5 Chat Enhancements**
-
-**Goal:** Add model selector and category creation to the Claude chat agent
-
-**Target features:**
-- Server-driven model selector (Haiku/Sonnet/Opus) with centralized model list endpoint
-- Model selector UI dropdown above chat input bar (mobile-friendly native select)
-- Category creation agent tool with duplicate name validation and confirmation flow
-- Category group creation agent tool with duplicate name validation and confirmation flow
-- System prompt updates for new tools with behavioral guidance (add-only, no delete/rename)
+(No active milestone — use `/gsd:new-milestone` to start next)
 
 ### Out of Scope
 
@@ -74,9 +70,10 @@ Accurate, auto-synced financial data with envelope budgeting that lets you see w
 
 ## Context
 
-- Shipped v2.4 with 11,854 LOC TypeScript across 32 phases (6 milestones)
+- Shipped v2.5 with 19,237 LOC TypeScript across 37 phases (7 milestones)
 - Tech stack: React + Tailwind / Express + tRPC / SQLite via better-sqlite3 / TanStack Query / Claude Agent SDK / csv-parse
 - Replacing Monarch Money with a self-hosted alternative (CSV import with account filtering enables selective data migration)
+- Agent now supports model selection (Haiku/Sonnet/Opus) and can create categories/groups during conversation
 - SimpleFIN costs $15/year, connects to MX (16,000+ institutions)
 - Three institutions: Discover (banking + HELOC), Fidelity (investments), Consumers Credit Union (banking)
 - Pay schedule: bi-monthly (15th and last day of month), equal split
@@ -127,6 +124,11 @@ Accurate, auto-synced financial data with envelope budgeting that lets you see w
 | Server treats absent accounts as skip | No new API parameters — omit from mapping to skip | ✓ Good — backward-compatible, zero migration |
 | Client-side stats filtering via useMemo | No server round-trip for preview updates when toggling skips | ✓ Good — instant UI responsiveness |
 | Pure helper functions for UI logic | Exported testable functions (validation, filtering, stats) | ✓ Good — 22 tests covering skip logic |
+| Centralized models.ts config constant | Single source of truth for model IDs, labels, timeouts, validation | ✓ Good — clean separation, reusable in router and service |
+| Native HTML select for model dropdown | Accessible, mobile-friendly, sufficient for 3 options — no component library needed | ✓ Good — works well on all devices |
+| Per-model timeout scaling | Haiku 15s, Sonnet 30s, Opus 60s — proportional to model response time | ✓ Good — prevents premature timeouts on Opus |
+| Add-only agent category tools | Creation is safe; destructive ops (delete/rename) stay in UI where sort ordering is visible | ✓ Good — clear safety boundary |
+| System prompt behavioral rules for categories | Check existing before create, require confirmation, redirect destructive ops | ✓ Good — 7 tests verify prompt content |
 
 ---
-*Last updated: 2026-03-24 after v2.5 milestone start*
+*Last updated: 2026-03-24 after v2.5 milestone*

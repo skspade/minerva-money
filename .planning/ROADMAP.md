@@ -92,91 +92,20 @@ Full details: [milestones/v2.4-ROADMAP.md](milestones/v2.4-ROADMAP.md)
 
 </details>
 
-### ✅ v2.5 Chat Enhancements (Shipped 2026-03-24)
+<details>
+<summary>✅ v2.5 Chat Enhancements (Phases 33-37) — SHIPPED 2026-03-24</summary>
 
-**Milestone Goal:** Add model selector and category creation to the Claude chat agent
+- [x] Phase 33: Model Selector Server (1/1 plan) — completed 2026-03-24
+- [x] Phase 34: Category Creation Tools (1/1 plan) — completed 2026-03-24
+- [x] Phase 35: System Prompt Updates (1/1 plan) — completed 2026-03-25
+- [x] Phase 36: Model Selector UI (1/1 plan) — completed 2026-03-24
+- [x] Phase 37: Verification Gap Closure (1/1 plan) — completed 2026-03-24 [Gap Closure]
 
-- [x] **Phase 33: Model Selector Server** - Server-side model list endpoint, chat mutation model parameter, and model-specific timeout scaling (completed 2026-03-24)
-- [x] **Phase 34: Category Creation Tools** - Agent tools for creating categories and category groups with duplicate validation and confirmation flow (completed 2026-03-25)
-- [x] **Phase 35: System Prompt Updates** - Behavioral guidance for category creation tools and add-only policy (completed 2026-03-25)
-- [x] **Phase 36: Model Selector UI** - Client-side model dropdown, session reset on model change, and disabled state during pending requests (completed 2026-03-24)
-- [x] **Phase 37: Verification Gap Closure** - Add missing VERIFICATION.md files for Phases 33, 35, 36 [Gap Closure] (completed 2026-03-24)
+Full details: [milestones/v2.5-ROADMAP.md](milestones/v2.5-ROADMAP.md)
 
-## Phase Details
-
-### Phase 33: Model Selector Server
-**Goal**: Server exposes model options and accepts model selection for chat requests
-**Depends on**: Nothing (first phase of v2.5)
-**Requirements**: MOD-01, MOD-02, MOD-03, MOD-07
-**Success Criteria** (what must be TRUE):
-  1. Calling the models tRPC query returns a list of available models with id, label, and description
-  2. Sending a chat message with a model parameter uses that model instead of the hardcoded default
-  3. Sending a chat message without a model parameter defaults to Sonnet
-  4. Chat requests to Opus allow up to 60 seconds before timing out; Haiku allows 15 seconds
-**Plans**: 1 plan
-
-Plans:
-- [ ] 33-01-PLAN.md — Model definitions, service model parameter, router models query and chat model input
-
-### Phase 34: Category Creation Tools
-**Goal**: Agent can create categories and category groups during conversation with safety validation
-**Depends on**: Nothing (independent of Phase 33)
-**Requirements**: CAT-01, CAT-02, CAT-03, CAT-04, CAT-05, CAT-06, CAT-07
-**Success Criteria** (what must be TRUE):
-  1. User can ask the agent to create a category group and see a confirmation prompt before it is created
-  2. User can ask the agent to create a category in a specific group and see a confirmation prompt before it is created
-  3. Agent rejects creation and suggests the existing item when a duplicate name (case-insensitive) is requested
-  4. Agent rejects category creation when the target group does not exist
-  5. A newly created category can be used by the agent for categorization in the same conversation turn
-**Plans**: 1 plan
-
-Plans:
-- [ ] 34-01-PLAN.md — Add create_category_group and create_category tools with validation (TDD)
-
-### Phase 35: System Prompt Updates
-**Goal**: Agent follows behavioral guidance for category creation and directs users to UI for destructive operations
-**Depends on**: Phase 34
-**Requirements**: SYS-01, SYS-02, SYS-03, SYS-04
-**Success Criteria** (what must be TRUE):
-  1. Agent checks for existing categories before attempting to create a new one
-  2. Agent asks for user confirmation before creating a category or group
-  3. When asked to delete or rename a category, the agent directs the user to the Categories page instead
-**Plans**: 1 plan
-
-Plans:
-- [x] 35-01-PLAN.md — Add Category Management section to system prompt (TDD)
-
-### Phase 36: Model Selector UI
-**Goal**: User can choose between Haiku, Sonnet, and Opus from the chat interface
-**Depends on**: Phase 33
-**Requirements**: MOD-04, MOD-05, MOD-06
-**Success Criteria** (what must be TRUE):
-  1. A model dropdown is visible above the chat input bar with Haiku, Sonnet, and Opus options
-  2. Switching models clears the conversation history and starts a fresh session
-  3. The model dropdown is disabled and unclickable while a chat response is loading
-**Plans**: 1 plan
-
-Plans:
-- [x] 36-01-PLAN.md — Model selector dropdown, state reset on change, disabled during pending
-
-### Phase 37: Verification Gap Closure
-**Goal**: Add missing VERIFICATION.md files for phases 33, 35, and 36 to close procedural audit gaps
-**Depends on**: Phases 33, 35, 36 (all complete)
-**Requirements**: MOD-01, MOD-02, MOD-03, MOD-04, MOD-05, MOD-06, MOD-07, SYS-01, SYS-02, SYS-03, SYS-04
-**Gap Closure:** Closes gaps from v2.5 audit
-**Success Criteria** (what must be TRUE):
-  1. Phase 33 has a VERIFICATION.md confirming MOD-01, MOD-02, MOD-03, MOD-07
-  2. Phase 35 has a VERIFICATION.md confirming SYS-01, SYS-02, SYS-03, SYS-04
-  3. Phase 36 has a VERIFICATION.md confirming MOD-04, MOD-05, MOD-06
-**Plans**: 1 plan
-
-Plans:
-- [x] 37-01-PLAN.md — Create VERIFICATION.md for phases 33, 35, 36
+</details>
 
 ## Progress
-
-**Execution Order:**
-Phases 33 and 34 are independent and can execute in parallel. Phase 35 depends on 34. Phase 36 depends on 33.
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -186,8 +115,4 @@ Phases 33 and 34 are independent and can execute in parallel. Phase 35 depends o
 | 21-25 | v2.2 | 7/7 | Complete | 2026-03-24 |
 | 26-28 | v2.3 | 5/5 | Complete | 2026-03-24 |
 | 29-32 | v2.4 | 4/4 | Complete | 2026-03-24 |
-| 33. Model Selector Server | 1/1 | Complete   | 2026-03-24 | - |
-| 34. Category Creation Tools | 1/1 | Complete    | 2026-03-25 | - |
-| 35. System Prompt Updates | v2.5 | 1/1 | Complete | 2026-03-25 |
-| 36. Model Selector UI | v2.5 | 1/1 | Complete | 2026-03-24 |
-| 37. Verification Gap Closure | v2.5 | 1/1 | Complete | 2026-03-24 |
+| 33-37 | v2.5 | 5/5 | Complete | 2026-03-24 |

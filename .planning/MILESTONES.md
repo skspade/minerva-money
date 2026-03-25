@@ -1,5 +1,21 @@
 # Milestones
 
+## v2.5 Chat Enhancements (Shipped: 2026-03-24)
+
+**Phases:** 5 | **Plans:** 5 | **Requirements:** 18/18
+**LOC added:** ~373 TypeScript | **Total LOC:** 19,237
+**Timeline:** 2026-03-24 (single day)
+**Git range:** feat(33-01) → docs(37)
+
+**Key accomplishments:**
+1. Server-side model selection — centralized models.ts config, agent.models tRPC query, chat mutation model parameter with allowlist validation, per-model timeout scaling (Haiku 15s / Sonnet 30s / Opus 60s)
+2. Category creation tools — create_category_group and create_category MCP tools with case-insensitive duplicate validation, group existence checking, and confirmation flow
+3. System prompt behavioral guidance — category management rules (check before create, require confirmation, redirect delete/rename to UI)
+4. Model selector UI — native select dropdown in ChatPage, session reset on model change, disabled during pending requests
+5. Verification gap closure — VERIFICATION.md files for phases 33, 35, 36 confirming all 18 requirements
+
+---
+
 ## v2.4 CSV Import Account Filtering (Shipped: 2026-03-24)
 
 **Phases:** 4 | **Plans:** 4 | **Requirements:** 10/10
