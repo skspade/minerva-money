@@ -5,8 +5,8 @@ milestone_name: Manual Accounts
 status: unknown
 last_updated: "2026-03-25T11:54:26.539Z"
 progress:
-  total_phases: 9
-  completed_phases: 9
+  total_phases: 3
+  completed_phases: 1
   total_plans: 13
   completed_plans: 13
 ---
