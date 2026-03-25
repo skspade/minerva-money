@@ -29,10 +29,10 @@ Requirements for Chat Enhancements milestone. Each maps to roadmap phases.
 
 ### System Prompt
 
-- [ ] **SYS-01**: System prompt documents both category creation tools with usage guidance
-- [ ] **SYS-02**: System prompt requires confirmation before category/group creation
-- [ ] **SYS-03**: System prompt instructs agent to direct users to Categories page for delete/rename operations
-- [ ] **SYS-04**: System prompt guides agent to check for existing categories before creating duplicates
+- [x] **SYS-01**: System prompt documents both category creation tools with usage guidance
+- [x] **SYS-02**: System prompt requires confirmation before category/group creation
+- [x] **SYS-03**: System prompt instructs agent to direct users to Categories page for delete/rename operations
+- [x] **SYS-04**: System prompt guides agent to check for existing categories before creating duplicates
 
 ## Future Requirements
 
@@ -70,10 +70,10 @@ Requirements for Chat Enhancements milestone. Each maps to roadmap phases.
 | CAT-05 | Phase 34 | Done |
 | CAT-06 | Phase 34 | Done |
 | CAT-07 | Phase 34 | Done |
-| SYS-01 | Phase 35 | Pending |
-| SYS-02 | Phase 35 | Pending |
-| SYS-03 | Phase 35 | Pending |
-| SYS-04 | Phase 35 | Pending |
+| SYS-01 | Phase 35 | Done |
+| SYS-02 | Phase 35 | Done |
+| SYS-03 | Phase 35 | Done |
+| SYS-04 | Phase 35 | Done |
 
 **Coverage:**
 - v2.5 requirements: 18 total

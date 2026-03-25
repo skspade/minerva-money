@@ -98,7 +98,7 @@ Full details: [milestones/v2.4-ROADMAP.md](milestones/v2.4-ROADMAP.md)
 
 - [x] **Phase 33: Model Selector Server** - Server-side model list endpoint, chat mutation model parameter, and model-specific timeout scaling (completed 2026-03-24)
 - [x] **Phase 34: Category Creation Tools** - Agent tools for creating categories and category groups with duplicate validation and confirmation flow (completed 2026-03-25)
-- [ ] **Phase 35: System Prompt Updates** - Behavioral guidance for category creation tools and add-only policy
+- [x] **Phase 35: System Prompt Updates** - Behavioral guidance for category creation tools and add-only policy (completed 2026-03-25)
 - [ ] **Phase 36: Model Selector UI** - Client-side model dropdown, session reset on model change, and disabled state during pending requests
 
 ## Phase Details
@@ -143,7 +143,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 35-01-PLAN.md — Add Category Management section to system prompt (TDD)
+- [x] 35-01-PLAN.md — Add Category Management section to system prompt (TDD)
 
 ### Phase 36: Model Selector UI
 **Goal**: User can choose between Haiku, Sonnet, and Opus from the chat interface
