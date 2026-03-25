@@ -61,9 +61,10 @@ None.
 |---|-------------|------|--------|-----------|
 | 2 | Add a UI button to trigger manual sync and backup | 2026-03-24 | 6fdfae6 | [2-add-a-ui-button-to-trigger-manual-sync-a](./quick/2-add-a-ui-button-to-trigger-manual-sync-a/) |
 | 3 | Add local backup fallback when iCloud Drive unavailable | 2026-03-24 | 71b6913 | [3-add-local-backup-fallback-when-icloud-di](./quick/3-add-local-backup-fallback-when-icloud-di/) |
+| 4 | Expose backup status on dashboard | 2026-03-25 | 6f76d00 | [4-expose-backup-status-on-dashboard-under-](./quick/4-expose-backup-status-on-dashboard-under-/) |
 
 ## Session Continuity
 
 Last session: 2026-03-25
-Stopped at: Phase 44 complete — ready to plan Phase 45
+Stopped at: Quick task 4 complete — backup status on dashboard
 Resume file: None
