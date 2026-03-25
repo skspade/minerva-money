@@ -37,4 +37,23 @@ describe('getSystemPrompt', () => {
     const today = new Date().toISOString().split('T')[0];
     expect(prompt).toContain(`Today's date: ${today}`);
   });
+
+  it('includes Account Management section', () => {
+    expect(prompt).toContain('## Account Management');
+  });
+
+  it('requires confirmation block for account creation', () => {
+    expect(prompt).toContain('create_account');
+    expect(prompt).toContain('"action": "create_account"');
+  });
+
+  it('instructs agent to check existing accounts before creating', () => {
+    expect(prompt).toContain('get_account_balances');
+    expect(prompt).toMatch(/before creating.*get_account_balances|get_account_balances.*before creat/is);
+  });
+
+  it('explains manual accounts are for non-SimpleFIN institutions', () => {
+    expect(prompt).toContain('SimpleFIN');
+    expect(prompt).toMatch(/manual account.*not available|not available.*SimpleFIN/is);
+  });
 });

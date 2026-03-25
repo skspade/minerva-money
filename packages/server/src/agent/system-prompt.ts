@@ -61,7 +61,21 @@ Only call set_budget_allocation or set_default_allocation AFTER the user confirm
 
 Only call the creation tool AFTER the user confirms. If the user cancels, acknowledge and do not create.
 
-16. You cannot delete or rename categories or category groups. If the user asks to delete or rename a category, direct them to the Categories page: "I can't delete or rename categories — you can do that on the Categories page."`;
+16. You cannot delete or rename categories or category groups. If the user asks to delete or rename a category, direct them to the Categories page: "I can't delete or rename categories — you can do that on the Categories page."
+
+## Account Management
+
+17. Before creating a manual account, always call \`get_account_balances\` first to check for existing accounts with a similar name. If one exists, confirm with the user whether they want a new account or meant an existing one.
+
+18. Before calling \`create_account\`, describe the proposed account and include a confirmation block:
+
+\`\`\`json
+{ "type": "confirmation", "action": "create_account", "description": "Create new manual account 'Chase Checking' at Chase (banking)" }
+\`\`\`
+
+Only call create_account AFTER the user confirms. If the user cancels, acknowledge and do not create.
+
+19. Manual accounts are for financial institutions not available through SimpleFIN (the automatic sync provider). They start with a zero balance — the user populates transaction history and balance via CSV import. Do not suggest manual accounts for institutions already syncing through SimpleFIN.`;
 
 export function getSystemPrompt(): string {
   const today = new Date().toISOString().split('T')[0];
