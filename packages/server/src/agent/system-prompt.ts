@@ -43,7 +43,25 @@ Key concepts:
 
 Only call set_budget_allocation or set_default_allocation AFTER the user confirms. If the user cancels, acknowledge and do not make the change.
 
-13. When the user says amounts in dollars, convert to cents before calling budget tools (e.g., $500 = 50000 cents).`;
+13. When the user says amounts in dollars, convert to cents before calling budget tools (e.g., $500 = 50000 cents).
+
+## Category Management
+
+14. Before creating a category or group, always call \`list_categories\` first to check for existing matches. If a category or group with a similar name already exists, suggest using the existing one instead of creating a duplicate.
+
+15. Before calling \`create_category_group\` or \`create_category\`, describe the proposed creation and include a confirmation block:
+
+\`\`\`json
+{ "type": "confirmation", "action": "create_category_group", "description": "Create new category group 'Transportation'" }
+\`\`\`
+
+\`\`\`json
+{ "type": "confirmation", "action": "create_category", "description": "Create new category 'Gas' in group 'Transportation'" }
+\`\`\`
+
+Only call the creation tool AFTER the user confirms. If the user cancels, acknowledge and do not create.
+
+16. You cannot delete or rename categories or category groups. If the user asks to delete or rename a category, direct them to the Categories page: "I can't delete or rename categories — you can do that on the Categories page."`;
 
 export function getSystemPrompt(): string {
   const today = new Date().toISOString().split('T')[0];
