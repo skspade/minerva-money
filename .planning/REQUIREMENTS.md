@@ -66,32 +66,32 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PROTO-01 | — | Pending |
-| PROTO-02 | — | Pending |
-| PROTO-03 | — | Pending |
-| SRVR-01 | — | Pending |
-| SRVR-02 | — | Pending |
-| SRVR-03 | — | Pending |
-| SRVR-04 | — | Pending |
-| SRVR-05 | — | Pending |
-| SRVR-06 | — | Pending |
-| CLNT-01 | — | Pending |
-| CLNT-02 | — | Pending |
-| CLNT-03 | — | Pending |
-| CLNT-04 | — | Pending |
-| CLNT-05 | — | Pending |
-| UI-01 | — | Pending |
-| UI-02 | — | Pending |
-| UI-03 | — | Pending |
-| UI-04 | — | Pending |
-| UI-05 | — | Pending |
-| UI-06 | — | Pending |
+| PROTO-01 | Phase 38 | Pending |
+| PROTO-02 | Phase 38 | Pending |
+| PROTO-03 | Phase 38 | Pending |
+| SRVR-01 | Phase 40 | Pending |
+| SRVR-02 | Phase 40 | Pending |
+| SRVR-03 | Phase 39 | Pending |
+| SRVR-04 | Phase 39 | Pending |
+| SRVR-05 | Phase 39 | Pending |
+| SRVR-06 | Phase 39 | Pending |
+| CLNT-01 | Phase 41 | Pending |
+| CLNT-02 | Phase 41 | Pending |
+| CLNT-03 | Phase 41 | Pending |
+| CLNT-04 | Phase 41 | Pending |
+| CLNT-05 | Phase 41 | Pending |
+| UI-01 | Phase 42 | Pending |
+| UI-02 | Phase 42 | Pending |
+| UI-03 | Phase 42 | Pending |
+| UI-04 | Phase 42 | Pending |
+| UI-05 | Phase 42 | Pending |
+| UI-06 | Phase 42 | Pending |
 
 **Coverage:**
 - v2.6 requirements: 20 total
-- Mapped to phases: 0
-- Unmapped: 20 ⚠️
+- Mapped to phases: 20
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-24*
-*Last updated: 2026-03-24 after initial definition*
+*Last updated: 2026-03-24 after roadmap creation*
