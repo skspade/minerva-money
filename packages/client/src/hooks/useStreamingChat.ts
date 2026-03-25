@@ -116,7 +116,7 @@ export async function processStream(
             handlers.onToolEnd(event.tool);
             break;
           case 'done':
-            handlers.onDone(event.text, capturedSessionId);
+            handlers.onDone(event.text, capturedSessionId || sessionId || '');
             break;
           case 'error':
             handlers.onError(event.message);
