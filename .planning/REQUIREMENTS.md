@@ -12,9 +12,9 @@ Requirements for Chat Enhancements milestone. Each maps to roadmap phases.
 - [x] **MOD-01**: Server exposes a tRPC query returning available model options (id, label, description)
 - [x] **MOD-02**: Chat mutation accepts optional model parameter with server-side allowlist validation
 - [x] **MOD-03**: Agent service uses the selected model instead of hardcoded Sonnet default
-- [ ] **MOD-04**: User can select a model (Haiku/Sonnet/Opus) from a dropdown above the chat input bar
-- [ ] **MOD-05**: Switching models resets the conversation (clears messages, resets session)
-- [ ] **MOD-06**: Model selector is disabled while a chat request is pending
+- [x] **MOD-04**: User can select a model (Haiku/Sonnet/Opus) from a dropdown above the chat input bar
+- [x] **MOD-05**: Switching models resets the conversation (clears messages, resets session)
+- [x] **MOD-06**: Model selector is disabled while a chat request is pending
 - [x] **MOD-07**: Model-specific timeout scaling (Haiku 15s, Sonnet 30s, Opus 60s)
 
 ### Category Creation
@@ -59,9 +59,9 @@ Requirements for Chat Enhancements milestone. Each maps to roadmap phases.
 | MOD-01 | Phase 33 | Done |
 | MOD-02 | Phase 33 | Done |
 | MOD-03 | Phase 33 | Done |
-| MOD-04 | Phase 36 | Pending |
-| MOD-05 | Phase 36 | Pending |
-| MOD-06 | Phase 36 | Pending |
+| MOD-04 | Phase 36 | Done |
+| MOD-05 | Phase 36 | Done |
+| MOD-06 | Phase 36 | Done |
 | MOD-07 | Phase 33 | Done |
 | CAT-01 | Phase 34 | Done |
 | CAT-02 | Phase 34 | Done |

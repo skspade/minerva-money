@@ -99,7 +99,7 @@ Full details: [milestones/v2.4-ROADMAP.md](milestones/v2.4-ROADMAP.md)
 - [x] **Phase 33: Model Selector Server** - Server-side model list endpoint, chat mutation model parameter, and model-specific timeout scaling (completed 2026-03-24)
 - [x] **Phase 34: Category Creation Tools** - Agent tools for creating categories and category groups with duplicate validation and confirmation flow (completed 2026-03-25)
 - [x] **Phase 35: System Prompt Updates** - Behavioral guidance for category creation tools and add-only policy (completed 2026-03-25)
-- [ ] **Phase 36: Model Selector UI** - Client-side model dropdown, session reset on model change, and disabled state during pending requests
+- [x] **Phase 36: Model Selector UI** - Client-side model dropdown, session reset on model change, and disabled state during pending requests (completed 2026-03-24)
 
 ## Phase Details
 
@@ -156,7 +156,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 36-01-PLAN.md — Model selector dropdown, state reset on change, disabled during pending
+- [x] 36-01-PLAN.md — Model selector dropdown, state reset on change, disabled during pending
 
 ## Progress
 
@@ -174,4 +174,4 @@ Phases 33 and 34 are independent and can execute in parallel. Phase 35 depends o
 | 33. Model Selector Server | 1/1 | Complete   | 2026-03-24 | - |
 | 34. Category Creation Tools | 1/1 | Complete    | 2026-03-25 | - |
 | 35. System Prompt Updates | v2.5 | 0/1 | Not started | - |
-| 36. Model Selector UI | v2.5 | 0/1 | Not started | - |
+| 36. Model Selector UI | v2.5 | 1/1 | Complete | 2026-03-24 |

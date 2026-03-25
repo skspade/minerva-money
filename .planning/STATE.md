@@ -18,23 +18,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-24)
 
 **Core value:** Accurate, auto-synced financial data with envelope budgeting that lets you see where every dollar goes and how spending trends over time.
-**Current focus:** Phase 34 - Category Creation Tools
+**Current focus:** Phase 36 - Model Selector UI (completed)
 
 ## Current Position
 
-Phase: 34 (second of 4 in v2.5)
-Plan: Not yet planned
-Status: Ready to plan
-Last activity: 2026-03-24 — Phase 33 Model Selector Server completed
+Phase: 36 (fourth of 4 in v2.5)
+Plan: 36-01 complete
+Status: Phase complete
+Last activity: 2026-03-24 — Phase 36 Model Selector UI completed
 
-Progress: [██░░░░░░░░] 25%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 1 (v2.5)
-- Phases: 1/4
-- Requirements satisfied: 4/18
+- Total plans completed: 4 (v2.5)
+- Phases: 4/4
+- Requirements satisfied: 18/18
 
 ## Accumulated Context
 
@@ -64,5 +64,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-24
-Stopped at: Phase 33 completed, ready for Phase 34
+Stopped at: Phase 36 completed, v2.5 milestone complete
 Resume file: None
