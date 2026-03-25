@@ -4,6 +4,7 @@ import type Database from 'better-sqlite3';
 import type { Context } from '../../sync/trpc.js';
 import { updateTransactionCategory, createGroup, createCategory } from '../../categories/category-service.js';
 import { createRule, updateRule, deleteRule, applyRule } from '../../rules/rules-service.js';
+import { createAccount } from '../../accounts/accounts-service.js';
 import { setAllocation, setDefaultAllocation } from '../../budget/budget-service.js';
 import { confirmTransfer, dismissTransfer } from '../../transfers/transfer-service.js';
 import { runSync } from '../../sync/sync-service.js';
@@ -27,6 +28,10 @@ function duplicateGroupName(db: Database.Database, name: string): { id: number; 
 
 function duplicateCategoryName(db: Database.Database, groupId: number, name: string): { id: number; name: string } | null {
   return (db.prepare('SELECT id, name FROM categories WHERE group_id = ? AND LOWER(name) = LOWER(?)').get(groupId, name) as { id: number; name: string } | undefined) ?? null;
+}
+
+function duplicateAccountName(db: Database.Database, name: string): { id: string; name: string } | null {
+  return (db.prepare('SELECT id, name FROM accounts WHERE LOWER(name) = LOWER(?)').get(name) as { id: string; name: string } | undefined) ?? null;
 }
 
 export function createActionTools(db: Database.Database, ctx: Context) {
@@ -273,6 +278,26 @@ export function createActionTools(db: Database.Database, ctx: Context) {
           if (existing) return errorResult(new Error(`Category "${existing.name}" already exists in this group (id: ${existing.id})`));
           const category = createCategory(db, args.groupId, args.name);
           return jsonResult({ success: true, id: category.id, name: category.name });
+        } catch (error) {
+          return errorResult(error);
+        }
+      },
+    ),
+
+    tool(
+      'create_account',
+      'Create a new manual account for institutions not available through SimpleFIN. Creates with zero balance — populate via CSV import. Requires user confirmation before calling.',
+      {
+        name: z.string().describe('Account name'),
+        institution: z.string().describe('Financial institution name'),
+        type: z.enum(['banking', 'credit']).default('banking').describe('Account type (banking or credit)'),
+      },
+      async (args) => {
+        try {
+          const existing = duplicateAccountName(db, args.name);
+          if (existing) return errorResult(new Error(`Account "${existing.name}" already exists (id: ${existing.id})`));
+          const account = createAccount(db, { name: args.name, institution: args.institution, type: args.type });
+          return jsonResult({ success: true, id: account.id, name: account.name, institution: account.institution, type: account.type, source: account.source });
         } catch (error) {
           return errorResult(error);
         }

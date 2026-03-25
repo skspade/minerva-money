@@ -12,7 +12,7 @@ export function createQueryTools(db: Database.Database) {
   return [
     tool(
       'get_account_balances',
-      'List all accounts with current balances. Use to answer questions about account balances. Amounts in cents (integer). Account types: checking, savings, credit, investment.',
+      'List all accounts with current balances. Use to answer questions about account balances. Amounts in cents (integer). Account types: checking, savings, credit, investment. The source field distinguishes manual accounts from SimpleFIN-synced accounts.',
       {},
       async () => {
         try {

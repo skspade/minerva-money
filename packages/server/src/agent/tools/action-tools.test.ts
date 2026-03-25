@@ -48,9 +48,9 @@ describe('action-tools', () => {
     rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('returns 12 tools', () => {
+  it('returns 13 tools', () => {
     const tools = createActionTools(db, ctx);
-    expect(tools).toHaveLength(12);
+    expect(tools).toHaveLength(13);
   });
 
   it('returns tools with expected names', () => {
@@ -69,6 +69,7 @@ describe('action-tools', () => {
       'trigger_sync',
       'create_category_group',
       'create_category',
+      'create_account',
     ]);
   });
 
@@ -452,6 +453,42 @@ describe('action-tools', () => {
       const catData = parseResult(catResult);
       expect(catData.success).toBe(true);
       expect(catData.categoryId).toBe(created.id);
+    });
+  });
+
+  describe('create_account', () => {
+    it('creates a manual account and returns success', async () => {
+      const result = await findTool('create_account').handler({ name: 'Chase Checking', institution: 'Chase', type: 'banking' });
+      expect(result.isError).toBeUndefined();
+      const data = parseResult(result);
+      expect(data.success).toBe(true);
+      expect(data.id).toMatch(/^manual_/);
+      expect(data.name).toBe('Chase Checking');
+      expect(data.institution).toBe('Chase');
+      expect(data.type).toBe('banking');
+      expect(data.source).toBe('manual');
+    });
+
+    it('creates a credit account', async () => {
+      const result = await findTool('create_account').handler({ name: 'Chase Sapphire', institution: 'Chase', type: 'credit' });
+      expect(result.isError).toBeUndefined();
+      const data = parseResult(result);
+      expect(data.success).toBe(true);
+      expect(data.type).toBe('credit');
+    });
+
+    it('returns error for duplicate account name (case-insensitive)', async () => {
+      db.prepare("INSERT INTO accounts (id, name, institution, type, balance, source) VALUES ('manual_abc', 'Chase Checking', 'Chase', 'banking', 0, 'manual')").run();
+      const result = await findTool('create_account').handler({ name: 'chase checking', institution: 'Chase', type: 'banking' });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('already exists');
+      expect(result.content[0].text).toContain('Chase Checking');
+    });
+
+    it('includes confirmation requirement in description', () => {
+      const tools = createActionTools(db, ctx);
+      const tool = tools.find(t => t.name === 'create_account')!;
+      expect(tool.description).toContain('Requires user confirmation before calling');
     });
   });
 });
