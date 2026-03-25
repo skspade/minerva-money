@@ -1,5 +1,22 @@
 # Milestones
 
+## v2.6 Streaming Chat (Shipped: 2026-03-25)
+
+**Phases:** 6 | **Plans:** 6 | **Requirements:** 20/20
+**LOC added:** ~4,452 TypeScript | **Total LOC:** 21,189
+**Timeline:** 2026-03-24 → 2026-03-25 (2 days)
+**Git range:** feat(38-01) → feat(42-01)
+
+**Key accomplishments:**
+1. SSE event protocol — compile-time discriminated union with 6 typed event kinds shared between server and client packages
+2. Server stream processing — chatStream() async generator iterating Agent SDK with tool events, abort handling, and per-model idle timeout
+3. Express SSE endpoint — POST /api/chat/stream with Zod validation before SSE headers, standard wire format
+4. Client stream hook — useStreamingChat with fetch/ReadableStream consumption, reactive state, and automatic tRPC fallback
+5. Streaming chat UI — live token-by-token rendering, human-readable tool activity labels for 24 tools, smart auto-scroll
+6. Session ID continuity fix — fallback prevents empty session on resumed chat turns
+
+---
+
 ## v2.5 Chat Enhancements (Shipped: 2026-03-24)
 
 **Phases:** 5 | **Plans:** 5 | **Requirements:** 18/18

@@ -2,6 +2,50 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
+## Milestone: v2.6 — Streaming Chat
+
+**Shipped:** 2026-03-25
+**Phases:** 6 | **Plans:** 6 | **Requirements:** 20/20
+
+### What Was Built
+- SSE event protocol — compile-time discriminated union with 6 typed event kinds shared between packages
+- chatStream() async generator iterating Agent SDK with tool events, abort handling, and per-model idle timeout
+- POST /api/chat/stream Express endpoint with Zod validation before SSE headers
+- useStreamingChat React hook with fetch/ReadableStream, reactive state, and automatic tRPC fallback
+- Live token-by-token chat rendering with human-readable tool activity labels for 24 agent tools
+- Smart auto-scroll that pauses when user scrolls up to read earlier messages
+
+### What Worked
+- Strict 5-phase dependency chain (shared types → server generator → HTTP handler → client hook → UI) prevented integration surprises
+- TDD throughout — 58 net new tests with clean per-phase separation (types, generator, handler, hook, UI labels)
+- Zero new npm dependencies — Agent SDK streaming, Express SSE, fetch ReadableStream all used built-in capabilities
+- Extracting processStream and parseSSEChunk as standalone functions made hook testing trivial without React rendering
+- Live bubble separate from messages array avoided array churn on every token delta
+
+### What Was Inefficient
+- Phase 43 gap closure was still needed for missing VERIFICATION.md files on phases 40 and 42 — 6th milestone in a row
+- Session ID continuity bug (empty session on resumed turns) was caught by audit, not by tests — could have been a test case in Phase 41
+- ROADMAP.md plan checkboxes still unchecked for phases 38, 39, 41, 42 despite being complete
+
+### Patterns Established
+- SSE events as discriminated union with type literal field — self-describing parsed objects for switch narrowing
+- Custom hooks in packages/client/src/hooks/ directory
+- Tool label map: centralized Record<string, string> with formatted fallback for unknown tools
+- Smart scroll: useRef boolean + scroll event listener pattern for gating auto-scroll during streaming
+
+### Key Lessons
+1. Standalone Express routes work well alongside tRPC when the transport doesn't fit RPC semantics (streaming SSE)
+2. Hook testing is much easier when async logic is extracted into separately exported pure functions
+3. Session ID continuity across turns is subtle — the Agent SDK doesn't always emit a session event on resumed turns
+4. VERIFICATION.md gap closure is now a predictable tax on every milestone — urgent need for workflow automation
+
+### Cost Observations
+- Model mix: primarily opus for execution, sonnet for research/planning
+- Sessions: autopilot mode
+- Notable: entire milestone completed in 2 days, 6 phases, 4,452 net lines added
+
+---
+
 ## Milestone: v2.0 — Claude Agent
 
 **Shipped:** 2026-03-23
@@ -283,6 +327,7 @@
 | v2.3 | 3 | 5 | CSV import reusing existing services |
 | v2.4 | 4 | 4 | Account-level skip filtering for selective import |
 | v2.5 | 5 | 5 | Chat agent model selection and category creation tools |
+| v2.6 | 6 | 6 | SSE streaming with layered dependency chain |
 
 ### Cumulative Quality
 
@@ -295,6 +340,7 @@
 | v2.3 | 313 | 23/23 | 1 (Phase 28) |
 | v2.4 | 334 | 10/10 | 1 (Phase 32) |
 | v2.5 | 361 | 18/18 | 1 (Phase 37) |
+| v2.6 | 423 | 20/20 | 1 (Phase 43) |
 
 ### Top Lessons (Verified Across Milestones)
 
@@ -304,3 +350,4 @@
 4. Milestone audit always finds real issues — never skip it (confirmed across all milestones)
 5. Reusing existing service functions dramatically reduces milestone scope (v2.3 was 3 phases because dedup/rules/transfers already existed)
 6. SUMMARY.md frontmatter `requirements_completed` is skipped in every milestone — needs structural workflow fix, not reminders (confirmed v2.0 + v2.3 + v2.4)
+7. Extracting async logic from React hooks into standalone functions dramatically improves testability (confirmed v2.6 — processStream/parseSSEChunk pattern)

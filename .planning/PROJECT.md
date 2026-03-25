@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A single-user personal budgeting web app replacing Monarch Money. Built with React, Express, tRPC, and SQLite, hosted on a home iMac server. Pulls financial data from SimpleFIN (MX upstream) and uses envelope budgeting to assign every dollar a job. Ships with a full dashboard, spending/net-worth charts, categorization rules engine, transfer detection, twice-monthly auto-funding, a Claude-powered conversational agent with model selection (Haiku/Sonnet/Opus) and category creation tools, and CSV import with account-level skip filtering for migrating transaction history from Monarch Money.
+A single-user personal budgeting web app replacing Monarch Money. Built with React, Express, tRPC, and SQLite, hosted on a home iMac server. Pulls financial data from SimpleFIN (MX upstream) and uses envelope budgeting to assign every dollar a job. Ships with a full dashboard, spending/net-worth charts, categorization rules engine, transfer detection, twice-monthly auto-funding, a Claude-powered conversational agent with model selection (Haiku/Sonnet/Opus), category creation tools, and real-time token-by-token streaming responses with tool activity indicators. Includes CSV import with account-level skip filtering for migrating transaction history from Monarch Money.
 
 ## Core Value
 
@@ -48,16 +48,16 @@ Accurate, auto-synced financial data with envelope budgeting that lets you see w
 - ✓ Category creation agent tools (create_category_group, create_category) with duplicate validation and confirmation flow — v2.5
 - ✓ System prompt behavioral guidance for category management (add-only policy, duplicate checking, UI redirect for destructive ops) — v2.5
 
+- ✓ SSE event protocol with typed events (session, text-delta, tool-start, tool-end, done, error) shared between server and client — v2.6
+- ✓ Server SSE endpoint (POST /api/chat/stream) with Zod validation and SSE headers — v2.6
+- ✓ Server stream processing — iterate Agent SDK async iterable, emit SSE events in real-time with abort handling and idle timeout — v2.6
+- ✓ Client stream consumer hook (useStreamingChat) with fetch/ReadableStream, reactive state, and tRPC fallback — v2.6
+- ✓ Incremental text rendering, tool activity indicators (24 tools), smart auto-scroll in ChatPage — v2.6
+- ✓ Session ID continuity fix for resumed chat turns — v2.6
+
 ### Active
 
-**Milestone v2.6: Streaming Chat** — Add true token-by-token streaming of LLM responses to the chat interface using SSE, with tool activity indicators
-
-- [ ] SSE event protocol with typed events (session, text-delta, tool-start, tool-end, done, error)
-- [ ] Server SSE endpoint (POST /api/chat/stream) with Zod validation and SSE headers
-- [ ] Server stream processing — iterate Agent SDK async iterable, emit SSE events in real-time
-- [ ] Client stream consumer hook (useStreamingChat) with fetch/ReadableStream
-- [ ] Incremental text rendering and tool activity indicators in ChatPage
-- [ ] Migration path — SSE alongside existing tRPC mutation, both paths functional
+(No active requirements — planning next milestone)
 
 ### Out of Scope
 
@@ -70,24 +70,29 @@ Accurate, auto-synced financial data with envelope budgeting that lets you see w
 - Financial advice / recommendations — liability risk; agent answers data questions only
 - Voice input/output — text-only chat sufficient
 - Agent-initiated proactive alerts — dashboard already shows budget status
-- ~~Streaming agent responses~~ — moved to Active (v2.6)
 - Persistent chat history database — SDK sessions handle within-session continuity
 - Category deletion/rename via agent — UI concern with sort ordering; creation is safe but destructive ops stay in UI
 - Multi-agent orchestration — single agent sufficient
+- Stop button for streaming — deferred to future milestone (STOP-01)
+- Collapsible tool call log — deferred to future milestone (MTOOL-01)
+- SSE reconnection/resume on drop — deferred to future milestone (RESUME-01)
+- WebSocket transport — SSE is simpler and sufficient for unidirectional streaming
+- EventSource API — only supports GET; chat needs POST with message body
+- Extended thinking with streaming — Agent SDK does not emit StreamEvents when maxThinkingTokens is set
 
 ## Context
 
-- Shipped v2.5.1 with 19,237 LOC TypeScript across 37 phases (7 milestones)
+- Shipped v2.6 with 21,189 LOC TypeScript across 43 phases (8 milestones)
 - Tech stack: React + Tailwind / Express + tRPC / SQLite via better-sqlite3 / TanStack Query / Claude Agent SDK / csv-parse
 - Replacing Monarch Money with a self-hosted alternative (CSV import with account filtering enables selective data migration)
-- Agent now supports model selection (Haiku/Sonnet/Opus) and can create categories/groups during conversation
+- Agent now supports model selection (Haiku/Sonnet/Opus), category creation, and real-time token-by-token streaming with tool activity indicators
 - SimpleFIN costs $15/year, connects to MX (16,000+ institutions)
 - Three institutions: Discover (banking + HELOC), Fidelity (investments), Consumers Credit Union (banking)
 - Pay schedule: bi-monthly (15th and last day of month), equal split
 - SimpleFIN rate limit: 24 requests/day per account, 90-day max date range
 - Freedom Mortgage blocks all aggregators but payments appear as bank debits
 - Discover HELOC discontinued July 2025 (Capital One acquisition) — existing loan still serviced
-- Known tech debt: orphaned budget.allocations.byMonth procedure, client uses inline cents conversion instead of shared helper, 2 redundant backup tests (run-backup.test.ts), 3 VERIFICATION.md tool name mismatches in Phase 14, no dedicated unit tests for query-tools.ts or ChatPage.tsx, rules-service.test.ts has 8 repetitive beforeEach/afterEach blocks
+- Known tech debt: orphaned budget.allocations.byMonth procedure, client uses inline cents conversion instead of shared helper, 2 redundant backup tests (run-backup.test.ts), 3 VERIFICATION.md tool name mismatches in Phase 14, no dedicated unit tests for query-tools.ts or ChatPage.tsx, rules-service.test.ts has 8 repetitive beforeEach/afterEach blocks, compiled dist/sse-events.test.js duplicates src test (inflates test count by 10)
 
 ## Constraints
 
@@ -96,7 +101,7 @@ Accurate, auto-synced financial data with envelope budgeting that lets you see w
 - **Data provider**: SimpleFIN only — 24 req/day/account, daily refresh cycle
 - **Security**: SimpleFIN + Anthropic API credentials in .env file (gitignored), no auth layer needed
 - **Backup**: SQLite .backup to iCloud Drive, not live sync (corruption risk)
-- **Agent**: Claude Agent SDK, server-side execution only, collect-and-return (no streaming)
+- **Agent**: Claude Agent SDK, server-side execution only, SSE streaming with tRPC fallback
 
 ## Key Decisions
 
@@ -116,13 +121,12 @@ Accurate, auto-synced financial data with envelope budgeting that lets you see w
 | Claude Agent SDK over MCP server | Built-in tool execution, sessions, hooks — more powerful than raw MCP for chat-based agent | ✓ Good — clean integration with collect-and-return pattern |
 | Direct service binding for agent tools | Custom tools wrapping service functions vs raw DB access — safer, type-safe, explicit permissions | ✓ Good — 21 tools wrapping existing services |
 | Server-side agent execution | API key stays secure on server, agent runs in Express process | ✓ Good — no client exposure |
-| Collect-and-return over streaming | Simpler architecture; upgrade to WebSocket streaming later if response times are slow | ✓ Good — adequate for single-user |
 | System prompt confirmation flow | Budget amount changes require JSON confirmation block parsed by UI | ✓ Good — inline buttons for confirm/cancel |
 | XML-wrapped bank strings | Prevent prompt injection from payee/memo fields | ✓ Good — delimiter-based sanitization |
 | Gap closure phase (17) for audit findings | Rate limiter bypass and missing verification caught by audit | ✓ Good — all 34 v2.0 requirements verified |
-| launchd over PM2/Docker for process management | Native macOS, zero dependencies, consistent with existing backup plist | — Pending |
-| Express serves client static files | Single process, simpler deployment than nginx + Express | — Pending |
-| Node 20 --env-file over dotenv | No extra dependency, native support | — Pending |
+| launchd over PM2/Docker for process management | Native macOS, zero dependencies, consistent with existing backup plist | ✓ Good — stable in production |
+| Express serves client static files | Single process, simpler deployment than nginx + Express | ✓ Good — single-port deployment |
+| Node 20 --env-file over dotenv | No extra dependency, native support | ✓ Good |
 | Stateless preview/execute CSV import | Client sends CSV text, server re-parses on execute — no session state | ✓ Good — simple, no cleanup needed |
 | csv-parse library for CSV parsing | RFC-4180 compliant, BOM support, sync API — proven library | ✓ Good — handles edge cases reliably |
 | Rules engine priority over CSV categories | Rules run first, CSV categories only as fallback for unmatched | ✓ Good — consistent categorization |
@@ -136,6 +140,12 @@ Accurate, auto-synced financial data with envelope budgeting that lets you see w
 | Per-model timeout scaling | Haiku 15s, Sonnet 30s, Opus 60s — proportional to model response time | ✓ Good — prevents premature timeouts on Opus |
 | Add-only agent category tools | Creation is safe; destructive ops (delete/rename) stay in UI where sort ordering is visible | ✓ Good — clear safety boundary |
 | System prompt behavioral rules for categories | Check existing before create, require confirmation, redirect destructive ops | ✓ Good — 7 tests verify prompt content |
+| SSE over standalone Express POST route (not tRPC) | tRPC subscriptions are GET-only; POST needed for message body | ✓ Good — clean separation of streaming from RPC |
+| No new npm dependencies for streaming | Agent SDK streaming, Express SSE, fetch ReadableStream all built-in | ✓ Good — zero dependency overhead |
+| 5-phase strict dependency chain for streaming | shared types → server generator → HTTP handler → client hook → UI | ✓ Good — clean layered architecture |
+| Single send path via useStreamingChat | Removed chatMutation entirely; hook handles tRPC fallback internally | ✓ Good — simpler ChatPage code |
+| Live bubble separate from messages array | Avoids array churn on every token delta | ✓ Good — smooth streaming performance |
+| Discriminated union on type field for SSE events | Parsed objects are self-describing; enables switch narrowing | ✓ Good — compile-time protocol safety |
 
 ---
-*Last updated: 2026-03-24 after v2.6 milestone start*
+*Last updated: 2026-03-25 after v2.6 milestone*
