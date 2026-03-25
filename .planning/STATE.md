@@ -1,14 +1,14 @@
 ---
 gsd_state_version: 1.0
-milestone: v2.6
-milestone_name: Streaming Chat
-status: complete
+milestone: v2.7
+milestone_name: Manual Accounts
+status: defining_requirements
 last_updated: "2026-03-25"
 progress:
-  total_phases: 6
-  completed_phases: 6
-  total_plans: 6
-  completed_plans: 6
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
 ---
 
 # Project State
@@ -18,23 +18,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-25)
 
 **Core value:** Accurate, auto-synced financial data with envelope budgeting that lets you see where every dollar goes and how spending trends over time.
-**Current focus:** Planning next milestone
+**Current focus:** Defining requirements for v2.7 Manual Accounts
 
 ## Current Position
 
-Phase: 43 of 43 (Verification and Session Fix)
-Plan: 1 of 1 in current phase
-Status: Milestone v2.6 complete
-Last activity: 2026-03-25 — v2.6 Streaming Chat milestone archived
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-03-25 — Milestone v2.7 started
 
-Progress: [██████████] 100%
+Progress: [░░░░░░░░░░] 0%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 6 (v2.6)
-- Phases: 6/6
-- Requirements satisfied: 20/20
+- Total plans completed: 0 (v2.7)
+- Phases: 0/0
+- Requirements satisfied: 0/0
 
 ## Accumulated Context
 
@@ -48,7 +48,7 @@ None.
 
 ### Blockers/Concerns
 
-None — milestone complete.
+None.
 
 ### Quick Tasks Completed
 
@@ -60,5 +60,5 @@ None — milestone complete.
 ## Session Continuity
 
 Last session: 2026-03-25
-Stopped at: v2.6 milestone archived
+Stopped at: Milestone v2.7 started — defining requirements
 Resume file: None

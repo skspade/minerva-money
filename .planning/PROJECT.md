@@ -57,7 +57,17 @@ Accurate, auto-synced financial data with envelope budgeting that lets you see w
 
 ### Active
 
-(No active requirements — planning next milestone)
+#### Current Milestone: v2.7 Manual Accounts
+
+**Goal:** Enable manual account creation and CSV transaction import for accounts that cannot be synced via SimpleFIN, fully integrated into budgets, reports, dashboard, and net worth.
+
+**Target features:**
+- Database schema extension with `source` column to distinguish manual vs SimpleFIN accounts
+- Account CRUD service and tRPC API (create, update, delete, recalculate balance)
+- Import wizard integration — inline account creation during CSV import mapping step
+- Balance management — computed from transaction sums, recalculated on import
+- Dashboard/reporting integration — manual accounts treated identically to synced accounts with visual distinction
+- Agent tool integration — create_account tool with confirmation flow
 
 ### Out of Scope
 
@@ -86,6 +96,7 @@ Accurate, auto-synced financial data with envelope budgeting that lets you see w
 - Tech stack: React + Tailwind / Express + tRPC / SQLite via better-sqlite3 / TanStack Query / Claude Agent SDK / csv-parse
 - Replacing Monarch Money with a self-hosted alternative (CSV import with account filtering enables selective data migration)
 - Agent now supports model selection (Haiku/Sonnet/Opus), category creation, and real-time token-by-token streaming with tool activity indicators
+- v2.7: Adding manual account support for institutions not available through SimpleFIN (design: .planning/designs/2026-03-25-manual-accounts-csv-import-design.md)
 - SimpleFIN costs $15/year, connects to MX (16,000+ institutions)
 - Three institutions: Discover (banking + HELOC), Fidelity (investments), Consumers Credit Union (banking)
 - Pay schedule: bi-monthly (15th and last day of month), equal split
@@ -148,4 +159,4 @@ Accurate, auto-synced financial data with envelope budgeting that lets you see w
 | Discriminated union on type field for SSE events | Parsed objects are self-describing; enables switch narrowing | ✓ Good — compile-time protocol safety |
 
 ---
-*Last updated: 2026-03-25 after v2.6 milestone*
+*Last updated: 2026-03-25 after v2.7 milestone start*
