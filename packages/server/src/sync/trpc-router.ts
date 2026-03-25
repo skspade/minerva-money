@@ -2,8 +2,11 @@ import { router, publicProcedure } from './trpc.js';
 import { agentRouter } from '../agent/agent-router.js';
 import { importRouter } from '../import/import-router.js';
 import { runSync } from './sync-service.js';
+import { resolveBackupDir } from '../backup/backup.js';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
+import fs from 'node:fs';
+import path from 'node:path';
 import {
   listGroupsWithCategories,
   createGroup,
@@ -111,6 +114,38 @@ const syncRouter = router({
       } : null,
       errorCount,
       accounts,
+    };
+  }),
+});
+
+const backupRouter = router({
+  status: publicProcedure.query(() => {
+    const { dir, isCloud } = resolveBackupDir();
+
+    if (!fs.existsSync(dir)) {
+      return { lastBackup: null };
+    }
+
+    const files = fs.readdirSync(dir)
+      .filter(f => f.startsWith('minerva_') && f.endsWith('.db') && f !== 'minerva_latest.db')
+      .sort()
+      .reverse();
+
+    if (files.length === 0) {
+      return { lastBackup: null };
+    }
+
+    const latest = files[0];
+    const filePath = path.join(dir, latest);
+    const stat = fs.statSync(filePath);
+
+    return {
+      lastBackup: {
+        filename: latest,
+        timestamp: stat.mtime.toISOString(),
+        sizeBytes: stat.size,
+        isCloud,
+      },
     };
   }),
 });
@@ -445,6 +480,7 @@ const reportsRouter = router({
 
 export const appRouter = router({
   sync: syncRouter,
+  backup: backupRouter,
   accounts: accountsRouter,
   transactions: transactionsRouter,
   categories: categoriesRouter,
