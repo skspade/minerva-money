@@ -68,6 +68,16 @@ Pages map 1:1 to features: `DashboardPage`, `TransactionsPage`, `BudgetPage`, `C
 - **Health check**: `GET /health` returns `{ "status": "ok" }`
 - **Backup**: Every 6 hours via launchd, also after each sync. Atomic `sqlite3 .backup` to iCloud Drive
 
+## Version Bumping
+
+After completing each milestone (`/gsd:complete-milestone`), bump the version in the root `package.json` based on the work done:
+
+- **Patch** (2.5.0 → 2.5.1): Bug fixes, minor polish
+- **Minor** (2.5.0 → 2.6.0): New features, enhancements
+- **Major** (2.5.0 → 3.0.0): Breaking changes, major rewrites
+
+Commit as `chore: bump version to X.Y.Z` immediately after the milestone completion commit.
+
 ## Key Conventions
 
 - ESM throughout (`"type": "module"` in all packages)
