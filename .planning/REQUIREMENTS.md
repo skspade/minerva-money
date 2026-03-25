@@ -9,13 +9,13 @@ Requirements for Chat Enhancements milestone. Each maps to roadmap phases.
 
 ### Model Selection
 
-- [x] **MOD-01**: Server exposes a tRPC query returning available model options (id, label, description)
-- [x] **MOD-02**: Chat mutation accepts optional model parameter with server-side allowlist validation
-- [x] **MOD-03**: Agent service uses the selected model instead of hardcoded Sonnet default
-- [x] **MOD-04**: User can select a model (Haiku/Sonnet/Opus) from a dropdown above the chat input bar
-- [x] **MOD-05**: Switching models resets the conversation (clears messages, resets session)
-- [x] **MOD-06**: Model selector is disabled while a chat request is pending
-- [x] **MOD-07**: Model-specific timeout scaling (Haiku 15s, Sonnet 30s, Opus 60s)
+- [ ] **MOD-01**: Server exposes a tRPC query returning available model options (id, label, description)
+- [ ] **MOD-02**: Chat mutation accepts optional model parameter with server-side allowlist validation
+- [ ] **MOD-03**: Agent service uses the selected model instead of hardcoded Sonnet default
+- [ ] **MOD-04**: User can select a model (Haiku/Sonnet/Opus) from a dropdown above the chat input bar
+- [ ] **MOD-05**: Switching models resets the conversation (clears messages, resets session)
+- [ ] **MOD-06**: Model selector is disabled while a chat request is pending
+- [ ] **MOD-07**: Model-specific timeout scaling (Haiku 15s, Sonnet 30s, Opus 60s)
 
 ### Category Creation
 
@@ -29,10 +29,10 @@ Requirements for Chat Enhancements milestone. Each maps to roadmap phases.
 
 ### System Prompt
 
-- [x] **SYS-01**: System prompt documents both category creation tools with usage guidance
-- [x] **SYS-02**: System prompt requires confirmation before category/group creation
-- [x] **SYS-03**: System prompt instructs agent to direct users to Categories page for delete/rename operations
-- [x] **SYS-04**: System prompt guides agent to check for existing categories before creating duplicates
+- [ ] **SYS-01**: System prompt documents both category creation tools with usage guidance
+- [ ] **SYS-02**: System prompt requires confirmation before category/group creation
+- [ ] **SYS-03**: System prompt instructs agent to direct users to Categories page for delete/rename operations
+- [ ] **SYS-04**: System prompt guides agent to check for existing categories before creating duplicates
 
 ## Future Requirements
 
@@ -56,13 +56,13 @@ Requirements for Chat Enhancements milestone. Each maps to roadmap phases.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| MOD-01 | Phase 33 | Done |
-| MOD-02 | Phase 33 | Done |
-| MOD-03 | Phase 33 | Done |
-| MOD-04 | Phase 36 | Done |
-| MOD-05 | Phase 36 | Done |
-| MOD-06 | Phase 36 | Done |
-| MOD-07 | Phase 33 | Done |
+| MOD-01 | Phase 37 | Pending |
+| MOD-02 | Phase 37 | Pending |
+| MOD-03 | Phase 37 | Pending |
+| MOD-04 | Phase 37 | Pending |
+| MOD-05 | Phase 37 | Pending |
+| MOD-06 | Phase 37 | Pending |
+| MOD-07 | Phase 37 | Pending |
 | CAT-01 | Phase 34 | Done |
 | CAT-02 | Phase 34 | Done |
 | CAT-03 | Phase 34 | Done |
@@ -70,14 +70,15 @@ Requirements for Chat Enhancements milestone. Each maps to roadmap phases.
 | CAT-05 | Phase 34 | Done |
 | CAT-06 | Phase 34 | Done |
 | CAT-07 | Phase 34 | Done |
-| SYS-01 | Phase 35 | Done |
-| SYS-02 | Phase 35 | Done |
-| SYS-03 | Phase 35 | Done |
-| SYS-04 | Phase 35 | Done |
+| SYS-01 | Phase 37 | Pending |
+| SYS-02 | Phase 37 | Pending |
+| SYS-03 | Phase 37 | Pending |
+| SYS-04 | Phase 37 | Pending |
 
 **Coverage:**
 - v2.5 requirements: 18 total
-- Mapped to phases: 18
+- Satisfied: 7 (CAT-01 through CAT-07)
+- Pending verification: 11 (MOD-01–07, SYS-01–04 → Phase 37)
 - Unmapped: 0
 
 ---
