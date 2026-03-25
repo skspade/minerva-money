@@ -1,8 +1,10 @@
-import { useState, useRef, useEffect } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useTRPC } from '../trpc';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { useStreamingChat } from '../hooks/useStreamingChat';
+import { getToolLabel } from '../utils/tool-labels';
 
 type MessageRole = 'user' | 'assistant' | 'error';
 
@@ -53,31 +55,59 @@ export default function ChatPage() {
   const [respondedConfirmations, setRespondedConfirmations] = useState<Set<number>>(new Set());
   const [selectedModel, setSelectedModel] = useState<string>('claude-sonnet-4-20250514');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messageContainerRef = useRef<HTMLDivElement>(null);
+  const userScrolledUpRef = useRef(false);
   const trpc = useTRPC();
   const { data: models } = useQuery(trpc.agent.models.queryOptions());
 
-  const chatMutation = useMutation(
-    trpc.agent.chat.mutationOptions({
-      onSuccess: (data) => {
-        setSessionId(data.sessionId);
-        const { textContent, confirmation } = parseConfirmation(data.response);
-        setMessages((prev) => [
-          ...prev,
-          { role: 'assistant', content: textContent, confirmation },
-        ]);
-      },
-      onError: (error) => {
-        setMessages((prev) => [
-          ...prev,
-          { role: 'error', content: error.message, confirmation: null },
-        ]);
-      },
-    }),
-  );
+  const onComplete = useCallback((text: string, sid: string) => {
+    setSessionId(sid);
+    const { textContent, confirmation } = parseConfirmation(text);
+    setMessages((prev) => [
+      ...prev,
+      { role: 'assistant', content: textContent, confirmation },
+    ]);
+  }, []);
 
+  const { send, streamingText, activeTool, isStreaming, error } = useStreamingChat({ onComplete });
+
+  // Append error messages reactively
   useEffect(() => {
+    if (error) {
+      setMessages((prev) => [
+        ...prev,
+        { role: 'error', content: error, confirmation: null },
+      ]);
+    }
+  }, [error]);
+
+  // Detect user scroll-up
+  useEffect(() => {
+    const container = messageContainerRef.current;
+    if (!container) return;
+    function handleScroll() {
+      if (!container) return;
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      const nearBottom = scrollHeight - scrollTop - clientHeight < 50;
+      userScrolledUpRef.current = !nearBottom;
+    }
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // Auto-scroll during streaming (if user hasn't scrolled up)
+  useEffect(() => {
+    if (!isStreaming || userScrolledUpRef.current) return;
+    requestAnimationFrame(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    });
+  }, [streamingText, isStreaming]);
+
+  // Always scroll when new messages added (user sent or response completed)
+  useEffect(() => {
+    userScrolledUpRef.current = false;
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, chatMutation.isPending]);
+  }, [messages]);
 
   function handleSend(text?: string) {
     const messageText = text ?? input.trim();
@@ -87,7 +117,7 @@ export default function ChatPage() {
       ...prev,
       { role: 'user', content: messageText, confirmation: null },
     ]);
-    chatMutation.mutate({ message: messageText, sessionId, model: selectedModel });
+    send(messageText, sessionId, selectedModel);
   }
 
   function handleConfirm(index: number) {
@@ -117,8 +147,8 @@ export default function ChatPage() {
   return (
     <div className="fixed inset-0 top-0 md:top-[56px] bottom-[calc(env(safe-area-inset-bottom)+60px)] md:bottom-0 flex flex-col bg-gray-50 z-10">
       {/* Message area */}
-      <div className="flex-1 overflow-y-auto overscroll-contain p-4">
-        {messages.length === 0 ? (
+      <div ref={messageContainerRef} className="flex-1 overflow-y-auto overscroll-contain p-4">
+        {messages.length === 0 && !isStreaming ? (
           <div className="flex flex-col items-center justify-center h-full text-center">
             <h2 className="text-2xl font-semibold text-gray-800 mb-2">
               Ask Minerva anything about your finances
@@ -131,7 +161,8 @@ export default function ChatPage() {
                 <button
                   key={q}
                   onClick={() => handleSend(q)}
-                  className="px-4 py-2 text-sm rounded-full border border-gray-300 text-gray-700 hover:bg-gray-100 transition-colors"
+                  disabled={isStreaming}
+                  className="px-4 py-2 text-sm rounded-full border border-gray-300 text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {q}
                 </button>
@@ -159,14 +190,14 @@ export default function ChatPage() {
                       <div className="flex gap-2 mt-3 pt-3 border-t border-gray-200 items-center">
                         <button
                           onClick={() => handleConfirm(i)}
-                          disabled={chatMutation.isPending}
+                          disabled={isStreaming}
                           className="px-4 py-1.5 text-sm rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           Confirm
                         </button>
                         <button
                           onClick={() => handleCancel(i)}
-                          disabled={chatMutation.isPending}
+                          disabled={isStreaming}
                           className="px-4 py-1.5 text-sm rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           Cancel
@@ -186,7 +217,33 @@ export default function ChatPage() {
                 )}
               </div>
             ))}
-            {chatMutation.isPending && (
+            {/* Live streaming bubble */}
+            {isStreaming && streamingText && (
+              <div className="flex justify-start">
+                <div className="bg-white border border-gray-200 rounded-2xl rounded-bl-sm px-4 py-2 max-w-[80%]">
+                  <div className="prose prose-sm max-w-none">
+                    <Markdown remarkPlugins={[remarkGfm]}>{streamingText}</Markdown>
+                  </div>
+                  {activeTool && (
+                    <div className="mt-2 flex items-center gap-2 text-sm text-gray-400 italic">
+                      <span className="inline-block w-1.5 h-1.5 bg-gray-400 rounded-full animate-pulse" />
+                      {getToolLabel(activeTool)}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+            {/* Tool activity indicator before first text token */}
+            {isStreaming && !streamingText && activeTool && (
+              <div className="flex justify-start">
+                <div className="flex items-center gap-2 px-4 py-3 text-sm text-gray-400 italic">
+                  <span className="inline-block w-1.5 h-1.5 bg-gray-400 rounded-full animate-pulse" />
+                  {getToolLabel(activeTool)}
+                </div>
+              </div>
+            )}
+            {/* Bouncing dots — only before first text token and no tool active */}
+            {isStreaming && !streamingText && !activeTool && (
               <div className="flex justify-start">
                 <div className="flex items-center gap-1 px-4 py-3">
                   <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:0ms]" />
@@ -208,7 +265,7 @@ export default function ChatPage() {
             <select
               value={selectedModel}
               onChange={handleModelChange}
-              disabled={chatMutation.isPending}
+              disabled={isStreaming}
               className="rounded-lg border border-gray-300 text-base md:text-sm px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {(models ?? []).map((m) => (
@@ -227,12 +284,12 @@ export default function ChatPage() {
               onKeyDown={handleKeyDown}
               placeholder="Ask about your finances..."
               rows={1}
-              disabled={chatMutation.isPending}
+              disabled={isStreaming}
               className="flex-1 resize-none rounded-lg border border-gray-300 px-4 py-2 text-base md:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
             />
             <button
               onClick={() => handleSend()}
-              disabled={chatMutation.isPending || !input.trim()}
+              disabled={isStreaming || !input.trim()}
               className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Send
