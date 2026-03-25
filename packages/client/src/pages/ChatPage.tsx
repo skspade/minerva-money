@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { useTRPC } from '../trpc';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -51,8 +51,10 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sessionId, setSessionId] = useState<string | undefined>();
   const [respondedConfirmations, setRespondedConfirmations] = useState<Set<number>>(new Set());
+  const [selectedModel, setSelectedModel] = useState<string>('claude-sonnet-4-20250514');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const trpc = useTRPC();
+  const { data: models } = useQuery(trpc.agent.models.queryOptions());
 
   const chatMutation = useMutation(
     trpc.agent.chat.mutationOptions({
@@ -85,7 +87,7 @@ export default function ChatPage() {
       ...prev,
       { role: 'user', content: messageText, confirmation: null },
     ]);
-    chatMutation.mutate({ message: messageText, sessionId });
+    chatMutation.mutate({ message: messageText, sessionId, model: selectedModel });
   }
 
   function handleConfirm(index: number) {
@@ -96,6 +98,13 @@ export default function ChatPage() {
   function handleCancel(index: number) {
     setRespondedConfirmations((prev) => new Set(prev).add(index));
     handleSend('No, cancel');
+  }
+
+  function handleModelChange(e: React.ChangeEvent<HTMLSelectElement>) {
+    setSelectedModel(e.target.value);
+    setMessages([]);
+    setSessionId(undefined);
+    setRespondedConfirmations(new Set());
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -193,23 +202,42 @@ export default function ChatPage() {
 
       {/* Input bar */}
       <div className="border-t border-gray-200 bg-white px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-        <div className="mx-auto max-w-3xl flex gap-2">
-          <textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Ask about your finances..."
-            rows={1}
-            disabled={chatMutation.isPending}
-            className="flex-1 resize-none rounded-lg border border-gray-300 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
-          />
-          <button
-            onClick={() => handleSend()}
-            disabled={chatMutation.isPending || !input.trim()}
-            className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Send
-          </button>
+        <div className="mx-auto max-w-3xl space-y-2">
+          {/* Model selector row */}
+          <div className="flex items-center gap-3">
+            <select
+              value={selectedModel}
+              onChange={handleModelChange}
+              disabled={chatMutation.isPending}
+              className="rounded-lg border border-gray-300 text-sm px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {(models ?? []).map((m) => (
+                <option key={m.id} value={m.id}>{m.label}</option>
+              ))}
+            </select>
+            <span className="text-xs text-gray-500">
+              {models?.find((m) => m.id === selectedModel)?.description ?? ''}
+            </span>
+          </div>
+          {/* Input row */}
+          <div className="flex gap-2">
+            <textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Ask about your finances..."
+              rows={1}
+              disabled={chatMutation.isPending}
+              className="flex-1 resize-none rounded-lg border border-gray-300 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+            />
+            <button
+              onClick={() => handleSend()}
+              disabled={chatMutation.isPending || !input.trim()}
+              className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Send
+            </button>
+          </div>
         </div>
       </div>
     </div>
