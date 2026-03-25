@@ -9,10 +9,10 @@ Requirements for Manual Accounts milestone. Each maps to roadmap phases.
 
 ### Schema
 
-- [ ] **SCHEMA-01**: Database has a `source` column on accounts table distinguishing manual (`'manual'`) from synced (`'simplefin'`) accounts
-- [ ] **SCHEMA-02**: Existing accounts default to `source = 'simplefin'` after migration with no data loss
-- [ ] **SCHEMA-03**: Manual account IDs use `manual_` prefix + UUID to avoid collisions with SimpleFIN IDs
-- [ ] **SCHEMA-04**: Sync trigger and rate-limit check filter to `source = 'simplefin'` accounts only
+- [x] **SCHEMA-01**: Database has a `source` column on accounts table distinguishing manual (`'manual'`) from synced (`'simplefin'`) accounts
+- [x] **SCHEMA-02**: Existing accounts default to `source = 'simplefin'` after migration with no data loss
+- [x] **SCHEMA-03**: Manual account IDs use `manual_` prefix + UUID to avoid collisions with SimpleFIN IDs
+- [x] **SCHEMA-04**: Sync trigger and rate-limit check filter to `source = 'simplefin'` accounts only
 
 ### Account CRUD
 
@@ -71,10 +71,10 @@ Deferred to future milestone. Tracked but not in current roadmap.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SCHEMA-01 | Phase 44 | Pending |
-| SCHEMA-02 | Phase 44 | Pending |
-| SCHEMA-03 | Phase 44 | Pending |
-| SCHEMA-04 | Phase 44 | Pending |
+| SCHEMA-01 | Phase 44 | Complete |
+| SCHEMA-02 | Phase 44 | Complete |
+| SCHEMA-03 | Phase 44 | Complete |
+| SCHEMA-04 | Phase 44 | Complete |
 | CRUD-01 | Phase 45 | Pending |
 | CRUD-02 | Phase 45 | Pending |
 | CRUD-03 | Phase 45 | Pending |

@@ -125,7 +125,7 @@ Full details: [milestones/v2.6-ROADMAP.md](milestones/v2.6-ROADMAP.md)
 
 **Milestone Goal:** Enable manual account creation and CSV transaction import for accounts that cannot be synced via SimpleFIN, fully integrated into budgets, reports, dashboard, and net worth.
 
-- [ ] **Phase 44: Schema Migration and Sync Safety** - Add source column to accounts table and protect sync pipeline from manual accounts
+- [x] **Phase 44: Schema Migration and Sync Safety** - Add source column to accounts table and protect sync pipeline from manual accounts (completed 2026-03-25)
 - [ ] **Phase 45: Account CRUD Service and Import Integration** - Server-side account management with balance computation and post-import recalculation
 - [ ] **Phase 46: Client UI and Agent Tools** - Inline account creation in import wizard, dashboard visual distinction, and agent account creation
 
@@ -187,6 +187,6 @@ Plans:
 | 29-32 | v2.4 | 4/4 | Complete | 2026-03-24 |
 | 33-37 | v2.5 | 5/5 | Complete | 2026-03-24 |
 | 38-43 | v2.6 | 6/6 | Complete | 2026-03-25 |
-| 44. Schema Migration and Sync Safety | v2.7 | 0/TBD | Not started | - |
+| 44. Schema Migration and Sync Safety | 1/1 | Complete    | 2026-03-25 | - |
 | 45. Account CRUD Service and Import Integration | v2.7 | 0/TBD | Not started | - |
 | 46. Client UI and Agent Tools | v2.7 | 0/TBD | Not started | - |
