@@ -10,7 +10,7 @@ db.pragma('journal_mode = WAL');
 
 try {
   const result = await createBackup(db);
-  console.log(`Backup complete: ${result.path} (${result.sizeBytes} bytes, integrity: ${result.integrityOk})`);
+  console.log(`Backup complete: ${result.path} (${result.sizeBytes} bytes, integrity: ${result.integrityOk}, cloud: ${result.isCloudBackup})`);
 } catch (error) {
   console.error('Backup failed:', error);
   process.exitCode = 1;

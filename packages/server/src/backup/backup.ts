@@ -9,17 +9,35 @@ export interface BackupResult {
   timestamp: string;
   sizeBytes: number;
   integrityOk: boolean;
+  isCloudBackup: boolean;
 }
+
+const ICLOUD_PARENT = path.join(
+  'Library',
+  'Mobile Documents',
+  'com~apple~CloudDrive'
+);
 
 const DEFAULT_BACKUP_DIR = path.join(
   os.homedir(),
-  'Library',
-  'Mobile Documents',
-  'com~apple~CloudDrive',
+  ICLOUD_PARENT,
   'MinervaBackups'
 );
 
+const LOCAL_BACKUP_DIR = path.join(os.homedir(), 'minerva-money', 'backups');
+
 const RETENTION_DAYS = 30;
+
+export function resolveBackupDir(homeDir?: string): { dir: string; isCloud: boolean } {
+  const home = homeDir ?? os.homedir();
+  const iCloudDir = path.join(home, ICLOUD_PARENT);
+
+  if (fs.existsSync(iCloudDir)) {
+    return { dir: path.join(iCloudDir, 'MinervaBackups'), isCloud: true };
+  }
+
+  return { dir: path.join(home, 'minerva-money', 'backups'), isCloud: false };
+}
 
 function formatTimestamp(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, '0');
@@ -33,7 +51,19 @@ export async function createBackup(
   db: Database.Database,
   backupDir?: string
 ): Promise<BackupResult> {
-  const dir = backupDir ?? DEFAULT_BACKUP_DIR;
+  let dir: string;
+  let isCloudBackup: boolean;
+
+  if (backupDir) {
+    dir = backupDir;
+    isCloudBackup = false;
+  } else {
+    const resolved = resolveBackupDir();
+    dir = resolved.dir;
+    isCloudBackup = resolved.isCloud;
+  }
+
+  console.log(`Backup target: ${dir} (${isCloudBackup ? 'iCloud' : 'local'})`);
   fs.mkdirSync(dir, { recursive: true });
 
   const timestamp = formatTimestamp(new Date());
@@ -62,6 +92,7 @@ export async function createBackup(
     timestamp,
     sizeBytes: stats.size,
     integrityOk: true,
+    isCloudBackup,
   };
 }
 
