@@ -8,7 +8,7 @@
 - ✅ **v2.2 Mobile-Friendly UI** — Phases 21-25 (shipped 2026-03-24)
 - ✅ **v2.3 CSV Import** — Phases 26-28 (shipped 2026-03-24)
 - ✅ **v2.4 CSV Import Account Filtering** — Phases 29-32 (shipped 2026-03-24)
-- 🚧 **v2.5 Chat Enhancements** — Phases 33-37 (in progress)
+- ✅ **v2.5 Chat Enhancements** — Phases 33-37 (shipped 2026-03-24)
 
 ## Phases
 
@@ -92,7 +92,7 @@ Full details: [milestones/v2.4-ROADMAP.md](milestones/v2.4-ROADMAP.md)
 
 </details>
 
-### 🚧 v2.5 Chat Enhancements (In Progress)
+### ✅ v2.5 Chat Enhancements (Shipped 2026-03-24)
 
 **Milestone Goal:** Add model selector and category creation to the Claude chat agent
 
@@ -100,7 +100,7 @@ Full details: [milestones/v2.4-ROADMAP.md](milestones/v2.4-ROADMAP.md)
 - [x] **Phase 34: Category Creation Tools** - Agent tools for creating categories and category groups with duplicate validation and confirmation flow (completed 2026-03-25)
 - [x] **Phase 35: System Prompt Updates** - Behavioral guidance for category creation tools and add-only policy (completed 2026-03-25)
 - [x] **Phase 36: Model Selector UI** - Client-side model dropdown, session reset on model change, and disabled state during pending requests (completed 2026-03-24)
-- [ ] **Phase 37: Verification Gap Closure** - Add missing VERIFICATION.md files for Phases 33, 35, 36 [Gap Closure]
+- [x] **Phase 37: Verification Gap Closure** - Add missing VERIFICATION.md files for Phases 33, 35, 36 [Gap Closure] (completed 2026-03-24)
 
 ## Phase Details
 
@@ -171,7 +171,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 37-01-PLAN.md — Create VERIFICATION.md for phases 33, 35, 36
+- [x] 37-01-PLAN.md — Create VERIFICATION.md for phases 33, 35, 36
 
 ## Progress
 
@@ -188,6 +188,6 @@ Phases 33 and 34 are independent and can execute in parallel. Phase 35 depends o
 | 29-32 | v2.4 | 4/4 | Complete | 2026-03-24 |
 | 33. Model Selector Server | 1/1 | Complete   | 2026-03-24 | - |
 | 34. Category Creation Tools | 1/1 | Complete    | 2026-03-25 | - |
-| 35. System Prompt Updates | v2.5 | 0/1 | Not started | - |
+| 35. System Prompt Updates | v2.5 | 1/1 | Complete | 2026-03-25 |
 | 36. Model Selector UI | v2.5 | 1/1 | Complete | 2026-03-24 |
-| 37. Verification Gap Closure | v2.5 | 0/1 | Not started | - |
+| 37. Verification Gap Closure | v2.5 | 1/1 | Complete | 2026-03-24 |
