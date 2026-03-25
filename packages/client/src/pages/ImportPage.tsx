@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { Link } from 'react-router';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Upload } from 'lucide-react';
 import { useTRPC } from '../trpc';
 import { formatCurrency } from '../lib/format';
@@ -10,14 +10,15 @@ type WizardStep = 'upload' | 'preview' | 'results';
 // --- Skip Support Helpers ---
 
 export const SKIP_SENTINEL = '__SKIP__';
+export const CREATE_NEW_SENTINEL = '__CREATE_NEW__';
 
 export function isAccountResolved(value: string): boolean {
-  return value !== '' && value.length > 0;
+  return value !== '' && value !== CREATE_NEW_SENTINEL && value.length > 0;
 }
 
 export function filterSkippedAccounts(mappings: Record<string, string>): Record<string, string> {
   return Object.fromEntries(
-    Object.entries(mappings).filter(([, v]) => v !== SKIP_SENTINEL)
+    Object.entries(mappings).filter(([, v]) => v !== SKIP_SENTINEL && v !== CREATE_NEW_SENTINEL)
   );
 }
 
@@ -55,6 +56,7 @@ export function computeSkipFilterStats(
 
 export default function ImportPage() {
   const trpc = useTRPC();
+  const queryClient = useQueryClient();
 
   const [step, setStep] = useState<WizardStep>('upload');
   const [csvText, setCsvText] = useState('');
@@ -64,6 +66,8 @@ export default function ImportPage() {
   const [executeResult, setExecuteResult] = useState<ExecuteResult | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
+  const [creatingAccountFor, setCreatingAccountFor] = useState<string | null>(null);
+  const [localAccounts, setLocalAccounts] = useState<{ id: string; name: string }[]>([]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -92,6 +96,17 @@ export default function ImportPage() {
   const executeMutation = useMutation(trpc.import.execute.mutationOptions({
     onSuccess: (data) => {
       setExecuteResult(data);
+    },
+  }));
+
+  const createAccountMutation = useMutation(trpc.accounts.create.mutationOptions({
+    onSuccess: (newAccount) => {
+      setLocalAccounts(prev => [...prev, { id: newAccount.id, name: newAccount.name }]);
+      if (creatingAccountFor) {
+        setAccountMappings(prev => ({ ...prev, [creatingAccountFor]: newAccount.id }));
+        setCreatingAccountFor(null);
+      }
+      queryClient.invalidateQueries({ queryKey: trpc.accounts.list.queryKey() });
     },
   }));
 
@@ -144,8 +159,11 @@ export default function ImportPage() {
     setCategoryMappings({});
     setExecuteResult(null);
     setFileError(null);
+    setCreatingAccountFor(null);
+    setLocalAccounts([]);
     previewMutation.reset();
     executeMutation.reset();
+    createAccountMutation.reset();
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -182,7 +200,7 @@ export default function ImportPage() {
       {step === 'preview' && previewResult && (
         <PreviewStep
           previewResult={previewResult}
-          accounts={accounts ?? []}
+          accounts={[...(accounts ?? []), ...localAccounts]}
           categoryGroups={categoryGroups ?? []}
           accountMappings={accountMappings}
           categoryMappings={categoryMappings}
@@ -213,6 +231,21 @@ export default function ImportPage() {
               return next;
             });
           }}
+          creatingAccountFor={creatingAccountFor}
+          onCreateAccount={(csvName) => {
+            setCreatingAccountFor(csvName);
+            setAccountMappings(prev => ({ ...prev, [csvName]: CREATE_NEW_SENTINEL }));
+          }}
+          onCancelCreate={() => {
+            if (creatingAccountFor) {
+              setAccountMappings(prev => ({ ...prev, [creatingAccountFor]: '' }));
+            }
+            setCreatingAccountFor(null);
+            createAccountMutation.reset();
+          }}
+          onSubmitCreate={(input) => createAccountMutation.mutate(input)}
+          createAccountPending={createAccountMutation.isPending}
+          createAccountError={createAccountMutation.error?.message ?? null}
         />
       )}
 
@@ -367,6 +400,12 @@ interface PreviewStepProps {
   onCategoryMappingChange: (csvName: string, categoryId: number) => void;
   onContinue: () => void;
   onSkipAllUnmatched: () => void;
+  creatingAccountFor: string | null;
+  onCreateAccount: (csvName: string) => void;
+  onCancelCreate: () => void;
+  onSubmitCreate: (input: { name: string; institution: string; type: 'banking' | 'credit' }) => void;
+  createAccountPending: boolean;
+  createAccountError: string | null;
 }
 
 function PreviewStep({
@@ -380,13 +419,19 @@ function PreviewStep({
   onCategoryMappingChange,
   onContinue,
   onSkipAllUnmatched,
+  creatingAccountFor,
+  onCreateAccount,
+  onCancelCreate,
+  onSubmitCreate,
+  createAccountPending,
+  createAccountError,
 }: PreviewStepProps) {
   const { skippedAccountNames, skippedRowCount } = computeSkipFilterStats(accountMappings, previewResult.rowCountByAccount);
   const filteredTotalRows = previewResult.totalRows - skippedRowCount;
   const filteredValidRows = previewResult.validRows - skippedRowCount;
   const filteredSampleRows = previewResult.sampleRows.filter(row => !skippedAccountNames.has(row.accountName));
   const skippedAccountCount = skippedAccountNames.size;
-  const mappedAccountCount = Object.values(accountMappings).filter(v => v !== '' && v !== SKIP_SENTINEL).length;
+  const mappedAccountCount = Object.values(accountMappings).filter(v => v !== '' && v !== SKIP_SENTINEL && v !== CREATE_NEW_SENTINEL).length;
   const hasSkippedAccounts = skippedAccountCount > 0;
 
   return (
@@ -506,21 +551,39 @@ function PreviewStep({
               </label>
               <select
                 value={accountMappings[acct.csvName] ?? ''}
-                onChange={(e) => onAccountMappingChange(acct.csvName, e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === CREATE_NEW_SENTINEL) {
+                    onCreateAccount(acct.csvName);
+                  } else {
+                    onAccountMappingChange(acct.csvName, val);
+                  }
+                }}
                 className={`w-full rounded-md border px-3 py-2 text-sm ${
                   !accountMappings[acct.csvName] ? 'border-red-300' :
                   accountMappings[acct.csvName] === SKIP_SENTINEL ? 'border-amber-300' :
+                  accountMappings[acct.csvName] === CREATE_NEW_SENTINEL ? 'border-blue-300' :
                   'border-gray-300'
                 }`}
               >
                 <option value="" disabled>Select account...</option>
                 <option value={SKIP_SENTINEL}>Skip — do not import</option>
+                <option value={CREATE_NEW_SENTINEL}>+ Create New Account</option>
                 {accounts.map((a) => (
                   <option key={a.id} value={a.id}>{a.name}</option>
                 ))}
               </select>
               {accountMappings[acct.csvName] === SKIP_SENTINEL && (
                 <p className="text-xs text-amber-600 italic">Skipped — rows from this account will not be imported</p>
+              )}
+              {creatingAccountFor === acct.csvName && (
+                <InlineAccountForm
+                  defaultName={acct.csvName}
+                  onSubmit={onSubmitCreate}
+                  onCancel={onCancelCreate}
+                  isPending={createAccountPending}
+                  error={createAccountError}
+                />
               )}
             </div>
           ))}
@@ -564,6 +627,77 @@ function PreviewStep({
           className="w-full md:w-auto px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           Continue
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// --- Inline Account Form ---
+
+function InlineAccountForm({
+  defaultName,
+  onSubmit,
+  onCancel,
+  isPending,
+  error,
+}: {
+  defaultName: string;
+  onSubmit: (input: { name: string; institution: string; type: 'banking' | 'credit' }) => void;
+  onCancel: () => void;
+  isPending: boolean;
+  error: string | null;
+}) {
+  const [name, setName] = useState(defaultName);
+  const [institution, setInstitution] = useState('');
+  const [type, setType] = useState<'banking' | 'credit'>('banking');
+
+  const canSubmit = name.trim() !== '' && institution.trim() !== '' && !isPending;
+
+  return (
+    <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-2">
+      <p className="text-xs font-medium text-blue-700">New Account</p>
+      <input
+        type="text"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Account name"
+        className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm"
+      />
+      <input
+        type="text"
+        value={institution}
+        onChange={(e) => setInstitution(e.target.value)}
+        placeholder="Institution (required)"
+        className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm"
+      />
+      <select
+        value={type}
+        onChange={(e) => setType(e.target.value as 'banking' | 'credit')}
+        className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm"
+      >
+        <option value="banking">Banking</option>
+        <option value="credit">Credit</option>
+      </select>
+      {error && (
+        <p className="text-xs text-red-600">{error}</p>
+      )}
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={() => onSubmit({ name: name.trim(), institution: institution.trim(), type })}
+          disabled={!canSubmit}
+          className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          {isPending ? 'Creating...' : 'Create'}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={isPending}
+          className="px-3 py-1 text-sm text-gray-600 hover:text-gray-800 transition-colors"
+        >
+          Cancel
         </button>
       </div>
     </div>
