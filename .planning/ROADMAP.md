@@ -115,7 +115,7 @@ Full details: [milestones/v2.5-ROADMAP.md](milestones/v2.5-ROADMAP.md)
 - [x] **Phase 40: Express SSE Endpoint** - HTTP handler that wires the stream generator to POST /api/chat/stream with validation and SSE headers (completed 2026-03-25)
 - [x] **Phase 41: Client Stream Hook** - React hook that consumes the SSE stream via fetch/ReadableStream and exposes reactive streaming state (completed 2026-03-25)
 - [x] **Phase 42: ChatPage Streaming UI** - Incremental text rendering, tool activity indicators, smart auto-scroll, and graceful fallback in ChatPage (completed 2026-03-25)
-- [ ] **Phase 43: Verification and Session Fix** - Fix session ID continuity bug, add missing verification docs, update requirement checkboxes [Gap Closure]
+- [x] **Phase 43: Verification and Session Fix** - Fix session ID continuity bug, add missing verification docs, update requirement checkboxes [Gap Closure] (completed 2026-03-25)
 
 ## Phase Details
 
