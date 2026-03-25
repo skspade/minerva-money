@@ -114,7 +114,7 @@ Full details: [milestones/v2.5-ROADMAP.md](milestones/v2.5-ROADMAP.md)
 - [x] **Phase 39: Server Stream Processing** - Async generator that iterates Agent SDK streaming output and yields typed SSE events (completed 2026-03-25)
 - [x] **Phase 40: Express SSE Endpoint** - HTTP handler that wires the stream generator to POST /api/chat/stream with validation and SSE headers (completed 2026-03-25)
 - [x] **Phase 41: Client Stream Hook** - React hook that consumes the SSE stream via fetch/ReadableStream and exposes reactive streaming state (completed 2026-03-25)
-- [ ] **Phase 42: ChatPage Streaming UI** - Incremental text rendering, tool activity indicators, smart auto-scroll, and graceful fallback in ChatPage
+- [x] **Phase 42: ChatPage Streaming UI** - Incremental text rendering, tool activity indicators, smart auto-scroll, and graceful fallback in ChatPage (completed 2026-03-25)
 
 ## Phase Details
 
@@ -207,4 +207,4 @@ Phases execute in numeric order: 38 → 39 → 40 → 41 → 42
 | 39. Server Stream Processing | 1/1 | Complete    | 2026-03-25 | - |
 | 40. Express SSE Endpoint | v2.6 | 1/1 | Complete | 2026-03-25 |
 | 41. Client Stream Hook | 1/1 | Complete    | 2026-03-25 | - |
-| 42. ChatPage Streaming UI | v2.6 | 0/1 | Not started | - |
+| 42. ChatPage Streaming UI | 1/1 | Complete   | 2026-03-25 | - |
