@@ -17,7 +17,7 @@ export function createQueryTools(db: Database.Database) {
       async () => {
         try {
           const rows = db.prepare(
-            'SELECT id, name, institution, type, balance, available_balance FROM accounts ORDER BY institution, name',
+            'SELECT id, name, institution, type, balance, available_balance, source FROM accounts ORDER BY institution, name',
           ).all();
           return jsonResult(rows);
         } catch (error) {

@@ -57,7 +57,7 @@ export type { SpendingByCategory, SpendingOverTime, NetWorthPoint };
 const syncRouter = router({
   trigger: publicProcedure.mutation(async ({ ctx }) => {
     // Check rate limit for all known accounts before proceeding
-    const accounts = ctx.db.prepare('SELECT id, name FROM accounts').all() as { id: string; name: string }[];
+    const accounts = ctx.db.prepare("SELECT id, name FROM accounts WHERE source = 'simplefin'").all() as { id: string; name: string }[];
 
     if (accounts.length > 0) {
       const blocked = accounts.filter(a => !ctx.rateLimiter.canManualSync(a.id));
@@ -91,12 +91,13 @@ const syncRouter = router({
     ).get() as { count: number }).count;
 
     const accounts = ctx.db.prepare(
-      'SELECT id, name, balance, last_synced FROM accounts',
+      'SELECT id, name, balance, last_synced, source FROM accounts',
     ).all() as {
       id: string;
       name: string;
       balance: number;
       last_synced: string | null;
+      source: string;
     }[];
 
     return {
@@ -117,10 +118,10 @@ const syncRouter = router({
 const accountsRouter = router({
   list: publicProcedure.query(({ ctx }) => {
     const accounts = ctx.db.prepare(
-      'SELECT id, name, institution, type, balance, last_synced FROM accounts ORDER BY type ASC, name ASC',
+      'SELECT id, name, institution, type, balance, last_synced, source FROM accounts ORDER BY type ASC, name ASC',
     ).all() as {
       id: string; name: string; institution: string; type: string;
-      balance: number; last_synced: string | null;
+      balance: number; last_synced: string | null; source: string;
     }[];
 
     return accounts.map(a => ({
@@ -130,6 +131,7 @@ const accountsRouter = router({
       type: a.type,
       balance: a.balance,
       lastSynced: a.last_synced,
+      source: a.source,
     }));
   }),
 });
