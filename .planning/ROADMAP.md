@@ -141,10 +141,10 @@ Plans:
   2. Tool-start events are emitted when the agent begins a tool call and tool-end events when the tool completes
   3. The generator terminates cleanly when an abort signal fires (client disconnect), preventing memory leaks
   4. An idle timeout (no new events for extended period) terminates the stream instead of a monolithic request timeout
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 39-01: TBD
+- [ ] 39-01-PLAN.md — Implement chatStream async generator with TDD (streaming, tool events, abort, idle timeout)
 
 ### Phase 40: Express SSE Endpoint
 **Goal**: The streaming chat endpoint is reachable over HTTP and can be tested with curl before any client changes
