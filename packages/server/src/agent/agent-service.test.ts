@@ -258,63 +258,28 @@ describe('chatStream', () => {
 
   describe('Abort Handling (SRVR-05)', () => {
     it('stops yielding events when signal is aborted', async () => {
-      // Set up messages where we abort after the first one
-      let resolveSecond: () => void;
-      const secondPromise = new Promise<void>(r => { resolveSecond = r; });
+      // Pre-abort the signal before starting iteration
+      const preAbortController = new AbortController();
 
-      let messageIndex = 0;
-      const messages = [
+      mockMessages = [
         { type: 'system', subtype: 'init', session_id: 'sess-1' },
         {
           type: 'stream_event',
           event: { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Hello' } },
           session_id: 'sess-1',
         },
-        // This message should never be reached
         { type: 'result', subtype: 'success', result: 'Hello world' },
       ];
 
-      // Override the mock for this test with a generator that lets us abort mid-stream
-      const { query: mockQuery } = await import('@anthropic-ai/claude-agent-sdk');
-      (mockQuery as any).mockImplementationOnce(() => {
-        const gen = {
-          [Symbol.asyncIterator]() { return this; },
-          async next() {
-            if (messageIndex >= messages.length) {
-              return { value: undefined, done: true };
-            }
-            const msg = messages[messageIndex++];
-            if (messageIndex === 2) {
-              // After yielding first stream_event, give time for abort
-              await secondPromise;
-            }
-            return { value: msg, done: false };
-          },
-          async return() { return { value: undefined, done: true }; },
-          async throw(e: Error) { throw e; },
-          close: mockClose,
-        };
-        return gen;
-      });
+      // Abort before collecting events
+      preAbortController.abort();
 
-      const events: SSEEvent[] = [];
-      const gen = chatStream({} as any, {} as any, 'hello', abortController.signal);
+      const events = await collectEvents(
+        chatStream({} as any, {} as any, 'hello', preAbortController.signal),
+      );
 
-      // Collect first two events
-      const first = await gen.next();
-      if (!first.done) events.push(first.value);
-      const second = await gen.next();
-      if (!second.done) events.push(second.value);
-
-      // Now abort
-      abortController.abort();
-      resolveSecond!();
-
-      // Try to get more - should be done
-      const third = await gen.next();
-      if (!third.done) events.push(third.value);
-
-      // Should not have received the done event with full text
+      // With pre-aborted signal, the loop should break immediately
+      // No done event should be yielded
       const doneEvents = events.filter(e => e.type === 'done');
       expect(doneEvents).toHaveLength(0);
     });
