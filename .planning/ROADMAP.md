@@ -154,10 +154,10 @@ Plans:
   1. POST /api/chat/stream accepts JSON body with message, sessionId, and model fields
   2. Invalid input returns a standard JSON error response before SSE headers are sent
   3. Valid requests return `Content-Type: text/event-stream` with properly formatted SSE data lines
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 40-01: TBD
+- [ ] 40-01-PLAN.md — Implement SSE chat stream handler with TDD (validation, SSE formatting, abort handling, route registration)
 
 ### Phase 41: Client Stream Hook
 **Goal**: React components can consume streaming chat responses through a clean hook interface without knowing SSE details
