@@ -2,7 +2,7 @@ import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import type Database from 'better-sqlite3';
 import type { Context } from '../../sync/trpc.js';
-import { updateTransactionCategory } from '../../categories/category-service.js';
+import { updateTransactionCategory, createGroup, createCategory } from '../../categories/category-service.js';
 import { createRule, updateRule, deleteRule, applyRule } from '../../rules/rules-service.js';
 import { setAllocation, setDefaultAllocation } from '../../budget/budget-service.js';
 import { confirmTransfer, dismissTransfer } from '../../transfers/transfer-service.js';
@@ -15,6 +15,18 @@ function categoryExists(db: Database.Database, categoryId: number): boolean {
 
 function ruleExists(db: Database.Database, ruleId: number): boolean {
   return !!db.prepare('SELECT id FROM categorization_rules WHERE id = ?').get(ruleId);
+}
+
+function groupExists(db: Database.Database, groupId: number): boolean {
+  return !!db.prepare('SELECT id FROM category_groups WHERE id = ?').get(groupId);
+}
+
+function duplicateGroupName(db: Database.Database, name: string): { id: number; name: string } | null {
+  return (db.prepare('SELECT id, name FROM category_groups WHERE LOWER(name) = LOWER(?)').get(name) as { id: number; name: string } | undefined) ?? null;
+}
+
+function duplicateCategoryName(db: Database.Database, groupId: number, name: string): { id: number; name: string } | null {
+  return (db.prepare('SELECT id, name FROM categories WHERE group_id = ? AND LOWER(name) = LOWER(?)').get(groupId, name) as { id: number; name: string } | undefined) ?? null;
 }
 
 export function createActionTools(db: Database.Database, ctx: Context) {
@@ -223,6 +235,44 @@ export function createActionTools(db: Database.Database, ctx: Context) {
           }
           const result = await runSync(db, ctx.client, ctx.rateLimiter);
           return jsonResult(result);
+        } catch (error) {
+          return errorResult(error);
+        }
+      },
+    ),
+
+    tool(
+      'create_category_group',
+      'Create a new category group. Requires user confirmation before calling.',
+      {
+        name: z.string().describe('Name for the new category group'),
+      },
+      async (args) => {
+        try {
+          const existing = duplicateGroupName(db, args.name);
+          if (existing) return errorResult(new Error(`Category group "${existing.name}" already exists (id: ${existing.id})`));
+          const group = createGroup(db, args.name);
+          return jsonResult({ success: true, id: group.id, name: group.name });
+        } catch (error) {
+          return errorResult(error);
+        }
+      },
+    ),
+
+    tool(
+      'create_category',
+      'Create a new category in an existing group. Requires user confirmation before calling.',
+      {
+        groupId: z.number().describe('ID of the category group'),
+        name: z.string().describe('Name for the new category'),
+      },
+      async (args) => {
+        try {
+          if (!groupExists(db, args.groupId)) return errorResult(new Error(`Category group ${args.groupId} not found`));
+          const existing = duplicateCategoryName(db, args.groupId, args.name);
+          if (existing) return errorResult(new Error(`Category "${existing.name}" already exists in this group (id: ${existing.id})`));
+          const category = createCategory(db, args.groupId, args.name);
+          return jsonResult({ success: true, id: category.id, name: category.name });
         } catch (error) {
           return errorResult(error);
         }
