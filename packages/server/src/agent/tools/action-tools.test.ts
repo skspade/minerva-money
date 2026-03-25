@@ -48,9 +48,9 @@ describe('action-tools', () => {
     rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('returns 10 tools', () => {
+  it('returns 12 tools', () => {
     const tools = createActionTools(db, ctx);
-    expect(tools).toHaveLength(10);
+    expect(tools).toHaveLength(12);
   });
 
   it('returns tools with expected names', () => {
@@ -67,6 +67,8 @@ describe('action-tools', () => {
       'confirm_transfer',
       'dismiss_transfer',
       'trigger_sync',
+      'create_category_group',
+      'create_category',
     ]);
   });
 
@@ -359,6 +361,97 @@ describe('action-tools', () => {
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain('Rate limit');
       expect(result.content[0].text).toContain('Checking');
+    });
+  });
+
+  describe('create_category_group', () => {
+    it('creates a new category group', async () => {
+      const result = await findTool('create_category_group').handler({ name: 'Travel' });
+      expect(result.isError).toBeUndefined();
+      const data = parseResult(result);
+      expect(data.success).toBe(true);
+      expect(data.id).toBeGreaterThan(0);
+      expect(data.name).toBe('Travel');
+    });
+
+    it('returns error for duplicate group name (case-insensitive)', async () => {
+      createGroup(db, 'Food');
+      const result = await findTool('create_category_group').handler({ name: 'food' });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('already exists');
+      expect(result.content[0].text).toContain('Food');
+    });
+
+    it('returns error for duplicate group name (exact case)', async () => {
+      createGroup(db, 'Entertainment');
+      const result = await findTool('create_category_group').handler({ name: 'Entertainment' });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('already exists');
+    });
+
+    it('includes confirmation requirement in description', () => {
+      const tools = createActionTools(db, ctx);
+      const tool = tools.find(t => t.name === 'create_category_group')!;
+      expect(tool.description).toContain('Requires user confirmation before calling');
+    });
+  });
+
+  describe('create_category', () => {
+    it('creates a new category in existing group', async () => {
+      const group = createGroup(db, 'Travel');
+      const result = await findTool('create_category').handler({ groupId: group.id, name: 'Airlines' });
+      expect(result.isError).toBeUndefined();
+      const data = parseResult(result);
+      expect(data.success).toBe(true);
+      expect(data.id).toBeGreaterThan(0);
+      expect(data.name).toBe('Airlines');
+    });
+
+    it('returns error for non-existent group', async () => {
+      const result = await findTool('create_category').handler({ groupId: 99999, name: 'Airlines' });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('not found');
+    });
+
+    it('returns error for duplicate category name within group (case-insensitive)', async () => {
+      const group = createGroup(db, 'Food');
+      createCategory(db, group.id, 'Dining');
+      const result = await findTool('create_category').handler({ groupId: group.id, name: 'dining' });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('already exists');
+      expect(result.content[0].text).toContain('Dining');
+    });
+
+    it('allows same category name in different groups', async () => {
+      const group1 = createGroup(db, 'Personal');
+      const group2 = createGroup(db, 'Business');
+      createCategory(db, group1.id, 'Travel');
+      const result = await findTool('create_category').handler({ groupId: group2.id, name: 'Travel' });
+      expect(result.isError).toBeUndefined();
+      const data = parseResult(result);
+      expect(data.success).toBe(true);
+      expect(data.name).toBe('Travel');
+    });
+
+    it('includes confirmation requirement in description', () => {
+      const tools = createActionTools(db, ctx);
+      const tool = tools.find(t => t.name === 'create_category')!;
+      expect(tool.description).toContain('Requires user confirmation before calling');
+    });
+
+    it('returns id usable with categorize_transaction immediately', async () => {
+      const group = createGroup(db, 'Food');
+      db.prepare("INSERT INTO accounts (id, name, institution, type, balance) VALUES ('acc1', 'Checking', 'Bank', 'checking', 10000)").run();
+      db.prepare("INSERT INTO transactions (id, account_id, date, amount, payee) VALUES ('txn1', 'acc1', '2026-03-01', -500, 'Starbucks')").run();
+
+      const createResult = await findTool('create_category').handler({ groupId: group.id, name: 'Coffee' });
+      const created = parseResult(createResult);
+
+      const catResult = await findTool('categorize_transaction').handler({ transactionId: 'txn1', categoryId: created.id });
+      expect(catResult.isError).toBeUndefined();
+      const catData = parseResult(catResult);
+      expect(catData.success).toBe(true);
+      expect(catData.categoryId).toBe(created.id);
     });
   });
 });
