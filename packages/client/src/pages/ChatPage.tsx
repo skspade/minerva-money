@@ -115,9 +115,9 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="h-[calc(100dvh-56px)] md:h-[calc(100vh-56px)] -mx-4 -mt-6 flex flex-col">
+    <div className="fixed inset-0 top-0 md:top-[56px] bottom-[calc(env(safe-area-inset-bottom)+60px)] md:bottom-0 flex flex-col bg-gray-50 z-10">
       {/* Message area */}
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="flex-1 overflow-y-auto overscroll-contain p-4">
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center">
             <h2 className="text-2xl font-semibold text-gray-800 mb-2">
@@ -201,7 +201,7 @@ export default function ChatPage() {
       </div>
 
       {/* Input bar */}
-      <div className="border-t border-gray-200 bg-white px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+      <div className="border-t border-gray-200 bg-white px-4 pt-3 pb-3">
         <div className="mx-auto max-w-3xl space-y-2">
           {/* Model selector row */}
           <div className="flex items-center gap-3">
@@ -209,7 +209,7 @@ export default function ChatPage() {
               value={selectedModel}
               onChange={handleModelChange}
               disabled={chatMutation.isPending}
-              className="rounded-lg border border-gray-300 text-sm px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+              className="rounded-lg border border-gray-300 text-base md:text-sm px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {(models ?? []).map((m) => (
                 <option key={m.id} value={m.id}>{m.label}</option>
@@ -228,7 +228,7 @@ export default function ChatPage() {
               placeholder="Ask about your finances..."
               rows={1}
               disabled={chatMutation.isPending}
-              className="flex-1 resize-none rounded-lg border border-gray-300 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 resize-none rounded-lg border border-gray-300 px-4 py-2 text-base md:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
             />
             <button
               onClick={() => handleSend()}
