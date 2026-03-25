@@ -9,35 +9,35 @@ Requirements for streaming chat milestone. Each maps to roadmap phases.
 
 ### Protocol
 
-- [ ] **PROTO-01**: Server emits typed SSE events (session, text-delta, tool-start, tool-end, done, error) over HTTP with standard SSE wire format
-- [ ] **PROTO-02**: The `done` event carries the full assembled response text for confirmation parsing
-- [ ] **PROTO-03**: The `error` event includes a user-friendly error message and any partial text received
+- [x] **PROTO-01**: Server emits typed SSE events (session, text-delta, tool-start, tool-end, done, error) over HTTP with standard SSE wire format
+- [x] **PROTO-02**: The `done` event carries the full assembled response text for confirmation parsing
+- [x] **PROTO-03**: The `error` event includes a user-friendly error message and any partial text received
 
 ### Server Streaming
 
-- [ ] **SRVR-01**: Server exposes POST /api/chat/stream endpoint that accepts message, sessionId, and model in JSON body
-- [ ] **SRVR-02**: Server validates input with Zod and returns standard error response before SSE headers if validation fails
-- [ ] **SRVR-03**: Server iterates the Agent SDK async iterable with `includePartialMessages: true` and emits SSE events for each SDK message
-- [ ] **SRVR-04**: Server emits `tool-start` events when the agent begins a tool call and `tool-end` when it completes
-- [ ] **SRVR-05**: Server handles client disconnect by cleaning up the Agent SDK iterator to prevent memory leaks
-- [ ] **SRVR-06**: Server applies per-model idle timeout (no events for extended period) rather than monolithic request timeout
+- [x] **SRVR-01**: Server exposes POST /api/chat/stream endpoint that accepts message, sessionId, and model in JSON body
+- [x] **SRVR-02**: Server validates input with Zod and returns standard error response before SSE headers if validation fails
+- [x] **SRVR-03**: Server iterates the Agent SDK async iterable with `includePartialMessages: true` and emits SSE events for each SDK message
+- [x] **SRVR-04**: Server emits `tool-start` events when the agent begins a tool call and `tool-end` when it completes
+- [x] **SRVR-05**: Server handles client disconnect by cleaning up the Agent SDK iterator to prevent memory leaks
+- [x] **SRVR-06**: Server applies per-model idle timeout (no events for extended period) rather than monolithic request timeout
 
 ### Client Streaming
 
-- [ ] **CLNT-01**: Client consumes SSE stream via `fetch()` with `ReadableStream` reader (not EventSource, which only supports GET)
-- [ ] **CLNT-02**: Client accumulates text-delta events into a growing string and exposes it as reactive state
-- [ ] **CLNT-03**: Client tracks the currently active tool name from tool-start/tool-end events
-- [ ] **CLNT-04**: Client calls onComplete callback with full response text and sessionId when done event arrives
-- [ ] **CLNT-05**: Client falls back to existing tRPC chat mutation if SSE connection fails to establish
+- [x] **CLNT-01**: Client consumes SSE stream via `fetch()` with `ReadableStream` reader (not EventSource, which only supports GET)
+- [x] **CLNT-02**: Client accumulates text-delta events into a growing string and exposes it as reactive state
+- [x] **CLNT-03**: Client tracks the currently active tool name from tool-start/tool-end events
+- [x] **CLNT-04**: Client calls onComplete callback with full response text and sessionId when done event arrives
+- [x] **CLNT-05**: Client falls back to existing tRPC chat mutation if SSE connection fails to establish
 
 ### Chat UI
 
-- [ ] **UI-01**: User sees text tokens appear incrementally in the chat message bubble as they stream in
-- [ ] **UI-02**: User sees a tool activity indicator with human-readable label (e.g., "Checking your budget...") when the agent calls a tool
-- [ ] **UI-03**: Chat auto-scrolls to show new tokens while streaming, but pauses auto-scroll if user scrolls up to read earlier messages
-- [ ] **UI-04**: Bouncing dots loading animation shows only before the first text token arrives (not during the entire response)
-- [ ] **UI-05**: Confirmation buttons (Confirm/Cancel) appear after stream completes, parsed from the full response text (same as today)
-- [ ] **UI-06**: User input is disabled while a response is streaming (same pattern as today)
+- [x] **UI-01**: User sees text tokens appear incrementally in the chat message bubble as they stream in
+- [x] **UI-02**: User sees a tool activity indicator with human-readable label (e.g., "Checking your budget...") when the agent calls a tool
+- [x] **UI-03**: Chat auto-scrolls to show new tokens while streaming, but pauses auto-scroll if user scrolls up to read earlier messages
+- [x] **UI-04**: Bouncing dots loading animation shows only before the first text token arrives (not during the entire response)
+- [x] **UI-05**: Confirmation buttons (Confirm/Cancel) appear after stream completes, parsed from the full response text (same as today)
+- [x] **UI-06**: User input is disabled while a response is streaming (same pattern as today)
 
 ## Future Requirements
 
@@ -66,26 +66,26 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PROTO-01 | Phase 38 | Pending |
-| PROTO-02 | Phase 38 | Pending |
-| PROTO-03 | Phase 38 | Pending |
-| SRVR-01 | Phase 43 | Pending |
-| SRVR-02 | Phase 43 | Pending |
-| SRVR-03 | Phase 43 | Pending |
-| SRVR-04 | Phase 43 | Pending |
-| SRVR-05 | Phase 43 | Pending |
-| SRVR-06 | Phase 43 | Pending |
-| CLNT-01 | Phase 41 | Pending |
-| CLNT-02 | Phase 41 | Pending |
-| CLNT-03 | Phase 41 | Pending |
-| CLNT-04 | Phase 41 | Pending |
-| CLNT-05 | Phase 41 | Pending |
-| UI-01 | Phase 43 | Pending |
-| UI-02 | Phase 43 | Pending |
-| UI-03 | Phase 43 | Pending |
-| UI-04 | Phase 43 | Pending |
-| UI-05 | Phase 43 | Pending |
-| UI-06 | Phase 43 | Pending |
+| PROTO-01 | Phase 38 | Done |
+| PROTO-02 | Phase 38 | Done |
+| PROTO-03 | Phase 38 | Done |
+| SRVR-01 | Phase 40 | Done |
+| SRVR-02 | Phase 40 | Done |
+| SRVR-03 | Phase 39 | Done |
+| SRVR-04 | Phase 39 | Done |
+| SRVR-05 | Phase 39 | Done |
+| SRVR-06 | Phase 39 | Done |
+| CLNT-01 | Phase 41 | Done |
+| CLNT-02 | Phase 41 | Done |
+| CLNT-03 | Phase 41 | Done |
+| CLNT-04 | Phase 41 | Done |
+| CLNT-05 | Phase 41 | Done |
+| UI-01 | Phase 42 | Done |
+| UI-02 | Phase 42 | Done |
+| UI-03 | Phase 42 | Done |
+| UI-04 | Phase 42 | Done |
+| UI-05 | Phase 42 | Done |
+| UI-06 | Phase 42 | Done |
 
 **Coverage:**
 - v2.6 requirements: 20 total
@@ -94,4 +94,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-03-24*
-*Last updated: 2026-03-25 after gap closure phase creation*
+*Last updated: 2026-03-25 after phase 43 gap closure completion*
