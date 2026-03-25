@@ -298,6 +298,27 @@ describe('useStreamingChat (integration)', () => {
     await expect(processStream('test', handlers)).rejects.toThrow();
   });
 
+  it('falls back to options.sessionId in onDone when no session event is emitted', async () => {
+    mockFetchSuccess([
+      { type: 'text-delta', text: 'Resumed' },
+      { type: 'done', text: 'Resumed response' },
+    ]);
+
+    const { processStream } = await import('./useStreamingChat');
+    const onDone = vi.fn();
+    const handlers = {
+      onTextDelta: vi.fn(),
+      onToolStart: vi.fn(),
+      onToolEnd: vi.fn(),
+      onDone,
+      onError: vi.fn(),
+      onSession: vi.fn(),
+    };
+
+    await processStream('test', handlers, { sessionId: 'existing-sess-123' });
+    expect(onDone).toHaveBeenCalledWith('Resumed response', 'existing-sess-123');
+  });
+
   it('supports AbortController signal', async () => {
     const controller = new AbortController();
     controller.abort(); // Pre-abort
