@@ -97,7 +97,14 @@ export default function DashboardPage() {
                   <div className="text-xs text-gray-400 uppercase mb-1">{type}</div>
                   {accts!.map(a => (
                     <div key={a.id} className="flex justify-between py-1">
-                      <span className="text-sm">{a.name}</span>
+                      <span className="text-sm">
+                        {a.name}
+                        {a.source === 'manual' && (
+                          <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">
+                            Manual
+                          </span>
+                        )}
+                      </span>
                       <span className="text-sm font-medium">{formatCurrency(a.balance)}</span>
                     </div>
                   ))}

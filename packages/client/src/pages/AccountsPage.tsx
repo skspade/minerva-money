@@ -18,7 +18,7 @@ export default function AccountsPage() {
     return (
       <div>
         <h2 className="text-2xl font-bold mb-4">Accounts</h2>
-        <p className="text-gray-500">No accounts synced yet. Use Sync Now to get started.</p>
+        <p className="text-gray-500">No accounts yet. Sync with SimpleFIN or import a CSV to get started.</p>
       </div>
     );
   }
@@ -41,10 +41,17 @@ export default function AccountsPage() {
               >
                 <div>
                   <p className="font-semibold text-gray-900">{account.name}</p>
-                  <p className="text-sm text-gray-500">{account.institution}</p>
+                  <p className="text-sm text-gray-500">
+                    {account.institution}
+                    {account.source === 'manual' && (
+                      <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">
+                        Manual
+                      </span>
+                    )}
+                  </p>
                   {account.lastSynced && (
                     <p className="text-xs text-gray-400 mt-1">
-                      Last synced: {new Date(account.lastSynced).toLocaleDateString()}
+                      {account.source === 'manual' ? 'Last imported' : 'Last synced'}: {new Date(account.lastSynced).toLocaleDateString()}
                     </p>
                   )}
                 </div>
