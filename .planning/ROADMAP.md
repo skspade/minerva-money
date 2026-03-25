@@ -127,10 +127,10 @@ Full details: [milestones/v2.5-ROADMAP.md](milestones/v2.5-ROADMAP.md)
   2. The `done` event type carries a `text` field containing the full assembled response
   3. The `error` event type carries a `message` field for user-friendly display and an optional `partialText` field
   4. Both `packages/server` and `packages/client` can import the SSE event types from `packages/shared`
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 38-01: TBD
+- [ ] 38-01-PLAN.md — Define SSE event types, re-export from shared package
 
 ### Phase 39: Server Stream Processing
 **Goal**: The agent service can stream LLM responses as a sequence of typed events, handling tool calls and errors in real-time
