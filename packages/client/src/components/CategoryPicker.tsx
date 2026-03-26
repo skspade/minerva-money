@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTRPC } from '../trpc';
 
@@ -7,7 +8,7 @@ interface CategoryPickerProps {
   className?: string;
 }
 
-export default function CategoryPicker({ value, onChange, className }: CategoryPickerProps) {
+export default memo(function CategoryPicker({ value, onChange, className }: CategoryPickerProps) {
   const trpc = useTRPC();
   const { data: groups } = useQuery(trpc.categories.groups.list.queryOptions());
 
@@ -32,4 +33,4 @@ export default function CategoryPicker({ value, onChange, className }: CategoryP
       ))}
     </select>
   );
-}
+});

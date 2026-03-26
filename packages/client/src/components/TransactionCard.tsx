@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import CategoryPicker from './CategoryPicker';
 import { formatCurrency } from '../lib/format';
 
@@ -20,7 +21,7 @@ interface TransactionCardProps {
   onSplitClick: () => void;
 }
 
-export default function TransactionCard({
+export default memo(function TransactionCard({
   txn,
   isExpanded,
   onToggle,
@@ -97,4 +98,4 @@ export default function TransactionCard({
       )}
     </div>
   );
-}
+});

@@ -7,7 +7,9 @@ import { Drawer } from 'vaul';
 import SplitModal from '../components/SplitModal';
 import ManualTransactionForm from '../components/ManualTransactionForm';
 import TransactionCard from '../components/TransactionCard';
-import { Filter, ChevronDown, ChevronUp } from 'lucide-react';
+import { Filter, ChevronDown, ChevronUp, ChevronLeft, ChevronRight } from 'lucide-react';
+
+const PAGE_SIZE = 50;
 
 type SortColumn = 'date' | 'payee' | 'amount' | 'account';
 type SortDirection = 'asc' | 'desc';
@@ -89,6 +91,7 @@ export default function TransactionsPage() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [filterPanelOpen, setFilterPanelOpen] = useState(false);
+  const [page, setPage] = useState(0);
 
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
@@ -192,6 +195,18 @@ export default function TransactionsPage() {
 
     return result;
   }, [transactions, dateFrom, dateTo, debouncedSearch, amountMin, amountMax, categoryFilter, sortColumn, sortDirection]);
+
+  // Reset to first page when filters/sort change
+  useEffect(() => {
+    setPage(0);
+  }, [dateFrom, dateTo, debouncedSearch, amountMin, amountMax, categoryFilter, sortColumn, sortDirection]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages - 1);
+  const paginatedRows = useMemo(
+    () => filtered.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE),
+    [filtered, safePage],
+  );
 
   const activeFilterCount = [dateFrom, dateTo, debouncedSearch, amountMin, amountMax, categoryFilter]
     .filter(v => v !== '').length;
@@ -368,7 +383,7 @@ export default function TransactionsPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map(txn => (
+              {paginatedRows.map(txn => (
                 <tr key={txn.id} className="border-b border-gray-200 even:bg-gray-50 hover:bg-gray-100">
                   <td className="px-4 py-2 text-sm">
                     {new Date(txn.date + 'T00:00:00').toLocaleDateString()}
@@ -426,7 +441,7 @@ export default function TransactionsPage() {
 
         {/* Mobile cards */}
         <div className="md:hidden space-y-2">
-          {filtered.map(txn => (
+          {paginatedRows.map(txn => (
             <TransactionCard
               key={txn.id}
               txn={txn}
@@ -437,6 +452,48 @@ export default function TransactionsPage() {
             />
           ))}
         </div>
+
+        {/* Pagination controls */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between mt-4 text-sm text-gray-600">
+            <span>
+              Showing {safePage * PAGE_SIZE + 1}--{Math.min((safePage + 1) * PAGE_SIZE, filtered.length)} of {filtered.length}
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setPage(0)}
+                disabled={safePage === 0}
+                className="px-2 py-1 rounded hover:bg-gray-100 disabled:opacity-30 disabled:cursor-default"
+              >
+                First
+              </button>
+              <button
+                onClick={() => setPage(p => Math.max(0, p - 1))}
+                disabled={safePage === 0}
+                className="p-1 rounded hover:bg-gray-100 disabled:opacity-30 disabled:cursor-default"
+              >
+                <ChevronLeft size={18} />
+              </button>
+              <span className="px-2">
+                Page {safePage + 1} of {totalPages}
+              </span>
+              <button
+                onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+                disabled={safePage >= totalPages - 1}
+                className="p-1 rounded hover:bg-gray-100 disabled:opacity-30 disabled:cursor-default"
+              >
+                <ChevronRight size={18} />
+              </button>
+              <button
+                onClick={() => setPage(totalPages - 1)}
+                disabled={safePage >= totalPages - 1}
+                className="px-2 py-1 rounded hover:bg-gray-100 disabled:opacity-30 disabled:cursor-default"
+              >
+                Last
+              </button>
+            </div>
+          </div>
+        )}
         </>
       )}
 
