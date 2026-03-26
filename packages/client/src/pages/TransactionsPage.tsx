@@ -455,7 +455,7 @@ export default function TransactionsPage() {
 
         {/* Pagination controls */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between mt-4 text-sm text-gray-600">
+          <div className="flex items-center justify-between mt-4 pb-20 md:pb-0 text-sm text-gray-600">
             <span>
               Showing {safePage * PAGE_SIZE + 1}--{Math.min((safePage + 1) * PAGE_SIZE, filtered.length)} of {filtered.length}
             </span>
