@@ -140,7 +140,7 @@ Full details: [milestones/v2.7-ROADMAP.md](milestones/v2.7-ROADMAP.md)
 - [x] **Phase 47: Database Foundation** - sync_warnings table with UPSERT-compatible schema and foreign key to sync_log (completed 2026-03-27)
 - [x] **Phase 48: Sync Service Warning Pipeline** (1 plan) - Persist per-account warnings, determine partial/success/error status, auto-clear resolved warnings (completed 2026-03-27)
 - [x] **Phase 49: tRPC Response Extension** (1 plan) - Structured warnings array in sync.status response for client consumption (completed 2026-03-26)
-- [ ] **Phase 50: Dashboard Warning UI** - Amber "Partial" badge, per-account error list, and SimpleFIN reconnect link
+- [ ] **Phase 50: Dashboard Warning UI** (1 plan) - Amber "Partial" badge, per-account error list, and SimpleFIN reconnect link
 - [ ] **Phase 51: Navbar Warning Indicator** - Amber indicator with hover tooltip showing affected account names
 - [ ] **Phase 52: Agent Tool Update** - Fix existing column name bugs and add warnings to get_sync_status response
 
@@ -191,7 +191,8 @@ Full details: [milestones/v2.7-ROADMAP.md](milestones/v2.7-ROADMAP.md)
   2. Each affected account is listed by name with a simplified error message
   3. A SimpleFIN reconnect link appears when connection errors exist
   4. When no warnings exist, the sync card renders identically to before (no visual regression)
-**Plans**: TBD
+**Plans**: 1 plan
+- [ ] 50-01-PLAN.md — Amber partial badge, per-account warning list, and SimpleFIN reconnect link
 
 ### Phase 51: Navbar Warning Indicator
 **Goal**: User is alerted to sync problems from any page without navigating to the dashboard
