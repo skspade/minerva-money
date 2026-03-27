@@ -201,7 +201,8 @@ Full details: [milestones/v2.7-ROADMAP.md](milestones/v2.7-ROADMAP.md)
 **Success Criteria** (what must be TRUE):
   1. Navbar SyncStatus component shows an amber warning indicator when the latest sync is 'partial'
   2. Hovering over the indicator reveals a tooltip with the count and names of affected accounts
-**Plans**: TBD
+**Plans**: 1 plan
+  - [ ] 51-01-PLAN.md — Add amber warning indicator and tooltip to SyncStatus component
 
 ### Phase 52: Agent Tool Update
 **Goal**: Agent accurately reports sync status including warnings and fixes pre-existing query bugs
