@@ -14,10 +14,10 @@ Requirements for Sync Error Visibility milestone. Each maps to roadmap phases.
 
 ### Sync Service
 
-- [ ] **SYNC-01**: Sync service writes per-account warnings to sync_warnings table when SimpleFIN returns account-level errors
-- [ ] **SYNC-02**: Sync service sets sync_log status to 'partial' when some accounts have errors but the API call succeeded
-- [ ] **SYNC-03**: Sync service auto-clears warnings for accounts that sync successfully
-- [ ] **SYNC-04**: Sync service maps SimpleFIN error codes and connection-level errors to the correct accounts
+- [x] **SYNC-01**: Sync service writes per-account warnings to sync_warnings table when SimpleFIN returns account-level errors
+- [x] **SYNC-02**: Sync service sets sync_log status to 'partial' when some accounts have errors but the API call succeeded
+- [x] **SYNC-03**: Sync service auto-clears warnings for accounts that sync successfully
+- [x] **SYNC-04**: Sync service maps SimpleFIN error codes and connection-level errors to the correct accounts
 
 ### API
 
@@ -65,10 +65,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | SCHEMA-01 | Phase 47 | Complete |
 | SCHEMA-02 | Phase 47 | Complete |
-| SYNC-01 | Phase 48 | Pending |
-| SYNC-02 | Phase 48 | Pending |
-| SYNC-03 | Phase 48 | Pending |
-| SYNC-04 | Phase 48 | Pending |
+| SYNC-01 | Phase 48 | Complete |
+| SYNC-02 | Phase 48 | Complete |
+| SYNC-03 | Phase 48 | Complete |
+| SYNC-04 | Phase 48 | Complete |
 | API-01 | Phase 49 | Pending |
 | API-02 | Phase 49 | Pending |
 | DASH-01 | Phase 50 | Pending |
