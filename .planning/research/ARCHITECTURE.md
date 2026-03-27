@@ -1,373 +1,421 @@
 # Architecture Research
 
-**Domain:** Manual account CRUD + CSV import integration — Minerva Money v2.7
-**Researched:** 2026-03-25
-**Confidence:** HIGH (all findings derived from direct codebase inspection)
+**Domain:** Sync error visibility — Minerva Money v2.8
+**Researched:** 2026-03-26
+**Confidence:** HIGH (all findings from direct codebase inspection)
 
-## Standard Architecture
-
-### System Overview
+## System Overview
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                          Client (React SPA)                          │
-│  ┌─────────────┐  ┌─────────────────────────────┐  ┌─────────────┐  │
-│  │ AccountsPage│  │        ImportPage            │  │  ChatPage   │  │
-│  │  (modified) │  │  PreviewStep (modified)      │  │ (modified)  │  │
-│  │  Manual badge│  │  + inline create form       │  │ create_acct │  │
-│  └──────┬──────┘  └──────────────┬───────────────┘  └──────┬──────┘  │
-│         │                        │                         │          │
-│         └────────────────────────┴─────────────────────────┘          │
-│                           tRPC client (useTRPC)                       │
-└───────────────────────────────┬──────────────────────────────────────┘
-                                │ tRPC over HTTP
-┌───────────────────────────────▼──────────────────────────────────────┐
-│                        Server (Express + tRPC)                        │
-│  ┌─────────────────────────────────────────────────────────────────┐  │
-│  │                    appRouter (trpc-router.ts)                    │  │
-│  │  accountsRouter (modified)    importRouter (modified)           │  │
-│  │  agentRouter (new tool)                                         │  │
-│  └──────────────┬────────────────────────┬──────────────────────── ┘  │
-│                 │                        │                             │
-│  ┌──────────────▼──────────┐  ┌──────────▼──────────────────────┐     │
-│  │   accounts-service.ts   │  │       import-service.ts         │     │
-│  │       (NEW MODULE)      │  │          (modified)             │     │
-│  │  createAccount()        │  │  executeImport() calls          │     │
-│  │  updateAccount()        │  │  recalculateBalance() per       │     │
-│  │  deleteAccount()        │  │  manual account after inserts   │     │
-│  │  recalculateBalance()   │  └─────────────────────────────────┘     │
-│  └──────────────┬──────────┘                                          │
-└─────────────────┼──────────────────────────────────────────────────── ┘
-                  │
-┌─────────────────▼──────────────────────────────────────────────────── ┐
-│                           SQLite Database                               │
-│  accounts (+ source column via migration 006)                           │
-│  transactions, balance_snapshots, budget_allocations, ...              │
-└─────────────────────────────────────────────────────────────────────── ┘
+SimpleFIN API
+       |
+       v
+sync-service.ts ──write──> sync_warnings table (NEW)
+       |                          |
+       v                          v
+  sync_log table         tRPC sync.status (MODIFIED)
+  (status: success/               |
+   partial/error)         +-------+-------+
+                          |               |
+                          v               v
+                   SyncStatus.tsx   DashboardPage.tsx
+                   (navbar amber)  (warning details)
 ```
+
+Changes span three layers (database, service/API, client) but touch only six files plus one new migration. No new packages, no new dependencies, no new endpoints.
 
 ### Component Responsibilities
 
 | Component | Responsibility | Status |
-|-----------|---------------|--------|
-| `migrations/006-manual-accounts.sql` | Add `source TEXT NOT NULL DEFAULT 'simplefin'` to accounts table | NEW |
-| `src/accounts/accounts-service.ts` | createAccount, updateAccount, deleteAccount, recalculateBalance — all manual-account business logic | NEW |
-| `src/sync/trpc-router.ts` — accountsRouter | Add accounts.create, accounts.update, accounts.delete mutations; extend accounts.list to return source field | MODIFIED |
-| `src/import/import-service.ts` — executeImport | After transaction insert loop, call recalculateBalance for each touched manual account | MODIFIED |
-| `src/agent/tools/action-tools.ts` | Add create_account tool wrapping createAccount() service function | MODIFIED |
-| `src/agent/tools/query-tools.ts` | Include source field in get_account_balances response | MODIFIED |
-| `src/agent/system-prompt.ts` | Add guidance that agent can create manual accounts for unsupported institutions | MODIFIED |
-| `client/pages/ImportPage.tsx` — PreviewStep | Inline account creation form in account mapping dropdowns; invalidate accounts.list on create | MODIFIED |
-| `client/pages/AccountsPage.tsx` | Render "Manual" badge for source=manual accounts; suppress last-synced timestamp for manual accounts | MODIFIED |
+|-----------|----------------|--------|
+| `migrations/007-sync-warnings.sql` | New table for per-account error persistence | **NEW** |
+| `sync-service.ts` `runSync()` | Persist warnings to DB, determine 'partial' status | **MODIFY** |
+| `trpc-router.ts` `syncRouter.status` | Query active warnings, extend response shape | **MODIFY** |
+| `SyncStatus.tsx` | Navbar amber indicator for partial sync | **MODIFY** |
+| `DashboardPage.tsx` | Sync Status card: amber badge, warning list, reconnect link | **MODIFY** |
+| `query-tools.ts` `get_sync_status` | Include active warnings in agent response, fix column names | **MODIFY** |
 
-## Recommended Project Structure
+## New Database Table
 
-```
-packages/server/
-├── migrations/
-│   └── 006-manual-accounts.sql     # NEW: ALTER TABLE accounts ADD COLUMN source
-├── src/
-│   ├── accounts/                   # NEW module
-│   │   └── accounts-service.ts     # createAccount, updateAccount, deleteAccount, recalculateBalance
-│   ├── sync/
-│   │   └── trpc-router.ts          # MODIFIED: accountsRouter gains CRUD + list returns source
-│   ├── import/
-│   │   └── import-service.ts       # MODIFIED: executeImport calls recalculateBalance post-insert
-│   └── agent/
-│       └── tools/
-│           ├── action-tools.ts     # MODIFIED: +create_account tool
-│           └── query-tools.ts      # MODIFIED: source in get_account_balances
+Migration `007-sync-warnings.sql`:
 
-packages/client/src/
-└── pages/
-    ├── ImportPage.tsx              # MODIFIED: inline create form in PreviewStep
-    └── AccountsPage.tsx            # MODIFIED: Manual badge, conditional last-synced label
+```sql
+CREATE TABLE sync_warnings (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  sync_log_id INTEGER NOT NULL REFERENCES sync_log(id) ON DELETE CASCADE,
+  account_id TEXT,
+  account_name TEXT,
+  error_code TEXT NOT NULL,
+  error_message TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX idx_sync_warnings_sync_log_id ON sync_warnings(sync_log_id);
 ```
 
-### Structure Rationale
-
-- **`src/accounts/` as new module:** Mirrors the existing module pattern (budget/, categories/, rules/, sync/). One service file, one clear responsibility. The tRPC router stays thin and imports from it.
-- **No new router file for accounts:** The existing `accountsRouter` in `trpc-router.ts` already exists with a `list` procedure. Adding mutations inline there follows the same pattern as every other router in the file. A separate `accounts-router.ts` would add a file for minimal benefit.
-- **Migration as a numbered SQL file:** The migration runner (`migrate.ts`) reads `migrations/*.sql` sorted numerically and applies any file with a version number above `PRAGMA user_version`. Adding `006-manual-accounts.sql` requires zero changes to the runner.
+**Design decisions:**
+- `account_id` is nullable -- some SimpleFIN errors are connection-level, not tied to a specific account
+- `account_name` is denormalized for display because the account may not exist in the `accounts` table if sync failed before the upsert ran
+- Foreign key to `sync_log` with CASCADE so old warnings auto-clean with old log entries
+- No UNIQUE constraint on account_id -- append-only model; "active" warnings are those from the latest sync_log entry
+- Index on `sync_log_id` for the active-warnings join query
 
 ## Architectural Patterns
 
-### Pattern 1: Service-Layer Encapsulation (existing, extended)
+### Pattern 1: Additive tRPC Response Extension
 
-**What:** All business logic lives in service functions. tRPC router procedures are thin: validate with Zod, call service, return result. Agent tools call the same service functions directly (bypassing tRPC), following the exact pattern of `create_category` and `create_category_group`.
-**When to use:** Every new mutation in this codebase — this is the established convention.
-**Trade-offs:** Minor indirection, but the benefit is that service functions remain testable in isolation and reusable by both tRPC and agent tools.
+**What:** Add `warnings[]` field to existing `sync.status` response rather than creating a new endpoint.
+**When to use:** New data is conceptually part of the same resource.
+**Trade-offs:** Slightly larger response vs. zero additional client plumbing. The warnings array is trivially small (max 6 accounts in this app).
 
-**Example:**
+Current response shape:
 ```typescript
-// accounts-service.ts
-export function createAccount(db: Database.Database, name: string, institution: string, type: string) {
-  const id = `manual_${randomUUID()}`;
-  db.transaction(() => {
-    db.prepare(`INSERT INTO accounts (id, name, institution, type, balance, source)
-                VALUES (?, ?, ?, ?, 0, 'manual')`).run(id, name, institution, type);
-    // Write today's balance snapshot (same pattern as syncAccount in sync-service.ts)
-    const today = new Date().toISOString().split('T')[0];
-    db.prepare(`INSERT OR REPLACE INTO balance_snapshots (account_id, date, balance)
-                VALUES (?, ?, 0)`).run(id, today);
-  })();
-  return db.prepare('SELECT * FROM accounts WHERE id = ?').get(id);
-}
-
-// In trpc-router.ts accountsRouter
-create: publicProcedure
-  .input(z.object({ name: z.string().min(1), institution: z.string().min(1), type: z.string().min(1) }))
-  .mutation(({ ctx, input }) => createAccount(ctx.db, input.name, input.institution, input.type)),
-```
-
-### Pattern 2: Source Guard on Mutations
-
-**What:** `updateAccount` and `deleteAccount` verify `source = 'manual'` before proceeding and throw a descriptive error if called on a SimpleFIN-synced account. The guard lives in the service function, not the tRPC router, so the agent tool path is also protected.
-**When to use:** Any write operation that is only valid for user-managed rows.
-**Trade-offs:** Runtime check only (not a TypeScript compile-time constraint), but this matches how the codebase handles all other runtime preconditions.
-
-**Example:**
-```typescript
-export function deleteAccount(db: Database.Database, id: string) {
-  const account = db.prepare('SELECT id, source FROM accounts WHERE id = ?')
-    .get(id) as { id: string; source: string } | undefined;
-  if (!account) throw new Error(`Account ${id} not found`);
-  if (account.source !== 'manual') throw new Error('Cannot delete SimpleFIN-synced accounts');
-  // ON DELETE CASCADE handles transactions, balance_snapshots, transfer_links
-  db.prepare('DELETE FROM accounts WHERE id = ?').run(id);
+{
+  lastSync: { startedAt, completedAt, status, errorMessage, accountsSynced, transactionsAdded } | null,
+  errorCount: number,
+  accounts: { id, name, balance, last_synced, source }[]
 }
 ```
 
-### Pattern 3: Post-Import Balance Recalculation
-
-**What:** After `executeImport()` completes its transaction insert loop, it collects the set of account IDs that actually received new rows, filters to those with `source = 'manual'`, and calls `recalculateBalance()` once per manual account. This happens inside the same DB transaction so balance is consistent on rollback.
-**When to use:** Any write path that inserts transactions for manual accounts.
-**Trade-offs:** Requires one additional query per manual account (SELECT SUM). For typical import sizes (hundreds to thousands of rows across a handful of accounts) this is negligible.
-
-**Key implementation detail:** Collect unique account IDs during the insert loop, not after, to avoid an extra scan. Filter for manual accounts with a single batch query (`WHERE id IN (...) AND source = 'manual'`).
-
+Extended response (additive, non-breaking):
 ```typescript
-// In executeImport() — after the insert loop, inside db.transaction():
-const touchedAccountIds = [...new Set(validTransformed
-  .filter(row => accountMappings[row.accountName])
-  .map(row => accountMappings[row.accountName])
-)];
-
-if (touchedAccountIds.length > 0) {
-  const placeholders = touchedAccountIds.map(() => '?').join(', ');
-  const manualAccounts = db.prepare(
-    `SELECT id FROM accounts WHERE id IN (${placeholders}) AND source = 'manual'`
-  ).all(...touchedAccountIds) as { id: string }[];
-  for (const { id } of manualAccounts) {
-    recalculateBalance(db, id);
-  }
+{
+  lastSync: { ... } | null,  // status now includes 'partial'
+  errorCount: number,
+  accounts: [...],
+  warnings: {                 // NEW field
+    accountId: string | null,
+    accountName: string | null,
+    errorCode: string,
+    errorMessage: string,
+    createdAt: string
+  }[]
 }
 ```
 
-### Pattern 4: Inline Account Creation in Import Wizard
+This works because every consumer of `sync.status` already invalidates on sync completion (`SyncButton.onSuccess` at line 11, `DashboardPage.syncMut.onSuccess` at line 35), so warnings refresh automatically with zero new wiring.
 
-**What:** In `ImportPage.tsx`, the `PreviewStep` component adds a `"+ Create New Account"` option at the top of each account mapping `<select>`. Selecting it reveals a small inline form (name pre-filled from CSV account name, institution text input, type dropdown). On submit, the component calls `trpc.accounts.create` mutation, then auto-selects the new account in the dropdown and collapses the form.
-**When to use:** Surfacing a quick-create flow without navigating away from a multi-step wizard.
-**Trade-offs:** Adds local state to `PreviewStep` (a `creatingForAccount: string | null` state and an inline form component). The newly created account must appear in the dropdown immediately — achieved by calling `queryClient.invalidateQueries(trpc.accounts.list.queryKey())` on mutation success so the `accounts` prop re-fetches.
+### Pattern 2: Latest-Sync-Log Join for Active Warnings
 
-The `PreviewStep` already receives `accounts` as a prop from the `useQuery(trpc.accounts.list.queryOptions())` call in the parent `ImportPage`. After invalidation, the query refetches and the prop updates automatically.
+**What:** Query active warnings by joining to the most recent sync_log entry rather than maintaining a mutable "active" flag.
+**When to use:** Append-only log tables where you need "current state."
+**Trade-offs:** Slightly more complex query vs. no cleanup/state-management logic.
+
+```sql
+SELECT w.account_id, w.account_name, w.error_code, w.error_message, w.created_at
+FROM sync_warnings w
+WHERE w.sync_log_id = (SELECT id FROM sync_log ORDER BY id DESC LIMIT 1)
+```
+
+Each sync writes its own warning rows linked to its sync_log_id. The latest sync's warnings are the active ones. No "clear old warnings" logic needed.
+
+### Pattern 3: Tri-State Status Enum
+
+**What:** Extend sync_log.status from `success | error` to `success | partial | error`.
+**When to use:** A process can succeed partially (API call worked, but some accounts had errors).
+**Trade-offs:** Client must handle three states instead of two. Worth it because it maps directly to three visual states (green/amber/red).
+
+Determination logic:
+```typescript
+// After processing all accounts:
+if (result.accountsSynced === 0 && result.errors.length > 0) {
+  finalStatus = 'error';      // complete failure
+} else if (result.errors.length > 0) {
+  finalStatus = 'partial';    // some accounts synced, some had errors
+} else {
+  finalStatus = 'success';    // clean sync
+}
+```
+
+Note: The existing catch block (line 76-84 of sync-service.ts) handles API-level failures (network down, auth revoked) and already sets status to 'error'. The 'partial' logic only applies within the try block.
 
 ## Data Flow
 
-### Create Manual Account
+### Write Path (Sync Time)
 
 ```
-User selects "+ Create New Account" in ImportPage Step 2 dropdown
-    ↓
-Inline form appears (name pre-filled from CSV account name)
-    ↓
-User fills institution, type; submits form
-    ↓
-accounts.create mutation (tRPC)
-    ↓
-accountsRouter.create → createAccount(db, name, institution, type)
-    ↓
-INSERT INTO accounts ... source = 'manual', id = 'manual_<uuid>'
-INSERT OR REPLACE INTO balance_snapshots ... balance = 0
-    ↓
-Returns new account row
-    ↓
-queryClient.invalidateQueries(trpc.accounts.list.queryKey())
-    ↓
-accounts.list query refetches; dropdown re-renders with new account auto-selected
+SimpleFIN fetchAccounts()
+    |
+    v
+response.errors[] ──> INSERT sync_warnings (per error, with sync_log_id)
+    |
+    v
+for each account:
+    |-- success ──> upsert account, insert transactions
+    |-- failure ──> push to result.errors
+    v
+determine status: success / partial / error
+    |
+    v
+UPDATE sync_log SET status = ?
 ```
 
-### CSV Import with Manual Account
+**Existing code touch points in sync-service.ts:**
+- Lines 38-42: Already iterates `data.errors` and pushes to `result.errors[]` -- add INSERT here
+- Lines 56-59: Per-account catch block already pushes to `result.errors[]` -- these are processing errors, not SimpleFIN errors, but should also become warnings
+- Line 64-66: Currently hardcodes `status = 'success'` -- change to conditional status
+
+### Read Path (Client Polling)
 
 ```
-executeImport mutation fires with accountMappings including 'manual_<uuid>'
-    ↓
-executeImport(db, csvText, accountMappings, categoryMappings) — no parsing changes
-    ↓
-Same INSERT OR IGNORE pipeline (dedup, rules engine, transfer detection unchanged)
-    ↓
-Collect unique touched account IDs
-    ↓
-Batch query: filter to source = 'manual'
-    ↓
-recalculateBalance(db, id) for each manual account:
-  UPDATE accounts SET balance = (SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE account_id = ?)
-  INSERT OR REPLACE INTO balance_snapshots (account_id, date, balance) VALUES (?, today, newBalance)
-    ↓
-Returns ExecuteResult (shape unchanged — no new fields required)
+SyncStatus.tsx / DashboardPage.tsx
+    |  (TanStack Query: 30s refetch + onSuccess invalidation)
+    v
+tRPC sync.status
+    |
+    v
+SELECT from sync_log (latest entry)
+SELECT from sync_warnings WHERE sync_log_id = latest
+    |
+    v
+{ lastSync: { status: 'partial', ... }, warnings: [...] }
+    |
+    v
+Client renders:
+  - 'success' ──> green badge
+  - 'partial' ──> amber badge + warning count/list
+  - 'error'   ──> red badge + error message
 ```
 
-### Delete Manual Account
+### Cache Invalidation (Already Wired)
 
-```
-User clicks Delete on manual account in AccountsPage
-    ↓
-accounts.delete mutation (tRPC)
-    ↓
-deleteAccount(db, id) — checks source = 'manual'; throws if SimpleFIN account
-    ↓
-DELETE FROM accounts WHERE id = ?
-  (CASCADE: transactions, balance_snapshots, transfer_links auto-deleted)
-    ↓
-queryClient.invalidateQueries(trpc.accounts.list.queryKey())
-    ↓
-AccountsPage re-renders without deleted account
-```
+Both `SyncButton` (line 11-13) and `DashboardPage` (line 35) sync mutations already invalidate `sync.status.queryKey()` on success. SyncStatus polls at 30s intervals (line 23). No new invalidation wiring needed.
 
-### Agent create_account Tool
+## Detailed File Changes
 
-```
-User asks Claude to create an account for an unsupported institution
-    ↓
-Agent requests confirmation (same pattern as create_category)
-    ↓
-User confirms
-    ↓
-create_account tool calls createAccount(db, name, institution, type)
-    ↓
-Same service function as tRPC path — identical DB write
-    ↓
-Returns jsonResult({ success: true, id, name, source: 'manual' })
-```
+### 1. `packages/server/migrations/007-sync-warnings.sql` (NEW)
 
-## Integration Points
+Create table and index as specified above. The migration runner reads `migrations/*.sql` sorted numerically and applies any file with a version number above `PRAGMA user_version`.
 
-### New vs. Modified Components
+### 2. `packages/server/src/sync/sync-service.ts` (MODIFY)
 
-| Component | Type | What Changes |
-|-----------|------|-------------|
-| `migrations/006-manual-accounts.sql` | NEW | Single `ALTER TABLE accounts ADD COLUMN source TEXT NOT NULL DEFAULT 'simplefin'` |
-| `src/accounts/accounts-service.ts` | NEW | Full CRUD service + recalculateBalance |
-| `src/sync/trpc-router.ts` — accountsRouter | MODIFIED | +create/update/delete mutations; list SELECT gains `source` column; return type gains `source` field |
-| `src/import/import-service.ts` — executeImport | MODIFIED | ~10 lines: collect touched account IDs, filter to manual, call recalculateBalance |
-| `src/agent/tools/action-tools.ts` | MODIFIED | +create_account tool (same structure as create_category) |
-| `src/agent/tools/query-tools.ts` | MODIFIED | get_account_balances SELECT includes `source` column |
-| `src/agent/system-prompt.ts` | MODIFIED | +guidance for manual account creation |
-| `client/pages/ImportPage.tsx` | MODIFIED | PreviewStep: inline create form, accounts query invalidation on create |
-| `client/pages/AccountsPage.tsx` | MODIFIED | Manual badge, suppress last-synced for source=manual |
-| `client/pages/DashboardPage.tsx` | UNCHANGED | accounts.list query already renders all accounts regardless of source |
+**Current behavior:** Lines 38-42 log SimpleFIN errors to `result.errors[]` string array but never persist them. Line 64 sets status to `'success'` unconditionally when the try block completes.
 
-### Internal Boundaries
+**Changes:**
+- After the `errList` loop (line 42): INSERT each SimpleFIN error into `sync_warnings` table with `syncLogId`
+- Resolve `account_name` by looking up from `data.accounts` array (SimpleFIN response includes account data even when errors exist for some accounts)
+- Per-account catch block (line 56-59): also INSERT a warning for processing failures
+- Before the sync_log UPDATE (line 64): determine `finalStatus` based on `result.errors.length` and `result.accountsSynced`
+- Update sync_log with `finalStatus` instead of hardcoded `'success'`
 
-| Boundary | Communication | Notes |
-|----------|---------------|-------|
-| `accounts-service` ← `trpc-router` | Direct import | Same pattern as all other service modules |
-| `accounts-service` ← `action-tools` | Direct import | Consistent with create_category / create_group precedent |
-| `accounts-service.recalculateBalance` ← `import-service` | Direct import | Called post-insert in executeImport |
-| `sync-service` → `accounts` table | Raw SQL (unchanged) | SimpleFIN sync still writes directly; only manual account mutations go through the service |
-| `AccountsPage` ↔ `accountsRouter.list` | tRPC query | list response must include `source` field for conditional UI rendering |
-| `ImportPage` ↔ `accountsRouter.create` | tRPC mutation | New mutation; invalidates accounts.list cache on success |
+```typescript
+// Pseudo-change after data = await client.fetchAccounts():
+const insertWarning = db.prepare(
+  `INSERT INTO sync_warnings (sync_log_id, account_id, account_name, error_code, error_message)
+   VALUES (?, ?, ?, ?, ?)`
+);
 
-### Schema Migration Contract
+const errList = data.errors ?? data.errlist ?? [];
+for (const err of errList) {
+  const accountName = err.account_id
+    ? data.accounts.find(a => a.id === err.account_id)?.name ?? err.account_id
+    : null;
+  insertWarning.run(syncLogId, err.account_id ?? null, accountName, err.code, err.msg);
+  result.errors.push(`SimpleFIN error [${err.code}]: ${err.msg}`);
+}
 
-SQLite `ALTER TABLE ... ADD COLUMN ... DEFAULT 'simplefin'` is safe:
-- All existing rows receive `'simplefin'` as the source value — no data migration needed
-- The `source` column is NOT NULL with a default, so it cannot be omitted on new inserts
-- The migration runner wraps it in a transaction with `PRAGMA user_version` bump
-- No other migration files need to change
-
-```sql
--- migrations/006-manual-accounts.sql
-ALTER TABLE accounts ADD COLUMN source TEXT NOT NULL DEFAULT 'simplefin';
+// When updating sync_log:
+const finalStatus = result.errors.length > 0 && result.accountsSynced > 0
+  ? 'partial' : 'success';
+db.prepare(
+  `UPDATE sync_log SET status = ?, completed_at = datetime('now'), accounts_synced = ?, transactions_added = ? WHERE id = ?`
+).run(finalStatus, result.accountsSynced, result.transactionsAdded, syncLogId);
 ```
 
-### Account ID Convention
+### 3. `packages/server/src/sync/trpc-router.ts` — syncRouter.status (MODIFY)
 
-Manual accounts use `manual_<uuid>` as the primary key. This prefix:
-- Prevents collision with SimpleFIN IDs (which are opaque strings without a known prefix)
-- Makes manual accounts identifiable by ID alone without a DB lookup (useful for the import wizard to distinguish after creation)
-- Does not affect any existing queries (all JOIN on `accounts.id` regardless of format)
+**Current:** Lines 80-119. Queries sync_log and accounts table.
 
-The `simplefin_id` column remains nullable; manual accounts leave it NULL.
+**Changes:** Add query for `sync_warnings` joined to latest sync_log. Map rows to camelCase. Add `warnings` field to return object.
+
+```typescript
+// Add after existing queries (around line 105):
+const warnings = lastSync ? (ctx.db.prepare(`
+  SELECT account_id, account_name, error_code, error_message, created_at
+  FROM sync_warnings WHERE sync_log_id = ?
+`).all(lastSync.id) as {
+  account_id: string | null; account_name: string | null;
+  error_code: string; error_message: string; created_at: string;
+}[]).map(w => ({
+  accountId: w.account_id,
+  accountName: w.account_name,
+  errorCode: w.error_code,
+  errorMessage: w.error_message,
+  createdAt: w.created_at,
+})) : [];
+
+// Add to return object:
+return { lastSync: ..., errorCount, accounts, warnings };
+```
+
+### 4. `packages/client/src/components/SyncStatus.tsx` (MODIFY)
+
+**Current:** Lines 32-49. Three branches: 'running', 'error', default (shows last sync time). Located in navbar (Layout.tsx line 98).
+
+**Changes:** Add branch for `status === 'partial'` between 'running' and 'error':
+
+```typescript
+if (status.lastSync.status === 'partial') {
+  const count = status.warnings?.length ?? 0;
+  const names = status.warnings?.map(w => w.accountName ?? 'Unknown').join(', ');
+  return (
+    <span className="text-sm text-amber-400" title={`Issues: ${names}`}>
+      Partial sync ({count} warning{count !== 1 ? 's' : ''})
+    </span>
+  );
+}
+```
+
+### 5. `packages/client/src/pages/DashboardPage.tsx` (MODIFY)
+
+**Current:** Lines 213-219. Status display is a ternary: green for 'success', red otherwise.
+
+**Changes:**
+- Add amber 'partial' to the status ternary (line 214-216)
+- Below existing status details, conditionally render a warnings section when `syncStatus.warnings.length > 0`
+- Each warning: account name, error message, amber background
+- SimpleFIN reconnect link at bottom: `https://bridge.simplefin.org/`
+
+```typescript
+// Status badge (modify existing ternary):
+<span className={`text-sm font-medium ${
+  syncStatus.lastSync.status === 'success' ? 'text-green-600' :
+  syncStatus.lastSync.status === 'partial' ? 'text-amber-600' :
+  'text-red-600'
+}`}>
+  {syncStatus.lastSync.status}
+</span>
+
+// Warning list (new, after existing status details):
+{syncStatus.warnings?.length > 0 && (
+  <div className="mt-3 space-y-1">
+    {syncStatus.warnings.map((w, i) => (
+      <div key={i} className="p-2 bg-amber-50 rounded text-sm text-amber-700">
+        <span className="font-medium">{w.accountName ?? 'Connection'}</span>: {w.errorMessage}
+      </div>
+    ))}
+    <a href="https://bridge.simplefin.org/" target="_blank" rel="noopener noreferrer"
+       className="text-sm text-blue-600 hover:text-blue-800">
+      Reconnect on SimpleFIN
+    </a>
+  </div>
+)}
+```
+
+### 6. `packages/server/src/agent/tools/query-tools.ts` (MODIFY)
+
+**Current:** Lines 256-258. Queries sync_log with wrong column names (`transactions_updated`, `error` instead of actual `error_message`; no `transactions_updated` column exists).
+
+**Changes:**
+- Fix column names to match actual schema: `error_message` not `error`, remove `transactions_updated`
+- Add second query for active warnings from `sync_warnings`
+- Return combined result
+
+```typescript
+tool(
+  'get_sync_status',
+  'Get sync status: last sync time, result, warnings, and any errors.',
+  {},
+  async () => {
+    try {
+      const rows = db.prepare(
+        'SELECT started_at, completed_at, status, accounts_synced, transactions_added, error_message FROM sync_log ORDER BY started_at DESC LIMIT 5'
+      ).all();
+      const latestId = rows.length > 0 ? (rows[0] as any).id : null;
+      const warnings = latestId ? db.prepare(
+        'SELECT account_name, error_code, error_message FROM sync_warnings WHERE sync_log_id = ?'
+      ).all(latestId) : [];
+      return jsonResult({ recentSyncs: rows, activeWarnings: warnings });
+    } catch (error) {
+      return errorResult(error);
+    }
+  },
+),
+```
 
 ## Anti-Patterns
 
-### Anti-Pattern 1: Balance Recalculation Inside the Per-Row Insert Loop
+### Anti-Pattern 1: Separate Warnings Endpoint
 
-**What people do:** Call `recalculateBalance(db, accountId)` for each row inside the `for (const row of validTransformed)` loop.
-**Why it's wrong:** Recalculates N times when only one recalculation per account is needed. A 500-row import touching 3 accounts would trigger 500 recalculations instead of 3.
-**Do this instead:** Collect unique manual account IDs during the loop; call `recalculateBalance` once per account after the loop completes.
+**What people do:** Create `sync.warnings` as a new tRPC procedure.
+**Why it's wrong:** Forces two client requests for one conceptual resource. Doubles cache invalidation keys. Warnings are tiny data.
+**Do this instead:** Extend `sync.status` response with `warnings[]`.
 
-### Anti-Pattern 2: Source Guard in the tRPC Router Instead of the Service
+### Anti-Pattern 2: Upsert-by-Account Warning Table
 
-**What people do:** Put the `source !== 'manual'` guard inside the tRPC mutation handler.
-**Why it's wrong:** The agent `create_account` tool and any future CLI path call service functions directly, bypassing the tRPC router. Guards at the router level do not protect the service-level path.
-**Do this instead:** Guards in service functions. The router procedure trusts the service to enforce invariants.
+**What people do:** UNIQUE(account_id) constraint, upsert on each sync, explicit DELETE for resolved accounts.
+**Why it's wrong:** Loses history. Requires cleanup logic that can drift out of sync.
+**Do this instead:** Append-only rows linked to sync_log_id. "Active" = latest sync's warnings.
 
-### Anti-Pattern 3: Creating a Separate accounts-router.ts File
+### Anti-Pattern 3: Client-Side Error String Parsing
 
-**What people do:** Create `src/accounts/accounts-router.ts` and register it separately in `appRouter`.
-**Why it's wrong:** The existing `accountsRouter` in `trpc-router.ts` is already a sub-router. Splitting it out adds a file and an import for no functional benefit. All other domain routers are defined inline in `trpc-router.ts` alongside their imports.
-**Do this instead:** Add `create`, `update`, and `delete` procedures to the existing `accountsRouter` in `trpc-router.ts`, importing from `accounts-service.ts`.
+**What people do:** Return raw error strings like "SimpleFIN error [AUTH_FAILED]: ..." and parse account names/codes in the client.
+**Why it's wrong:** Fragile. Format changes break UI.
+**Do this instead:** Structured objects `{ accountId, accountName, errorCode, errorMessage }` from the server.
 
-### Anti-Pattern 4: Separate Balance Snapshot Write Outside recalculateBalance
+### Anti-Pattern 4: Notification System
 
-**What people do:** After calling `recalculateBalance()`, separately write a `balance_snapshots` record.
-**Why it's wrong:** Creates two code paths for snapshot management. `syncAccount()` in `sync-service.ts` already does both balance column update and snapshot write in a single function. `recalculateBalance()` should follow the same pattern for consistency.
-**Do this instead:** `recalculateBalance()` updates both `accounts.balance` and writes a `balance_snapshots` entry for today, using `INSERT OR REPLACE` (same as `syncAccount`).
+**What people do:** Build toast notifications, badge counters, or persistent alerts for sync warnings.
+**Why it's wrong:** Over-engineering for a single-user app with 3 institutions. PROJECT.md explicitly scopes out external alerts.
+**Do this instead:** Inline indicators in existing components (navbar + dashboard card).
 
-### Anti-Pattern 5: Adding `source` Filter to Existing Report/Budget Queries
+### Anti-Pattern 5: Polling at Different Intervals for Warnings
 
-**What people do:** Add `WHERE a.source = 'simplefin'` or similar conditions to spending reports, net worth queries, or budget queries to exclude manual accounts.
-**Why it's wrong:** The design explicitly requires manual accounts to be treated identically to SimpleFIN accounts in all reports. Filtering them out would defeat the purpose.
-**Do this instead:** Leave all existing query joins unchanged. Manual account transactions participate in reports automatically via the `transactions.account_id` foreign key.
+**What people do:** Add a separate, faster polling interval for warnings.
+**Why it's wrong:** Warnings only change when a sync runs (twice daily or manual trigger). The existing 30-second poll on `sync.status` is already sufficient.
+**Do this instead:** Ride on existing `sync.status` refetchInterval and onSuccess invalidation.
+
+## Integration Points
+
+### External Services
+
+| Service | Integration Pattern | Notes |
+|---------|---------------------|-------|
+| SimpleFIN API | `errors[]` array in fetchAccounts response | Errors have `code`, `msg`, optional `account_id` and `conn_id`. Already parsed in sync-service.ts lines 38-42 but not persisted. |
+| SimpleFIN Dashboard | Static link `https://bridge.simplefin.org/` | User reconnects institutions there. Display-only, no API integration. |
+
+### Internal Boundaries
+
+| Boundary | Communication | Change Needed |
+|----------|---------------|---------------|
+| sync-service -> sync_warnings | Direct better-sqlite3 INSERT | New writes in runSync() |
+| tRPC router -> sync_warnings | Direct better-sqlite3 SELECT | New query in syncRouter.status |
+| SyncStatus -> tRPC | TanStack Query (existing) | Handle new 'partial' status + warnings array |
+| DashboardPage -> tRPC | TanStack Query (existing) | Handle new 'partial' status + render warnings |
+| Agent -> sync_warnings | Direct better-sqlite3 SELECT | New query in get_sync_status tool |
 
 ## Suggested Build Order
 
-Dependencies flow strictly: schema → service → router → import integration → client → agent.
+Strict dependency chain, bottom-up:
 
-| Step | What | Files | Dependency |
-|------|------|-------|------------|
-| 1 | Migration | `migrations/006-manual-accounts.sql` | None — unblocks all subsequent steps |
-| 2 | accounts-service | `src/accounts/accounts-service.ts` | Depends on source column existing |
-| 3 | accountsRouter mutations + list update | `src/sync/trpc-router.ts` | Depends on accounts-service |
-| 4 | import-service recalculateBalance integration | `src/import/import-service.ts` | Depends on accounts-service |
-| 5 | AccountsPage visual distinction | `client/pages/AccountsPage.tsx` | Depends on list returning source |
-| 6 | ImportPage inline account creation | `client/pages/ImportPage.tsx` | Depends on accounts.create mutation (step 3) |
-| 7 | create_account agent tool | `src/agent/tools/action-tools.ts` | Depends on accounts-service |
-| 8 | get_account_balances source field | `src/agent/tools/query-tools.ts` | Depends on list returning source (step 3) |
-| 9 | System prompt update | `src/agent/system-prompt.ts` | Depends on create_account tool existing (step 7) |
+| Phase | File | Depends On | Parallelizable? |
+|-------|------|------------|-----------------|
+| 1 | `007-sync-warnings.sql` | Nothing | -- |
+| 2 | `sync-service.ts` | Phase 1 (table must exist) | -- |
+| 3 | `trpc-router.ts` syncRouter.status | Phase 2 (warnings populated) | -- |
+| 4 | `query-tools.ts` get_sync_status | Phase 1 (table exists) | Yes, with 5-6 |
+| 5 | `SyncStatus.tsx` | Phase 3 (response shape) | Yes, with 4, 6 |
+| 6 | `DashboardPage.tsx` | Phase 3 (response shape) | Yes, with 4-5 |
 
-**Step ordering rationale:**
-- Steps 1-4 are server-only and have a strict linear dependency chain
-- Steps 5-6 are client and can be done in parallel with steps 7-9 once step 3 is complete
-- Step 6 (ImportPage) is the most complex client change and should be done independently from AccountsPage to keep diffs reviewable
-- Agent steps 7-9 can proceed in parallel with client steps once the service is ready
+**Phase ordering rationale:**
+- Phases 1-3 are strictly sequential: table -> write path -> read path
+- Phases 4, 5, 6 all depend only on the response shape being finalized (phase 3) and are independent of each other
+- Phase 6 (DashboardPage) is the most complex UI change but has no dependency on phases 4-5
 
 ## Sources
 
-- Direct inspection of `packages/server/migrations/001-initial-schema.sql` (schema structure and migration pattern)
-- Direct inspection of `packages/server/src/sync/trpc-router.ts` (router pattern, existing accountsRouter)
-- Direct inspection of `packages/server/src/import/import-service.ts` (executeImport structure)
-- Direct inspection of `packages/server/src/sync/sync-service.ts` (balance snapshot pattern in syncAccount)
-- Direct inspection of `packages/server/src/agent/tools/action-tools.ts` (tool creation pattern)
-- Direct inspection of `packages/server/src/db/migrate.ts` (migration runner behavior)
-- Direct inspection of `packages/client/src/pages/ImportPage.tsx` (wizard state management, PreviewStep structure)
-- Direct inspection of `packages/client/src/pages/AccountsPage.tsx` (current render structure)
-- Direct inspection of `packages/client/src/pages/DashboardPage.tsx` (accounts list consumption)
-- Direct inspection of `.planning/designs/2026-03-25-manual-accounts-csv-import-design.md` (authoritative design decisions)
-- Direct inspection of `.planning/PROJECT.md` (milestone requirements and key decisions)
+- Direct inspection of `packages/server/src/sync/sync-service.ts` (write path, error handling, sync_log status logic)
+- Direct inspection of `packages/server/src/sync/trpc-router.ts` (syncRouter.status current response shape, lines 80-119)
+- Direct inspection of `packages/server/src/sync/simplefin-types.ts` (SimpleFINError interface: code, msg, account_id, conn_id)
+- Direct inspection of `packages/server/migrations/001-initial-schema.sql` (sync_log table schema)
+- Direct inspection of `packages/client/src/components/SyncStatus.tsx` (current status rendering)
+- Direct inspection of `packages/client/src/components/SyncButton.tsx` (cache invalidation on sync)
+- Direct inspection of `packages/client/src/components/Layout.tsx` (navbar structure, SyncStatus placement)
+- Direct inspection of `packages/client/src/pages/DashboardPage.tsx` (sync status card rendering, lines 182-267)
+- Direct inspection of `packages/server/src/agent/tools/query-tools.ts` (get_sync_status tool, lines 250-264)
+- Direct inspection of `packages/server/src/sync/fixtures/simplefin-response.json` (error structure)
+- `.planning/PROJECT.md` v2.8 milestone requirements
 
 ---
-*Architecture research for: Minerva Money v2.7 — Manual Accounts & CSV Import Integration*
-*Researched: 2026-03-25*
+*Architecture research for: Minerva Money v2.8 — Sync Error Visibility*
+*Researched: 2026-03-26*

@@ -1,258 +1,306 @@
-# Pitfalls Research
+# Domain Pitfalls
 
-**Domain:** Manual account management + CSV import integration in an existing budgeting app with auto-sync
-**Researched:** 2026-03-25
-**Confidence:** HIGH (based on direct codebase analysis of existing service layer, schema, and sync pipeline)
+**Domain:** Sync error visibility — per-account warnings, partial sync status, dashboard/navbar indicators
+**Researched:** 2026-03-26
+**Confidence:** HIGH (based on direct codebase analysis of sync pipeline, sync_log schema, SyncStatus component, DashboardPage, and SimpleFIN response types)
 
 ---
 
 ## Critical Pitfalls
 
-### Pitfall 1: Sync Trigger Iterates All Accounts Including Manual Ones
+### Pitfall 1: "Success" Status Masking Per-Account Errors
 
 **What goes wrong:**
-The `sync.trigger` mutation (trpc-router.ts line 60-64) fetches ALL accounts from the DB and checks the rate limiter for every one. When manual accounts exist, their IDs will appear in this list. The rate limiter has no record of them (they've never been incremented), but they may fail `canManualSync()` depending on how the limiter handles unknown IDs. The real problem: SimpleFIN's `fetchAccounts()` returns only SimpleFIN accounts, so iterating manual accounts in the rate-limit check is incorrect and creates confusing error messages ("Rate limit: insufficient quota for accounts: My Mortgage").
+The current `runSync()` (sync-service.ts lines 62-66) writes `status = 'success'` to sync_log whenever the SimpleFIN API call itself succeeds — even when individual accounts have errors. The SimpleFIN response can include per-account errors in the `errors`/`errlist` array (e.g., bank connection expired, institution down), and individual `syncAccount()` calls can throw. These errors are pushed to `result.errors[]` but the sync_log row is still marked `'success'`. The sync_log only gets `'error'` status when the entire `client.fetchAccounts()` call fails (line 76-83). This means the current system silently reports "success" for partial syncs — the exact problem v2.8 aims to fix.
 
 **Why it happens:**
-The sync infrastructure was built when all accounts were SimpleFIN accounts. The accounts list query has no filter. Adding manual accounts to the DB makes them visible to every code path that queries `FROM accounts` without a `WHERE source = 'simplefin'` filter.
+The status field was designed as a binary: the API call worked or it didn't. Per-account granularity was never modeled. The `result.errors` array is returned to the caller but never persisted.
 
-**How to avoid:**
-In the `sync.trigger` mutation, filter the accounts list to SimpleFIN accounts before rate-limit checking: `WHERE source = 'simplefin'` (or `WHERE simplefin_id IS NOT NULL` as a safe fallback during the migration period). Apply the same filter anywhere the sync pipeline queries accounts.
+**Consequences:**
+If you add a `'partial'` status but only check the `result.errors` array length, you miss errors that were caught during `syncAccount()` processing. If you check both the SimpleFIN `errList` and the per-account catch blocks but forget that `result.errors` also includes rate-limit messages (line 48-49), you'll flag rate-limited accounts as "errors" when they're actually expected behavior.
 
-**Warning signs:**
-- Manual sync returning rate-limit errors for accounts that were never synced
-- Sync log showing `accounts_synced` count that includes manual accounts
-- Rate limiter `increment()` being called with `manual_*` IDs
+**Prevention:**
+Distinguish between three error sources in the sync pipeline:
+1. SimpleFIN API-level errors (`data.errors`/`data.errlist`) — these are connection/institution problems
+2. Per-account processing failures (the catch block on line 57-60) — these are app-level bugs
+3. Rate-limit skips (line 47-49) — these are expected behavior, not errors
+
+Only sources 1 and 2 should produce warnings. Source 3 is operational. The `'partial'` status should be set when `result.accountsSynced > 0` AND warnings exist from sources 1 or 2.
+
+**Detection:**
+- sync_log shows `status = 'success'` but `result.errors` is non-empty
+- Dashboard shows green "Success" when a bank connection is actually broken
 
 **Phase to address:**
-Schema migration phase (the phase that adds the `source` column). The filter must be added to the sync trigger in the same phase that introduces manual accounts to the DB, not in a later cleanup phase.
+First phase — sync service changes. This is the foundational logic that everything else depends on.
 
 ---
 
-### Pitfall 2: Balance Column Goes Stale for Manual Accounts
+### Pitfall 2: sync_warnings Table Without Cleanup Creates Unbounded Growth
 
 **What goes wrong:**
-Manual account balance is computed from transaction sums (`recalculateBalance()`), but the `balance` column on the `accounts` table is the authoritative value read by the dashboard, net worth chart, and the `accounts.list` query. If `recalculateBalance()` is not called after every operation that adds transactions, the displayed balance diverges from reality. The net worth chart reads `balance_snapshots` which are populated from the `balance` column — so a stale balance column produces a permanently incorrect net worth history for that day.
+A `sync_warnings` table that stores per-account errors with history but has no retention policy will grow without bound. With twice-daily syncs and a persistently broken bank connection, that's ~60 warning rows per month per broken account. Over a year, that's 720+ rows for one account. The table is queried on every page load (SyncStatus auto-refetches every 30 seconds) and on every dashboard render.
 
 **Why it happens:**
-The existing pattern for SimpleFIN accounts is that the sync upsert writes `balance` directly from the bank API — an external source of truth. For manual accounts there is no external source; the balance must be derived. Developers often implement `recalculateBalance()` after CSV import but forget that: (1) the scheduled snapshot job reads the current `balance` column — if import and the snapshot run in the wrong order on the same day, the snapshot captures the pre-import balance; (2) there is currently no "delete transaction" flow for manual accounts — if one is added later, balance recalculation must be wired there too.
+The natural instinct is to INSERT a new warning row on every sync, building a history. But unlike sync_log (which has one row per sync), sync_warnings would have N rows per sync (one per affected account), and the "current warnings" query must filter to the latest sync.
 
-**How to avoid:**
-Call `recalculateBalance()` inside the same SQLite transaction as the operation that changes transactions. For CSV import, `recalculateBalance()` must be the last step inside `db.transaction()` in `executeImport()`, after all inserts. Consider also inserting a balance snapshot for the import date at the end of `executeImport()` rather than waiting for the scheduled snapshot job.
+**Consequences:**
+Without a retention policy or "latest only" design, the query to get current warnings becomes increasingly expensive, or you end up writing complex "get the most recent warning per account" queries with window functions.
 
-**Warning signs:**
-- Dashboard shows balance 0 for a manual account that has imported transactions
-- Net worth chart shows no change on the day of a CSV import
-- `SELECT balance FROM accounts WHERE id = 'manual_...'` returns 0 after a successful import
+**Prevention:**
+Use an UPSERT pattern: `INSERT INTO sync_warnings (account_id, ...) ON CONFLICT(account_id) DO UPDATE SET ...`. The table has one row per account (not per sync). The row represents the *current* state. Add a `resolved_at` column that gets set when an account syncs successfully. This means the table stays bounded at the number of accounts (~5-10 rows), current-state queries are trivial (`WHERE resolved_at IS NULL`), and the sync_log table retains the historical record.
+
+**Detection:**
+- sync_warnings table has hundreds of rows
+- Current-warnings query uses `GROUP BY` or `ROW_NUMBER()` instead of a simple `WHERE`
 
 **Phase to address:**
-The account CRUD service phase. The `recalculateBalance()` function must be defined there, and the import service must be updated in the same or immediately subsequent phase to call it.
+First phase — schema migration. Get the table design right before building anything on top of it.
 
 ---
 
-### Pitfall 3: Inline Account Creation Leaves Preview Stats Stale
+### Pitfall 3: Status State Machine With No Transition Rules
 
 **What goes wrong:**
-The import wizard uses a stateless preview/execute pattern: the client sends the CSV text to `previewImport()` at step 2, which auto-suggests account matches against the current DB. If the user then creates a new account inline (still on step 2), the client has the new account ID from the `accounts.create` response — but the preview stats (dedup counts, sample rows, row counts by account) were computed before the account existed. The user sees "0 duplicates" for a second import of the same data to a newly-created account, even when duplicates exist.
+Adding `'partial'` to the status field creates a 4-state machine: `running -> success | partial | error`. Without explicit transition rules, edge cases create impossible states:
+- A sync starts (`running`), the API returns accounts with some errors, but then the server crashes before the UPDATE. The row stays `running` forever.
+- A subsequent sync starts while a previous one is still `running` (croner overlap or manual + scheduled collision). Two sync_log rows are `running` simultaneously.
+- The SyncStatus component checks `status.lastSync.status === 'running'` to show "Syncing..." — if a stale `running` row exists from a crash, the UI permanently shows "Syncing..." even though nothing is running.
 
 **Why it happens:**
-The preview is a one-shot server call. The client patches `accountMappings` locally when a new account is created, which is correct for the execute step. But the dedup stats shown in the UI are the server's original preview response, which used `suggestedId: null` for that account (treating its rows as "new" by the conservative default in `previewImport()`). This is a safe failure mode in that no wrong data is written, but it creates a UX trust gap and can mask real duplicate problems.
+The current code has no recovery for stale `running` entries. This isn't a problem today because: (1) syncs complete quickly, (2) crashes are rare, (3) the user can just trigger another sync. But once you surface sync status prominently (navbar indicator, dashboard badge), a stale `running` state becomes a visible bug.
 
-**How to avoid:**
-After inline account creation, re-run `previewImport()` with the updated mappings, or accept that the dedup stats shown may be conservative and add an explicit disclaimer in the UI ("Duplicate check not available for newly created accounts — will be enforced at import."). The execute step is always authoritative; the preview is advisory.
+**Consequences:**
+Navbar shows a permanent "syncing" spinner. Dashboard status card is stuck on "Syncing...". User clicks "Sync Now" repeatedly, creating more stale rows.
 
-**Warning signs:**
-- Dedup stats show "0 duplicates" for a second import of the same data to a newly-created account
-- The confirm page row count differs from what actually gets imported
+**Prevention:**
+Before inserting a new sync_log row, mark any existing `running` rows as `error` with a message like "Interrupted — previous sync did not complete." Add this as the first statement in `runSync()`. This is a one-line fix but must be done in the same phase that makes the status more visible.
+
+**Detection:**
+- Multiple `running` rows in sync_log
+- SyncStatus component stuck on "Syncing..." when no sync is active
 
 **Phase to address:**
-The import wizard UI phase. Either add a "refresh preview" call after inline account creation, or add a disclaimer note to the preview stats for accounts created mid-wizard.
+First phase — sync service changes. Clean up stale `running` entries before they become user-visible problems.
 
 ---
 
-### Pitfall 4: Cascade Delete Removes Budget-Relevant Transaction History
+### Pitfall 4: SimpleFIN Error Codes Are Not Stable — Don't Parse Them
 
 **What goes wrong:**
-The schema uses `ON DELETE CASCADE` on `transactions.account_id`. Deleting a manual account deletes all its transactions. For a personal budgeting app, this destroys historical spending data — past budget periods can no longer show what was spent, and the net worth chart loses historical balance data points for that account.
+The SimpleFIN `errors` array contains objects with `code` and `msg` fields (simplefin-types.ts line 6-10). It's tempting to parse the `code` field to determine error severity, map to specific UI messages, or auto-link to SimpleFIN reconnect. But SimpleFIN's error codes are not documented as a stable API — they come from upstream MX aggregator error codes which change without notice.
 
 **Why it happens:**
-Cascade delete is the correct choice for referential integrity. The pitfall is not the cascade itself — it's that `deleteAccount()` as described in the design does not require explicit confirmation at the service layer about what will be lost. If a `delete_account` agent tool is ever added, it could silently destroy months of transaction history without the user understanding the scope.
+Developer sees error codes like `"FI_NOT_AVAILABLE"` or `"AUTH_REQUIRED"` and builds switch statements against them. These work for a while, then break when MX changes their error taxonomy.
 
-**How to avoid:**
-The `deleteAccount()` service function should: (1) count the transactions that will be deleted and include that count in the return value, (2) expose this count via the tRPC mutation so the UI can show a warning ("This will permanently delete 847 transactions"), (3) never be exposed as an agent tool without a confirmation flow identical to the budget-change confirmation pattern already in the system. Add a `dryRun: true` option to `deleteAccount()` that returns the count without deleting.
+**Consequences:**
+The UI shows "Unknown error" for new error codes, or worse, categorizes a serious auth failure as a minor temporary issue.
 
-**Warning signs:**
-- A "Delete Account" UI button with no transaction count in the confirmation dialog
-- `deleteAccount()` function that does not return the count of affected transactions before deleting
+**Prevention:**
+Store the raw `code` and `msg` verbatim. Display the `msg` to the user (it's human-readable). Use the presence of an error (not its code) to set the `'partial'` status. The only safe classification is: "has error" vs. "no error" — not "what kind of error." If you want to show a "Reconnect" link, show it for ALL per-account errors, not just specific codes. The SimpleFIN reconnect URL is `https://bridge.simplefin.org/reconnect` — always valid regardless of error type.
+
+**Detection:**
+- Switch statement or if-chain on SimpleFIN error codes in the codebase
+- Different UI treatments for different error codes
 
 **Phase to address:**
-Account CRUD service phase. Build the safeguard into the service function itself, not as a UI-only concern.
+First phase — sync service and warning persistence. Store raw, don't interpret.
 
 ---
 
-### Pitfall 5: Sync Upsert Can Overwrite Manual Account Data on ID Collision
+### Pitfall 5: Dashboard and Navbar Showing Stale Warning State After Successful Sync
 
 **What goes wrong:**
-The sync upsert (sync-service.ts line 94-105) uses `INSERT INTO accounts ... ON CONFLICT(id) DO UPDATE SET name = ..., balance = ...`. The DO UPDATE clause has no guard on the `source` column. The design uses `manual_<uuid>` IDs which are collision-resistant, but the upsert would update any row whose `id` matches an incoming SimpleFIN account ID — including a manual account if an ID ever collided. More practically: the upsert also sets `simplefin_id = excluded.id` for every row it touches. A manual account correctly has `simplefin_id = NULL`. If a SimpleFIN account ID ever matched a manual account ID (essentially impossible with UUID, but not architecturally prevented), the manual account's `source` value and `simplefin_id` would be silently overwritten.
+The SyncStatus component auto-refetches every 30 seconds (SyncStatus.tsx line 24). The SyncButton invalidates the sync.status query on success (SyncButton.tsx lines 11-15). But if warnings are served from a separate endpoint or table, the SyncButton's invalidation list must also include the new warnings query key. If it doesn't, the sequence is: user clicks Sync Now -> sync succeeds (all accounts OK) -> sync.status shows "Success" -> but the navbar warning indicator still shows the old warnings from the previous sync until the next 30-second refetch.
 
 **Why it happens:**
-The sync upsert was written when all accounts came from SimpleFIN. The DO UPDATE clause does not check the current row's `source` value before updating.
+The SyncButton.tsx `onSuccess` handler explicitly lists which queries to invalidate (lines 11-15). Adding a new data source (sync warnings) without updating every invalidation site creates a stale-data window.
 
-**How to avoid:**
-Add `WHERE source = 'simplefin'` (or equivalently check that `simplefin_id IS NOT NULL`) to the upsert's DO UPDATE clause. This is cheap to add in the migration phase and makes the invariant architecturally enforced rather than relying on UUID collision-resistance.
+**Consequences:**
+User sees contradictory states: "Last synced: just now, Success" in the dashboard alongside an amber warning indicator in the navbar. The 30-second refetch eventually fixes it, but the brief inconsistency erodes trust.
 
-**Warning signs:**
-- Manual account `source` value becomes `'simplefin'` after a sync
-- Manual account `simplefin_id` is no longer NULL after a sync
+**Prevention:**
+Return warnings as part of the existing `sync.status` query response rather than a separate endpoint. This way, any component that already invalidates `sync.status` automatically gets fresh warning data. The sync.status query already returns `lastSync` and `accounts` — adding a `warnings` field keeps the invalidation surface unchanged.
+
+If warnings must be a separate endpoint, add the new query key to ALL invalidation sites: `SyncButton.tsx`, `DashboardPage.tsx` (line 34-37), and any future component that triggers sync.
+
+**Detection:**
+- Amber indicator visible for 0-30 seconds after a successful sync that resolved all warnings
+- `queryClient.invalidateQueries` calls that don't include the warnings query key
 
 **Phase to address:**
-Schema migration phase. Update the sync upsert's DO UPDATE clause at the same time the `source` column is added.
+tRPC endpoint phase. Design the API response shape to include warnings in the existing sync.status response.
 
 ---
 
-### Pitfall 6: `accounts.list` Query Missing `source` Column Breaks Downstream Features
+### Pitfall 6: Agent get_sync_status Tool Returns Wrong Column Names
 
 **What goes wrong:**
-The existing `accounts.list` tRPC procedure (trpc-router.ts line 119-134) selects `id, name, institution, type, balance, last_synced` — no `source` column. After adding `source` to the schema, any code that needs to distinguish manual vs. synced accounts (dashboard visual badge, agent `list_accounts` tool, import wizard auto-suggest, sync trigger filter in the UI) must consume `source`. If the `accounts.list` query is not updated in the same phase as the migration, every downstream consumer silently receives objects without the field it needs, TypeScript types will not reflect the new column, and developers will add one-off queries in multiple places instead of using the canonical list procedure.
+The existing `get_sync_status` agent tool (query-tools.ts line 254-257) queries `sync_log` with column names that don't match the actual schema: it selects `transactions_updated` and `error` — but the schema has `transactions_added` and `error_message`. This is a pre-existing bug (documented in PROJECT.md tech debt). When you add a `'partial'` status and warnings to the sync system, the agent tool will also need updating — and if you copy from the existing (buggy) query, you'll propagate the same column name errors.
 
 **Why it happens:**
-Column added by migration, query not updated in the same phase. This is the classic "migration without query update" failure pattern — the DB has the data but the API does not expose it.
+The agent tool was written independently from the tRPC router and uses a raw SQL query rather than calling the service function. The column names were typed from memory.
 
-**How to avoid:**
-Update `accounts.list` to include `source` in the same commit as the migration. Update the TypeScript return type. All downstream consumers (dashboard, agent tools, import wizard auto-suggest) will then have access without additional queries.
+**Consequences:**
+Agent reports NULL for sync errors and transaction counts. Adding warnings data to a query that's already broken means the agent can't tell users about sync problems — defeating part of the purpose of v2.8.
 
-**Warning signs:**
-- Dashboard cannot show "Manual" badge because the list response has no `source` field
-- Agent `list_accounts` tool returns objects without a `source` field despite the DB having it
-- TypeScript type for the accounts list does not include `source`
+**Prevention:**
+Fix the existing column name bug in the same phase that adds warnings. Consider having the agent tool call the same function that backs the tRPC `sync.status` endpoint, rather than running its own raw SQL. This follows the existing pattern where most agent tools wrap service functions.
+
+**Detection:**
+- Agent responds with "0 transactions added" when the sync log shows non-zero
+- Agent says "no errors" when sync_log.error_message has content
 
 **Phase to address:**
-Schema migration phase. Treat the query update as part of the same atomic change as the migration SQL.
+Agent tool update phase. Fix the existing bug alongside the new warnings integration.
 
 ---
 
-## Technical Debt Patterns
+## Moderate Pitfalls
 
-Shortcuts that seem reasonable but create long-term problems.
+### Pitfall 7: Migration Adding sync_warnings Table While Production Is Running
 
-| Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
-|----------|-------------------|----------------|-----------------|
-| Skipping `recalculateBalance()` in tests | Faster test setup | Tests don't verify balance accuracy; balance bugs ship silently | Never — balance is core output |
-| Using `simplefin_id IS NOT NULL` as the source filter instead of `source` column | No migration needed | Fragile — assumes all SimpleFIN accounts have a non-null simplefin_id (currently true but not schema-enforced) | Only as a temporary fallback during the migration period |
-| Not re-running preview after inline account creation | Simpler UI code | Dedup stats are incorrect for newly-created accounts; misleads user on second import | Acceptable only if a disclaimer is shown in the preview |
-| Hard-coding `type = 'banking'` as the only option for manual accounts | Reduces form complexity | Investment account type is needed for net-worth-only balance display; adding it later requires UI change | Only if investment manual accounts are explicitly out of scope for this milestone |
-| Exposing account delete in the agent without a confirmation flow | Faster agent implementation | Can silently destroy months of transaction history | Never |
+**What goes wrong:**
+The app runs in production on the same iMac where development happens. The migration runner executes on server startup. If you add migration 007 with a new `sync_warnings` table and new columns, the next `npm run dev` will apply the migration to the shared production database. If the migration has a bug (wrong column type, missing DEFAULT, bad FOREIGN KEY), the production database is corrupted and the production process (still running the old code) may crash on its next sync.
 
----
+**Why it happens:**
+Dev and production share the same SQLite database at `~/minerva-money/data/minerva.db`. Migrations are forward-only. There's no down-migration or rollback mechanism.
 
-## Integration Gotchas
+**Prevention:**
+(1) Back up the database before running dev with a new migration: `cp ~/minerva-money/data/minerva.db ~/minerva-money/data/minerva-pre-007.db`. (2) Test the migration on a copy first. (3) Keep migrations additive — `CREATE TABLE IF NOT EXISTS` and `ALTER TABLE ADD COLUMN` are safe. Never rename or drop columns in a migration. (4) Stop production before starting dev when a migration is pending.
 
-Common mistakes when connecting the new feature to existing services.
+**Detection:**
+- Production process crashes with "no such column" or "no such table" after running dev
+- Migration runner logs an error on startup
 
-| Integration | Common Mistake | Correct Approach |
-|-------------|----------------|------------------|
-| SimpleFIN sync trigger | Querying all accounts for rate-limit check, including manual accounts | Filter to `WHERE source = 'simplefin'` before passing to rate limiter |
-| CSV import execute | Calling `recalculateBalance()` after the transaction instead of inside it | Call inside the same `db.transaction()` as the inserts |
-| Balance snapshots | Waiting for the scheduled snapshot job to capture post-import balance | Insert a `balance_snapshots` row for the import date at the end of `executeImport()` |
-| tRPC accounts router | Not adding `source` to `accounts.list` query after migration | Update the query and TypeScript types in the same phase as the migration |
-| Transfer detection on import | Adding a duplicate `detectTransferCandidates()` call to account creation flow | Transfer detection already runs inside `executeImport()` — no change needed at account creation time |
-| Dedup hash for manual accounts | Assuming `manual_` prefix in account ID breaks hash generation | `generateDedupHash()` takes `accountId` as an opaque string — the `manual_` prefix is irrelevant |
-| Agent `list_accounts` tool | Not including `source` field in tool response after schema migration | Update the query inside the tool helper to include `source` alongside the existing fields |
+**Phase to address:**
+Schema migration phase. Document the backup step in the phase verification.
 
 ---
 
-## Performance Traps
+### Pitfall 8: Mapping SimpleFIN Errors to Account IDs When account_id Is Optional
 
-Patterns that work at small scale but have hidden costs.
+**What goes wrong:**
+The SimpleFIN error object has `account_id` as optional (simplefin-types.ts line 9). Some errors are connection-level (e.g., "bank website down") and have a `conn_id` but no `account_id`. The current code (sync-service.ts lines 38-42) concatenates these into a generic error string. When you try to persist per-account warnings, connection-level errors without `account_id` don't map to any specific account.
 
-| Trap | Symptoms | Prevention | When It Breaks |
-|------|----------|------------|----------------|
-| Full table scan in `recalculateBalance()` | Slow balance update for accounts with large transaction history | `SELECT SUM(amount) FROM transactions WHERE account_id = ?` is a single indexed scan — already has `idx_transactions_account_id` index | Not a real issue at personal finance scale (< 50k total transactions) |
-| Re-parsing the entire CSV on preview refresh after inline account creation | Slow step-2 interaction for large CSV files | Cache parsed rows client-side in component state; only re-run the dedup check portion | Only relevant for CSV files > 5MB — unlikely in practice |
+**Why it happens:**
+SimpleFIN's error model distinguishes between connection errors (affecting all accounts at an institution) and account-specific errors. The current code doesn't need to distinguish because it dumps everything into `result.errors[]` as strings.
+
+**Consequences:**
+If you only persist warnings with an `account_id`, connection-level errors are silently dropped. If you require `account_id` as NOT NULL in the sync_warnings table, connection-level errors can't be stored.
+
+**Prevention:**
+When an error has `conn_id` but no `account_id`, look up all accounts with matching `conn_id` (stored as part of the SimpleFIN account data, available in the response's `accounts` array) and create a warning for each. This maps "Discover is down" to warnings on both the Discover Checking and Discover HELOC accounts. If no matching accounts are found, store the warning with `account_id = NULL` and handle it as a "general sync warning" in the UI.
+
+**Detection:**
+- Bank connection goes down but no warnings appear because the errors have no `account_id`
+- Warnings table has constraint violations when inserting connection-level errors
+
+**Phase to address:**
+First phase — sync service changes. Handle both error shapes when persisting warnings.
 
 ---
 
-## Security Mistakes
+### Pitfall 9: "Partial" Badge Color Collision With Existing UI Semantics
 
-Domain-specific security issues beyond general web security.
+**What goes wrong:**
+The design calls for an amber "Partial" badge on the dashboard. The existing DashboardPage uses exactly two status colors: `text-green-600` for success and `text-red-600` for error (line 214-216). The SyncStatus component (navbar) uses `text-blue-300` for running, `text-red-400` for error, and `text-gray-400` for success. Adding amber (yellow/orange) introduces a third semantic color. If the amber shade chosen is too close to the existing yellow used elsewhere (e.g., "Local only" backup warning at line 258-259 uses `text-yellow-600`), the two amber/yellow indicators blur together visually.
 
-| Mistake | Risk | Prevention |
-|---------|------|------------|
-| Allowing `updateAccount()` or `deleteAccount()` on SimpleFIN accounts via the tRPC API | User could delete a synced account; next sync would re-create it, but transaction history between deletion and re-sync is gone | Service functions must check `source = 'manual'` before any modification and throw a typed TRPCError |
-| Not sanitizing manual account name/institution in agent responses | Stored values appear in agent chat — if they contain prompt-injection sequences, they could influence agent behavior | The existing XML-wrapping pattern already handles transaction payee/memo fields; apply the same wrapping to account name and institution in the `create_account` and `list_accounts` tool responses |
+**Why it happens:**
+No design system or color palette documentation exists — Tailwind classes are applied inline. Each component picks its own colors.
+
+**Consequences:**
+User sees two yellow-ish indicators and conflates "sync partial" with "backup local only." Or worse, the amber badge is too subtle against the white card background and gets missed entirely.
+
+**Prevention:**
+Use `text-amber-600` and `bg-amber-50` for sync warnings consistently. Reserve `text-yellow-600` for backup warnings. Document the color semantics in a comment at the top of the SyncStatus component. Use the same amber shades in both the dashboard badge and the navbar indicator for consistency.
+
+**Detection:**
+- Two different yellow/amber shades on the same dashboard page
+- User reports not noticing the warning indicator
+
+**Phase to address:**
+UI phase — dashboard and navbar updates.
 
 ---
 
-## UX Pitfalls
+## Minor Pitfalls
 
-Common user experience mistakes in this domain.
+### Pitfall 10: 30-Second Polling Creates Unnecessary Load During Active Use
 
-| Pitfall | User Impact | Better Approach |
-|---------|-------------|-----------------|
-| Showing "Last synced: never" for manual accounts | Confusing — manual accounts are never "synced" | Show "Last imported: {date}" using `last_synced` column (repurposed for import timestamp), or hide the field if no imports yet |
-| "Sync Now" button or sync status applies to manual accounts | User tries to sync a manual account and gets an error or silent no-op | Grey out or hide sync affordances for rows where `source = 'manual'` in the dashboard accounts list |
-| Import wizard showing "Create New Account" for every unmapped account without pre-filling the name | User must type the name manually even though it came from the CSV | Pre-fill the Name field from the CSV account name; leave Institution blank but auto-focused |
-| No transaction count in the delete confirmation dialog | User accidentally deletes an account with 2 years of imported history with no indication of scope | Show count in dialog: "This will permanently delete 847 transactions and cannot be undone." |
-| Preview stats unchanged after inline account creation | User does not realize the dedup check was not run for the newly-created account | Add a note: "Duplicate check not available for newly created accounts — will be enforced at import time." |
+**What goes wrong:**
+SyncStatus refetches every 30 seconds regardless of whether a sync is in progress. With the addition of warnings (which change only on sync), this polling queries the sync_warnings table 120 times per hour even when no sync has occurred.
+
+**Prevention:**
+This is acceptable at the current scale (single user, SQLite on local disk, query is trivial). Don't optimize this unless it causes measurable issues. The alternative (WebSocket push) adds significant complexity for zero user-visible benefit.
+
+---
+
+### Pitfall 11: Navbar Warning Tooltip Overflowing on Mobile
+
+**What goes wrong:**
+The design calls for a navbar amber warning indicator with a tooltip showing affected account count. The navbar is hidden on mobile (Layout.tsx line 9: `hidden md:block`). If the tooltip is implemented as a CSS hover tooltip, it won't work on mobile at all. The BottomTabBar component handles mobile navigation separately and has no sync status display.
+
+**Prevention:**
+Don't add a warning indicator to the BottomTabBar. The dashboard sync status card is already visible on mobile. The navbar indicator is desktop-only, matching the existing pattern where SyncStatus and SyncButton are navbar children.
+
+---
+
+## Phase-Specific Warnings
+
+| Phase Topic | Likely Pitfall | Mitigation |
+|-------------|---------------|------------|
+| Schema migration (sync_warnings table) | Unbounded table growth; missing cleanup of stale running rows; migration applied to production DB | UPSERT pattern (one row per account); clean stale running rows in runSync(); backup DB before migration |
+| Sync service changes (partial status, warning persistence) | Conflating rate-limit skips with real errors; losing connection-level errors without account_id; not fixing stale running entries | Separate error sources; map conn_id errors to accounts; mark stale running rows as error |
+| tRPC endpoint (sync.status response shape) | Warnings on separate endpoint causing stale-state window; breaking existing SyncStatus contract | Return warnings inside existing sync.status response; maintain backward-compatible response shape |
+| Dashboard UI (amber badge, error list) | Color collision with backup status yellow; badge invisible on white background | Use amber-600/amber-50 consistently; test visual distinction from yellow-600 |
+| Navbar UI (warning indicator) | Tooltip not working on mobile; stale indicator after successful sync | Desktop-only indicator; rely on sync.status invalidation for freshness |
+| Agent tool update | Propagating existing column name bugs; raw SQL diverging from tRPC endpoint | Fix column names; consider wrapping the same service function used by tRPC |
 
 ---
 
 ## "Looks Done But Isn't" Checklist
 
-Things that appear complete but are missing critical pieces.
-
-- [ ] **Balance recalculation:** `recalculateBalance()` is called inside the import transaction — verify with a test that queries `accounts.balance` after `executeImport()` and confirms it matches `SUM(transactions.amount)` for that account
-- [ ] **Sync isolation:** Rate-limit check in `sync.trigger` filters to `source = 'simplefin'` — verify by inserting a manual account and running sync, confirming no rate-limit error and `accounts_synced` excludes the manual account
-- [ ] **Source column in list query:** `accounts.list` tRPC response includes `source` field — verify by calling the endpoint and checking the TypeScript response shape
-- [ ] **Cascade delete protection:** `deleteAccount()` returns transaction count — verify the UI shows this count before confirming deletion
-- [ ] **Balance snapshot on import:** A `balance_snapshots` row is inserted for the import date at the end of `executeImport()` — verify the net worth chart reflects updated data on the day of import without waiting for the scheduled snapshot
-- [ ] **Manual accounts in dashboard:** Manual accounts appear in the accounts list with a "Manual" badge — verify the `source` field drives the badge and SimpleFIN accounts do not show it
-- [ ] **Agent list_accounts includes source:** Verify in a test that the tool output includes `"source": "manual"` for a manual account
-- [ ] **Sync button hidden for manual accounts:** Verify the UI hides or disables sync affordance for rows where `source = 'manual'`
-- [ ] **Type guard on CRUD mutations:** `update` and `delete` mutations reject attempts to modify SimpleFIN accounts — verify with a test that sends a SimpleFIN account ID to `accounts.update` and expects a TRPCError
+- [ ] **Partial status set correctly:** Verify that `status = 'partial'` is written to sync_log when some accounts succeed and others have errors — not just when the SimpleFIN errors array is non-empty (rate-limit skips should not trigger partial)
+- [ ] **Stale running cleanup:** Verify that starting a new sync marks any existing `running` rows as `error`
+- [ ] **Connection-level errors mapped:** Verify that a SimpleFIN error with `conn_id` but no `account_id` produces warnings for all accounts belonging to that connection
+- [ ] **Warning resolved on success:** Verify that a successful sync for an account clears (resolves) its existing warning — not just inserts a new "success" row
+- [ ] **All invalidation sites updated:** Verify that SyncButton.tsx, DashboardPage.tsx sync mutation, and any other `onSuccess` handlers invalidate the query key that serves warnings
+- [ ] **Agent tool column names fixed:** Verify that the `get_sync_status` tool uses `transactions_added` and `error_message` (not `transactions_updated` and `error`)
+- [ ] **Agent tool returns warnings:** Verify that the `get_sync_status` tool includes current warnings in its response
+- [ ] **SimpleFIN reconnect link correct:** Verify the reconnect URL is valid and opens the SimpleFIN bridge reconnect flow
+- [ ] **Manual accounts excluded from warnings:** Verify that `source = 'manual'` accounts never appear in sync warnings (they don't sync via SimpleFIN)
+- [ ] **Amber color distinct from yellow:** Verify visually that the "Partial" badge is distinguishable from the "Local only" backup indicator on the same dashboard page
 
 ---
 
 ## Recovery Strategies
 
-When pitfalls occur despite prevention, how to recover.
-
 | Pitfall | Recovery Cost | Recovery Steps |
 |---------|---------------|----------------|
-| Balance column stale for manual accounts | LOW | Run `recalculateBalance()` for all manual accounts as a one-time repair query; add the call to import going forward |
-| Sync trigger failing due to manual accounts in rate-limit check | LOW | Add `WHERE source = 'simplefin'` filter to the accounts query in the trigger; deploy |
-| Manual account deleted accidentally (no soft delete) | HIGH | Restore from iCloud Drive backup (SQLite .backup snapshots run every 6 hours); re-run CSV import if backup is older than the import |
-| Preview stats stale after inline account creation | LOW | Add "Refresh preview" button or disclaimer; execute step always re-checks dedup |
-| Balance snapshot missing for import day | LOW | Manually insert a `balance_snapshots` row for today via a one-off SQL query on the server |
-| Sync upsert overwrote manual account data | MEDIUM | Restore from iCloud backup; add the `WHERE source = 'simplefin'` guard to the upsert DO UPDATE clause |
-
----
-
-## Pitfall-to-Phase Mapping
-
-How roadmap phases should address these pitfalls.
-
-| Pitfall | Prevention Phase | Verification |
-|---------|------------------|--------------|
-| Sync trigger iterates manual accounts | Schema migration phase (add `source` column + update sync trigger filter) | Test: insert manual account, trigger sync, confirm no rate-limit error and `accounts_synced` excludes it |
-| Balance column goes stale | Account CRUD service phase (define `recalculateBalance()`) + import service update phase | Test: call `executeImport()`, then query `accounts.balance` and compare to `SUM(transactions.amount)` |
-| Inline account creation leaves preview stats stale | Import wizard UI phase | Acceptance: add disclaimer note; test confirms execute produces correct imported count regardless |
-| Cascade delete destroys history | Account CRUD service phase (add `dryRun` option + return count) | Test: `deleteAccount({ id, dryRun: true })` returns correct count; UI shows count in confirmation |
-| Sync upsert overwrites manual account | Schema migration phase (update DO UPDATE clause) | Test: sync with a manual account present, confirm `source` column unchanged after sync |
-| `accounts.list` missing `source` | Schema migration phase (update query in same commit) | Test: `accounts.list` response includes `source` field with value `"manual"` or `"simplefin"` |
+| sync_log stuck on 'running' forever | LOW | One-line SQL: `UPDATE sync_log SET status = 'error', completed_at = datetime('now'), error_message = 'Interrupted' WHERE status = 'running'` |
+| sync_warnings table has thousands of rows | LOW | Truncate table, switch to UPSERT pattern, re-sync to populate current state |
+| Agent tool returning NULLs due to wrong column names | LOW | Fix the SQL query column names; no data loss |
+| Migration applied to production with bug | MEDIUM | Restore from iCloud backup (snapshots every 6 hours); fix migration; re-apply |
+| Amber badge not visible to user | LOW | Change Tailwind color classes; no data changes needed |
+| Stale warnings shown after successful sync | LOW | Add missing query invalidation to onSuccess handler; redeploy |
 
 ---
 
 ## Sources
 
-- Direct codebase analysis: `packages/server/migrations/001-initial-schema.sql` — schema structure, ON DELETE CASCADE rules, account ID format, `simplefin_id` UNIQUE constraint
-- Direct codebase analysis: `packages/server/src/sync/sync-service.ts` — upsert pattern (lines 94-105), how `simplefin_id` is set, balance update, balance snapshot insertion
-- Direct codebase analysis: `packages/server/src/sync/trpc-router.ts` — rate-limit check queries all accounts (lines 60-64), `accounts.list` column selection (lines 119-134)
-- Direct codebase analysis: `packages/server/src/import/import-service.ts` — stateless preview/execute pattern, dedup hash computation, post-import hooks (categorize + transfer detect), account auto-match logic
-- Direct codebase analysis: `packages/server/src/reports/reports-service.ts` — net worth chart reads `balance_snapshots`, which reads the `balance` column
-- Direct codebase analysis: `packages/server/src/sync/rate-limiter.ts` — rate limiter behavior for unknown account IDs
-- Design document: `.planning/designs/2026-03-25-manual-accounts-csv-import-design.md` — `manual_<uuid>` ID convention, `recalculateBalance()` placement, `last_synced` column reuse, `source = 'manual'` guard on mutations
+- Direct codebase analysis: `packages/server/src/sync/sync-service.ts` — runSync() status logic (lines 62-66 success, 76-83 error), error collection (lines 38-49), per-account processing (lines 44-61)
+- Direct codebase analysis: `packages/server/src/sync/simplefin-types.ts` — SimpleFINError shape (lines 6-10), optional account_id and conn_id fields
+- Direct codebase analysis: `packages/server/src/sync/trpc-router.ts` — sync.status query (lines 80-119), sync.trigger rate-limit check (lines 62-74)
+- Direct codebase analysis: `packages/client/src/components/SyncStatus.tsx` — 30-second polling (line 24), status rendering logic (lines 28-49)
+- Direct codebase analysis: `packages/client/src/components/SyncButton.tsx` — query invalidation on sync success (lines 11-15)
+- Direct codebase analysis: `packages/client/src/pages/DashboardPage.tsx` — sync status card color scheme (lines 214-216), backup yellow indicator (line 258-259), sync mutation invalidation (lines 33-37)
+- Direct codebase analysis: `packages/client/src/components/Layout.tsx` — navbar hidden on mobile (line 9), SyncStatus and SyncButton placement (lines 98-99)
+- Direct codebase analysis: `packages/server/src/agent/tools/query-tools.ts` — get_sync_status wrong column names (line 257)
+- Direct codebase analysis: `packages/server/migrations/001-initial-schema.sql` — sync_log schema (lines 97-105), no sync_warnings table
+- Direct codebase analysis: `packages/server/src/sync/fixtures/simplefin-response.json` — fixture has empty errlist, three connections with conn_id values
+- Project context: `.planning/PROJECT.md` — tech debt noting agent column name mismatches (line 112), v2.8 target features (lines 67-76)
 
 ---
-*Pitfalls research for: Manual account management + CSV import integration in budgeting app with auto-sync (v2.7)*
-*Researched: 2026-03-25*
+*Pitfalls research for: Sync error visibility — per-account warnings, partial sync status, dashboard/navbar indicators (v2.8)*
+*Researched: 2026-03-26*
