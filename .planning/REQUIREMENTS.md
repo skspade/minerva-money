@@ -9,8 +9,8 @@ Requirements for Sync Error Visibility milestone. Each maps to roadmap phases.
 
 ### Schema
 
-- [ ] **SCHEMA-01**: sync_warnings table persists per-account errors with account_id, account_name, error_code, message, first_seen, last_seen, and occurrence_count
-- [ ] **SCHEMA-02**: sync_warnings rows are linked to sync_log entries via foreign key
+- [x] **SCHEMA-01**: sync_warnings table persists per-account errors with account_id, account_name, error_code, message, first_seen, last_seen, and occurrence_count
+- [x] **SCHEMA-02**: sync_warnings rows are linked to sync_log entries via foreign key
 
 ### Sync Service
 
@@ -63,8 +63,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SCHEMA-01 | Phase 47 | Pending |
-| SCHEMA-02 | Phase 47 | Pending |
+| SCHEMA-01 | Phase 47 | Complete |
+| SCHEMA-02 | Phase 47 | Complete |
 | SYNC-01 | Phase 48 | Pending |
 | SYNC-02 | Phase 48 | Pending |
 | SYNC-03 | Phase 48 | Pending |
