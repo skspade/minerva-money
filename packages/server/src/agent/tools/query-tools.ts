@@ -17,7 +17,7 @@ export function createQueryTools(db: Database.Database) {
       async () => {
         try {
           const rows = db.prepare(
-            'SELECT id, name, institution, type, balance, available_balance, source FROM accounts ORDER BY institution, name',
+            'SELECT id, name, institution, type, balance, source FROM accounts ORDER BY institution, name',
           ).all();
           return jsonResult(rows);
         } catch (error) {
@@ -249,14 +249,17 @@ export function createQueryTools(db: Database.Database) {
 
     tool(
       'get_sync_status',
-      'Get sync status: last sync time, result, and any errors. Use for "when did I last sync?" or "are there sync errors?" questions.',
+      'Get sync status: last sync time, result, errors, and active warnings per account. Use for "when did I last sync?", "are there sync errors?", or "which accounts have problems?" questions.',
       {},
       async () => {
         try {
-          const rows = db.prepare(
-            'SELECT started_at, completed_at, status, accounts_synced, transactions_added, transactions_updated, error FROM sync_log ORDER BY started_at DESC LIMIT 5',
+          const syncLog = db.prepare(
+            'SELECT started_at, completed_at, status, accounts_synced, transactions_added, error_message FROM sync_log ORDER BY started_at DESC LIMIT 5',
           ).all();
-          return jsonResult(rows);
+          const warnings = db.prepare(
+            'SELECT account_id, account_name, error_code, message, first_seen, last_seen, occurrence_count FROM sync_warnings ORDER BY last_seen DESC',
+          ).all();
+          return jsonResult({ syncLog, warnings });
         } catch (error) {
           return errorResult(error);
         }
