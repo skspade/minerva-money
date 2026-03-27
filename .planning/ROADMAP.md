@@ -211,7 +211,8 @@ Full details: [milestones/v2.7-ROADMAP.md](milestones/v2.7-ROADMAP.md)
 **Success Criteria** (what must be TRUE):
   1. Agent get_sync_status tool returns active sync warnings alongside existing status data
   2. Pre-existing column name bugs in query-tools.ts are fixed (transactions_updated -> transactions_added, error -> error_message)
-**Plans**: TBD
+**Plans**: 1 plan
+- [ ] 52-01-PLAN.md — Fix column name bugs and add sync warnings to get_sync_status
 
 ## Progress
 
@@ -234,4 +235,4 @@ Phases 47-49 are strictly sequential. Phases 50, 51, 52 depend only on Phase 49 
 | 49. tRPC Response Extension | v2.8 | 1/1 | Complete | 2026-03-26 |
 | 50. Dashboard Warning UI | 1/1 | Complete    | 2026-03-27 | - |
 | 51. Navbar Warning Indicator | 1/1 | Complete    | 2026-03-27 | - |
-| 52. Agent Tool Update | v2.8 | 0/? | Not started | - |
+| 52. Agent Tool Update | v2.8 | 0/1 | Not started | - |
