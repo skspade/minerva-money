@@ -63,27 +63,27 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SCHEMA-01 | — | Pending |
-| SCHEMA-02 | — | Pending |
-| SYNC-01 | — | Pending |
-| SYNC-02 | — | Pending |
-| SYNC-03 | — | Pending |
-| SYNC-04 | — | Pending |
-| API-01 | — | Pending |
-| API-02 | — | Pending |
-| DASH-01 | — | Pending |
-| DASH-02 | — | Pending |
-| DASH-03 | — | Pending |
-| DASH-04 | — | Pending |
-| NAV-01 | — | Pending |
-| NAV-02 | — | Pending |
-| AGENT-01 | — | Pending |
+| SCHEMA-01 | Phase 47 | Pending |
+| SCHEMA-02 | Phase 47 | Pending |
+| SYNC-01 | Phase 48 | Pending |
+| SYNC-02 | Phase 48 | Pending |
+| SYNC-03 | Phase 48 | Pending |
+| SYNC-04 | Phase 48 | Pending |
+| API-01 | Phase 49 | Pending |
+| API-02 | Phase 49 | Pending |
+| DASH-01 | Phase 50 | Pending |
+| DASH-02 | Phase 50 | Pending |
+| DASH-03 | Phase 50 | Pending |
+| DASH-04 | Phase 50 | Pending |
+| NAV-01 | Phase 51 | Pending |
+| NAV-02 | Phase 51 | Pending |
+| AGENT-01 | Phase 52 | Pending |
 
 **Coverage:**
 - v2.8 requirements: 15 total
-- Mapped to phases: 0
-- Unmapped: 15 ⚠️
+- Mapped to phases: 15/15
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-26*
-*Last updated: 2026-03-26 after initial definition*
+*Last updated: 2026-03-26 after roadmap creation*

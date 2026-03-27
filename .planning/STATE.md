@@ -5,7 +5,7 @@ milestone_name: Sync Error Visibility
 status: planning
 last_updated: "2026-03-26"
 progress:
-  total_phases: 0
+  total_phases: 6
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -18,14 +18,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-26)
 
 **Core value:** Accurate, auto-synced financial data with envelope budgeting that lets you see where every dollar goes and how spending trends over time.
-**Current focus:** Defining requirements for v2.8 Sync Error Visibility
+**Current focus:** v2.8 Sync Error Visibility — Phase 47 Database Foundation
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-03-26 — Milestone v2.8 started
+Phase: 47 of 52 (Database Foundation) — first of 6 phases in v2.8
+Plan: 0 of ? in current phase
+Status: Ready to plan
+Last activity: 2026-03-26 — Roadmap created for v2.8 milestone
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -33,8 +33,8 @@ Progress: [░░░░░░░░░░] 0%
 
 **Velocity:**
 - Total plans completed: 0 (v2.8)
-- Phases: 0/0
-- Requirements satisfied: 0/0
+- Phases: 0/6
+- Requirements satisfied: 0/15
 
 ## Accumulated Context
 
@@ -43,9 +43,9 @@ Progress: [░░░░░░░░░░] 0%
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
-- [v2.8]: New sync_warnings table (not JSON column) for per-account error persistence
+- [v2.8]: UPSERT schema design for sync_warnings (one row per account, not append-only) to prevent unbounded table growth
+- [v2.8]: Extend existing sync.status endpoint (not new endpoint) so existing cache invalidation covers warnings automatically
 - [v2.8]: Three-state sync status model: success/partial/error
-- [v2.8]: Dashboard + navbar visibility (not toast notifications)
 
 ### Pending Todos
 
@@ -53,7 +53,8 @@ None.
 
 ### Blockers/Concerns
 
-None.
+- SimpleFIN reconnect URL needs verification before shipping (three different URLs cited in research)
+- Schema design conflict resolved: UPSERT approach from PITFALLS.md adopted over append-only model
 
 ### Quick Tasks Completed
 
@@ -66,5 +67,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-26
-Stopped at: Defining requirements for v2.8
+Stopped at: Roadmap created for v2.8 Sync Error Visibility
 Resume file: None

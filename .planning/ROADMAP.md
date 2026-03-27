@@ -11,6 +11,7 @@
 - ✅ **v2.5 Chat Enhancements** — Phases 33-37 (shipped 2026-03-24)
 - ✅ **v2.6 Streaming Chat** — Phases 38-43 (shipped 2026-03-25)
 - ✅ **v2.7 Manual Accounts** — Phases 44-46 (shipped 2026-03-25)
+- 🚧 **v2.8 Sync Error Visibility** — Phases 47-52 (in progress)
 
 ## Phases
 
@@ -132,7 +133,85 @@ Full details: [milestones/v2.7-ROADMAP.md](milestones/v2.7-ROADMAP.md)
 
 </details>
 
+### 🚧 v2.8 Sync Error Visibility (In Progress)
+
+**Milestone Goal:** Surface per-account sync errors in the UI so the user immediately knows when a bank connection needs attention, instead of silently showing "success" when SimpleFIN returns account-level errors.
+
+- [ ] **Phase 47: Database Foundation** - sync_warnings table with UPSERT-compatible schema and foreign key to sync_log
+- [ ] **Phase 48: Sync Service Warning Pipeline** - Persist per-account warnings, determine partial/success/error status, auto-clear resolved warnings
+- [ ] **Phase 49: tRPC Response Extension** - Structured warnings array in sync.status response for client consumption
+- [ ] **Phase 50: Dashboard Warning UI** - Amber "Partial" badge, per-account error list, and SimpleFIN reconnect link
+- [ ] **Phase 51: Navbar Warning Indicator** - Amber indicator with hover tooltip showing affected account names
+- [ ] **Phase 52: Agent Tool Update** - Fix existing column name bugs and add warnings to get_sync_status response
+
+## Phase Details
+
+### Phase 47: Database Foundation
+**Goal**: Sync warnings can be persisted and queried without unbounded table growth
+**Depends on**: Nothing (first phase of v2.8)
+**Requirements**: SCHEMA-01, SCHEMA-02
+**Success Criteria** (what must be TRUE):
+  1. A sync_warnings table exists with account_id, account_name, error_code, message, first_seen, last_seen, and occurrence_count columns
+  2. Each sync_warnings row references a sync_log entry via foreign key with CASCADE delete
+  3. The table uses a UNIQUE constraint on account_id enabling UPSERT (one active row per account, not append-only)
+  4. Migration 007 applies cleanly on both fresh and existing databases
+**Plans**: TBD
+
+### Phase 48: Sync Service Warning Pipeline
+**Goal**: Per-account sync errors are persisted and the sync_log accurately reflects partial success
+**Depends on**: Phase 47
+**Requirements**: SYNC-01, SYNC-02, SYNC-03, SYNC-04
+**Success Criteria** (what must be TRUE):
+  1. When SimpleFIN returns account-level errors, a warning row is written to sync_warnings for each affected account
+  2. sync_log status is 'partial' when some accounts have errors but the API call itself succeeded
+  3. Warnings are automatically cleared (resolved) for accounts that sync successfully in a subsequent run
+  4. Connection-level SimpleFIN errors (with conn_id but no account_id) are mapped to the correct accounts
+  5. Stale 'running' sync_log entries are cleaned up before each new sync run
+**Plans**: TBD
+
+### Phase 49: tRPC Response Extension
+**Goal**: Client can consume structured per-account warnings from the existing sync.status endpoint
+**Depends on**: Phase 48
+**Requirements**: API-01, API-02
+**Success Criteria** (what must be TRUE):
+  1. sync.status tRPC response includes a warnings array with accountId, accountName, errorCode, message, and lastSeen per entry
+  2. Warnings are queried from sync_warnings and returned alongside existing sync status fields (no separate endpoint)
+  3. When no warnings exist, the response includes an empty array (existing UI behavior unchanged)
+**Plans**: TBD
+
+### Phase 50: Dashboard Warning UI
+**Goal**: User sees per-account sync errors on the dashboard with actionable next steps
+**Depends on**: Phase 49
+**Requirements**: DASH-01, DASH-02, DASH-03, DASH-04
+**Success Criteria** (what must be TRUE):
+  1. Dashboard sync card shows an amber "Partial" badge when the latest sync status is 'partial'
+  2. Each affected account is listed by name with a simplified error message
+  3. A SimpleFIN reconnect link appears when connection errors exist
+  4. When no warnings exist, the sync card renders identically to before (no visual regression)
+**Plans**: TBD
+
+### Phase 51: Navbar Warning Indicator
+**Goal**: User is alerted to sync problems from any page without navigating to the dashboard
+**Depends on**: Phase 49
+**Requirements**: NAV-01, NAV-02
+**Success Criteria** (what must be TRUE):
+  1. Navbar SyncStatus component shows an amber warning indicator when the latest sync is 'partial'
+  2. Hovering over the indicator reveals a tooltip with the count and names of affected accounts
+**Plans**: TBD
+
+### Phase 52: Agent Tool Update
+**Goal**: Agent accurately reports sync status including warnings and fixes pre-existing query bugs
+**Depends on**: Phase 49
+**Requirements**: AGENT-01
+**Success Criteria** (what must be TRUE):
+  1. Agent get_sync_status tool returns active sync warnings alongside existing status data
+  2. Pre-existing column name bugs in query-tools.ts are fixed (transactions_updated -> transactions_added, error -> error_message)
+**Plans**: TBD
+
 ## Progress
+
+**Execution Order:**
+Phases 47-49 are strictly sequential. Phases 50, 51, 52 depend only on Phase 49 and are independent of each other.
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -145,3 +224,9 @@ Full details: [milestones/v2.7-ROADMAP.md](milestones/v2.7-ROADMAP.md)
 | 33-37 | v2.5 | 5/5 | Complete | 2026-03-24 |
 | 38-43 | v2.6 | 6/6 | Complete | 2026-03-25 |
 | 44-46 | v2.7 | 6/6 | Complete | 2026-03-25 |
+| 47. Database Foundation | v2.8 | 0/? | Not started | - |
+| 48. Sync Service Warning Pipeline | v2.8 | 0/? | Not started | - |
+| 49. tRPC Response Extension | v2.8 | 0/? | Not started | - |
+| 50. Dashboard Warning UI | v2.8 | 0/? | Not started | - |
+| 51. Navbar Warning Indicator | v2.8 | 0/? | Not started | - |
+| 52. Agent Tool Update | v2.8 | 0/? | Not started | - |
