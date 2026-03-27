@@ -1,5 +1,5 @@
 import type Database from 'better-sqlite3';
-import type { SimpleFINClient, SimpleFINAccountSet } from './simplefin-types.js';
+import type { SimpleFINClient, SimpleFINAccountSet, SimpleFINAccount, SimpleFINError } from './simplefin-types.js';
 import type { RateLimiter } from './rate-limiter.js';
 import { normalizeAccount, normalizeTransaction } from './simplefin-client.js';
 import { createBackup } from '../backup/backup.js';
@@ -16,6 +16,27 @@ export interface SyncOptions {
   skipBackup?: boolean;
 }
 
+/** UPSERT a warning row for a specific account */
+function writeWarning(
+  db: Database.Database,
+  syncLogId: number | bigint,
+  accountId: string,
+  accountName: string,
+  errorCode: string,
+  message: string,
+): void {
+  db.prepare(`
+    INSERT INTO sync_warnings (sync_log_id, account_id, account_name, error_code, message)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(account_id) DO UPDATE SET
+      sync_log_id = excluded.sync_log_id,
+      error_code = excluded.error_code,
+      message = excluded.message,
+      last_seen = datetime('now'),
+      occurrence_count = occurrence_count + 1
+  `).run(syncLogId, accountId, accountName, errorCode, message);
+}
+
 export async function runSync(
   db: Database.Database,
   client: SimpleFINClient,
@@ -23,6 +44,11 @@ export async function runSync(
   options: SyncOptions = {},
 ): Promise<SyncResult> {
   const result: SyncResult = { accountsSynced: 0, transactionsAdded: 0, errors: [] };
+
+  // Clean up stale 'running' sync_log entries before creating a new one
+  db.prepare(
+    `UPDATE sync_log SET status = 'error', completed_at = datetime('now'), error_message = 'Stale: superseded by new sync run' WHERE status = 'running'`,
+  ).run();
 
   // Create sync_log entry
   const logStmt = db.prepare(
@@ -34,11 +60,45 @@ export async function runSync(
   try {
     const data: SimpleFINAccountSet = await client.fetchAccounts();
 
-    // Log any per-account errors from SimpleFIN
+    // Build lookup maps for error processing
+    const accountById = new Map<string, SimpleFINAccount>();
+    const accountsByConnId = new Map<string, SimpleFINAccount[]>();
+    for (const acct of data.accounts) {
+      accountById.set(acct.id, acct);
+      const list = accountsByConnId.get(acct.conn_id) ?? [];
+      list.push(acct);
+      accountsByConnId.set(acct.conn_id, list);
+    }
+
+    // Track which accounts have errors (for status + auto-clear logic)
+    const errorAccountIds = new Set<string>();
+
+    // Process SimpleFIN error list and write warnings
     const errList = data.errors ?? data.errlist ?? [];
     for (const err of errList) {
       const msg = `SimpleFIN error [${err.code}]: ${err.msg}${err.account_id ? ` (account: ${err.account_id})` : ''}`;
       result.errors.push(msg);
+
+      if (err.account_id) {
+        // Account-level error
+        const acct = accountById.get(err.account_id);
+        const accountName = acct?.name ?? err.account_id;
+        writeWarning(db, syncLogId, err.account_id, accountName, err.code, err.msg);
+        errorAccountIds.add(err.account_id);
+      } else if (err.conn_id) {
+        // Connection-level error: map to all accounts on this connection
+        const connAccounts = accountsByConnId.get(err.conn_id) ?? [];
+        if (connAccounts.length === 0) {
+          // Edge case: connection failed before returning any accounts
+          writeWarning(db, syncLogId, err.conn_id, err.conn_id, err.code, err.msg);
+          errorAccountIds.add(err.conn_id);
+        } else {
+          for (const acct of connAccounts) {
+            writeWarning(db, syncLogId, acct.id, acct.name, err.code, err.msg);
+            errorAccountIds.add(acct.id);
+          }
+        }
+      }
     }
 
     // Process each account sequentially
@@ -57,13 +117,35 @@ export async function runSync(
       } catch (err) {
         const msg = `Sync failed for account ${rawAccount.name} (${rawAccount.id}): ${err instanceof Error ? err.message : String(err)}`;
         result.errors.push(msg);
+        // Write warning for per-account processing errors
+        writeWarning(db, syncLogId, rawAccount.id, rawAccount.name, 'sync_error', err instanceof Error ? err.message : String(err));
+        errorAccountIds.add(rawAccount.id);
       }
     }
 
-    // Update sync_log to success
+    // Auto-clear warnings for accounts that appeared in this response AND had no errors
+    const responseAccountIds = new Set(data.accounts.map(a => a.id));
+    const accountsToClear = [...responseAccountIds].filter(id => !errorAccountIds.has(id));
+    if (accountsToClear.length > 0) {
+      const placeholders = accountsToClear.map(() => '?').join(',');
+      db.prepare(`DELETE FROM sync_warnings WHERE account_id IN (${placeholders})`).run(...accountsToClear);
+    }
+
+    // Determine sync_log status
+    const hasErrors = errorAccountIds.size > 0;
+    let status: string;
+    if (hasErrors && result.accountsSynced > 0) {
+      status = 'partial';
+    } else if (hasErrors && result.accountsSynced === 0) {
+      status = 'error';
+    } else {
+      status = 'success';
+    }
+
+    // Update sync_log with final status
     db.prepare(
-      `UPDATE sync_log SET status = 'success', completed_at = datetime('now'), accounts_synced = ?, transactions_added = ? WHERE id = ?`,
-    ).run(result.accountsSynced, result.transactionsAdded, syncLogId);
+      `UPDATE sync_log SET status = ?, completed_at = datetime('now'), accounts_synced = ?, transactions_added = ? WHERE id = ?`,
+    ).run(status, result.accountsSynced, result.transactionsAdded, syncLogId);
 
     // Trigger backup after successful sync
     if (!options.skipBackup) {
