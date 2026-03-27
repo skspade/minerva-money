@@ -154,3 +154,87 @@ describe('initial schema (001-initial-schema.sql)', () => {
     }).toThrow();
   });
 });
+
+describe('migration 007 - sync_warnings', () => {
+  let db: Database.Database;
+  const migrationsDir = path.join(import.meta.dirname, '../../migrations');
+
+  beforeEach(() => {
+    db = new Database(':memory:');
+    db.pragma('foreign_keys = ON');
+    migrate(db, migrationsDir);
+  });
+
+  afterEach(() => {
+    db.close();
+  });
+
+  it('creates sync_warnings table', () => {
+    const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all() as { name: string }[];
+    expect(tables.map(t => t.name)).toContain('sync_warnings');
+  });
+
+  it('has all required columns with correct types', () => {
+    const info = db.pragma('table_info(sync_warnings)') as { name: string; type: string; notnull: number; pk: number }[];
+
+    const expected = [
+      { name: 'id', type: 'INTEGER', notnull: 0, pk: 1 },
+      { name: 'sync_log_id', type: 'INTEGER', notnull: 1, pk: 0 },
+      { name: 'account_id', type: 'TEXT', notnull: 1, pk: 0 },
+      { name: 'account_name', type: 'TEXT', notnull: 1, pk: 0 },
+      { name: 'error_code', type: 'TEXT', notnull: 1, pk: 0 },
+      { name: 'message', type: 'TEXT', notnull: 1, pk: 0 },
+      { name: 'first_seen', type: 'TEXT', notnull: 1, pk: 0 },
+      { name: 'last_seen', type: 'TEXT', notnull: 1, pk: 0 },
+      { name: 'occurrence_count', type: 'INTEGER', notnull: 1, pk: 0 },
+    ];
+
+    for (const exp of expected) {
+      const col = info.find(c => c.name === exp.name);
+      expect(col, `${exp.name} should exist`).toBeDefined();
+      expect(col!.type, `${exp.name} type`).toBe(exp.type);
+      expect(col!.notnull, `${exp.name} notnull`).toBe(exp.notnull);
+      expect(col!.pk, `${exp.name} pk`).toBe(exp.pk);
+    }
+  });
+
+  it('cascades delete from sync_log to sync_warnings', () => {
+    db.prepare("INSERT INTO sync_log (id, status) VALUES (1, 'completed')").run();
+    db.prepare("INSERT INTO sync_warnings (sync_log_id, account_id, account_name, error_code, message) VALUES (1, 'acc1', 'Checking', 'ERR_001', 'Test error')").run();
+
+    // Verify the warning exists
+    const before = db.prepare("SELECT COUNT(*) as count FROM sync_warnings").get() as { count: number };
+    expect(before.count).toBe(1);
+
+    // Delete the sync_log entry
+    db.prepare("DELETE FROM sync_log WHERE id = 1").run();
+
+    // Warning should be cascade-deleted
+    const after = db.prepare("SELECT COUNT(*) as count FROM sync_warnings").get() as { count: number };
+    expect(after.count).toBe(0);
+  });
+
+  it('enforces UNIQUE constraint on account_id', () => {
+    db.prepare("INSERT INTO sync_log (id, status) VALUES (1, 'completed')").run();
+    db.prepare("INSERT INTO sync_warnings (sync_log_id, account_id, account_name, error_code, message) VALUES (1, 'acc1', 'Checking', 'ERR_001', 'First error')").run();
+
+    expect(() => {
+      db.prepare("INSERT INTO sync_warnings (sync_log_id, account_id, account_name, error_code, message) VALUES (1, 'acc1', 'Checking', 'ERR_002', 'Second error')").run();
+    }).toThrow();
+  });
+
+  it('populates default values for first_seen, last_seen, and occurrence_count', () => {
+    db.prepare("INSERT INTO sync_log (id, status) VALUES (1, 'completed')").run();
+    db.prepare("INSERT INTO sync_warnings (sync_log_id, account_id, account_name, error_code, message) VALUES (1, 'acc1', 'Checking', 'ERR_001', 'Test error')").run();
+
+    const row = db.prepare("SELECT first_seen, last_seen, occurrence_count FROM sync_warnings WHERE account_id = 'acc1'").get() as { first_seen: string; last_seen: string; occurrence_count: number };
+
+    expect(row.first_seen).toBeTruthy();
+    expect(row.last_seen).toBeTruthy();
+    expect(row.occurrence_count).toBe(1);
+
+    // Verify datetime format (YYYY-MM-DD HH:MM:SS)
+    expect(row.first_seen).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
+    expect(row.last_seen).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
+  });
+});
