@@ -104,6 +104,16 @@ const syncRouter = router({
       source: string;
     }[];
 
+    const warnings = ctx.db.prepare(
+      'SELECT account_id, account_name, error_code, message, last_seen FROM sync_warnings ORDER BY last_seen DESC',
+    ).all() as {
+      account_id: string;
+      account_name: string;
+      error_code: string;
+      message: string;
+      last_seen: string;
+    }[];
+
     return {
       lastSync: lastSync ? {
         startedAt: lastSync.started_at,
@@ -115,6 +125,13 @@ const syncRouter = router({
       } : null,
       errorCount,
       accounts,
+      warnings: warnings.map(w => ({
+        accountId: w.account_id,
+        accountName: w.account_name,
+        errorCode: w.error_code,
+        message: w.message,
+        lastSeen: w.last_seen,
+      })),
     };
   }),
 });
