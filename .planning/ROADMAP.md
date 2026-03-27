@@ -155,7 +155,8 @@ Full details: [milestones/v2.7-ROADMAP.md](milestones/v2.7-ROADMAP.md)
   2. Each sync_warnings row references a sync_log entry via foreign key with CASCADE delete
   3. The table uses a UNIQUE constraint on account_id enabling UPSERT (one active row per account, not append-only)
   4. Migration 007 applies cleanly on both fresh and existing databases
-**Plans**: TBD
+**Plans**: 1 plan
+- [ ] 47-01-PLAN.md — Create sync_warnings table via migration 007 with schema tests
 
 ### Phase 48: Sync Service Warning Pipeline
 **Goal**: Per-account sync errors are persisted and the sync_log accurately reflects partial success
