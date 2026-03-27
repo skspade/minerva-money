@@ -26,10 +26,10 @@ Requirements for Sync Error Visibility milestone. Each maps to roadmap phases.
 
 ### Dashboard UI
 
-- [ ] **DASH-01**: Dashboard sync card shows amber "Partial" badge when sync status is 'partial'
-- [ ] **DASH-02**: Dashboard displays per-account error list with account name and simplified error message
-- [ ] **DASH-03**: Dashboard shows SimpleFIN reconnect link when connection errors exist
-- [ ] **DASH-04**: Dashboard sync card displays cleanly when no warnings exist (no visual regression)
+- [x] **DASH-01**: Dashboard sync card shows amber "Partial" badge when sync status is 'partial'
+- [x] **DASH-02**: Dashboard displays per-account error list with account name and simplified error message
+- [x] **DASH-03**: Dashboard shows SimpleFIN reconnect link when connection errors exist
+- [x] **DASH-04**: Dashboard sync card displays cleanly when no warnings exist (no visual regression)
 
 ### Navbar
 
@@ -71,10 +71,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SYNC-04 | Phase 48 | Complete |
 | API-01 | Phase 49 | Complete |
 | API-02 | Phase 49 | Complete |
-| DASH-01 | Phase 50 | Pending |
-| DASH-02 | Phase 50 | Pending |
-| DASH-03 | Phase 50 | Pending |
-| DASH-04 | Phase 50 | Pending |
+| DASH-01 | Phase 50 | Complete |
+| DASH-02 | Phase 50 | Complete |
+| DASH-03 | Phase 50 | Complete |
+| DASH-04 | Phase 50 | Complete |
 | NAV-01 | Phase 51 | Pending |
 | NAV-02 | Phase 51 | Pending |
 | AGENT-01 | Phase 52 | Pending |
