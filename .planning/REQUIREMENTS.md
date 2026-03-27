@@ -33,8 +33,8 @@ Requirements for Sync Error Visibility milestone. Each maps to roadmap phases.
 
 ### Navbar
 
-- [ ] **NAV-01**: Navbar SyncStatus shows amber warning indicator when latest sync is 'partial'
-- [ ] **NAV-02**: Navbar warning indicator includes tooltip showing count and names of affected accounts
+- [x] **NAV-01**: Navbar SyncStatus shows amber warning indicator when latest sync is 'partial'
+- [x] **NAV-02**: Navbar warning indicator includes tooltip showing count and names of affected accounts
 
 ### Agent
 
@@ -75,8 +75,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DASH-02 | Phase 50 | Complete |
 | DASH-03 | Phase 50 | Complete |
 | DASH-04 | Phase 50 | Complete |
-| NAV-01 | Phase 51 | Pending |
-| NAV-02 | Phase 51 | Pending |
+| NAV-01 | Phase 51 | Complete |
+| NAV-02 | Phase 51 | Complete |
 | AGENT-01 | Phase 52 | Pending |
 
 **Coverage:**
