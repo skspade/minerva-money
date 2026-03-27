@@ -96,6 +96,78 @@ describe('trpc-router', () => {
     }
   });
 
+  it('sync.status returns empty warnings array when no warnings exist', async () => {
+    const caller = createCaller();
+    const status = await caller.sync.status();
+
+    expect(status.warnings).toEqual([]);
+  });
+
+  it('sync.status returns warnings with correct shape', async () => {
+    const caller = createCaller();
+    // Need a sync_log entry for the foreign key
+    const logId = db.prepare(
+      "INSERT INTO sync_log (started_at, completed_at, status, accounts_synced, transactions_added) VALUES (datetime('now'), datetime('now'), 'partial', 1, 0)"
+    ).run().lastInsertRowid;
+
+    db.prepare(
+      "INSERT INTO sync_warnings (sync_log_id, account_id, account_name, error_code, message, first_seen, last_seen) VALUES (?, ?, ?, ?, ?, ?, ?)"
+    ).run(logId, 'acct-1', 'Checking Account', 'CONNECTION_ERROR', 'Could not connect to institution', '2026-03-25T10:00:00Z', '2026-03-26T10:00:00Z');
+
+    const status = await caller.sync.status();
+
+    expect(status.warnings).toHaveLength(1);
+    expect(status.warnings[0]).toEqual({
+      accountId: 'acct-1',
+      accountName: 'Checking Account',
+      errorCode: 'CONNECTION_ERROR',
+      message: 'Could not connect to institution',
+      lastSeen: '2026-03-26T10:00:00Z',
+    });
+  });
+
+  it('sync.status returns warnings ordered by lastSeen descending', async () => {
+    const caller = createCaller();
+    const logId = db.prepare(
+      "INSERT INTO sync_log (started_at, completed_at, status, accounts_synced, transactions_added) VALUES (datetime('now'), datetime('now'), 'partial', 0, 0)"
+    ).run().lastInsertRowid;
+
+    db.prepare(
+      "INSERT INTO sync_warnings (sync_log_id, account_id, account_name, error_code, message, first_seen, last_seen) VALUES (?, ?, ?, ?, ?, ?, ?)"
+    ).run(logId, 'acct-1', 'Savings', 'STALE_DATA', 'Data is stale', '2026-03-24T10:00:00Z', '2026-03-24T10:00:00Z');
+
+    db.prepare(
+      "INSERT INTO sync_warnings (sync_log_id, account_id, account_name, error_code, message, first_seen, last_seen) VALUES (?, ?, ?, ?, ?, ?, ?)"
+    ).run(logId, 'acct-2', 'Checking', 'CONNECTION_ERROR', 'Connection failed', '2026-03-26T10:00:00Z', '2026-03-26T10:00:00Z');
+
+    const status = await caller.sync.status();
+
+    expect(status.warnings).toHaveLength(2);
+    expect(status.warnings[0].accountId).toBe('acct-2'); // more recent
+    expect(status.warnings[1].accountId).toBe('acct-1'); // older
+  });
+
+  it('sync.status existing fields unchanged when warnings exist', async () => {
+    const caller = createCaller();
+    await caller.sync.trigger();
+
+    // Add a warning
+    const logId = (db.prepare('SELECT id FROM sync_log ORDER BY id DESC LIMIT 1').get() as { id: number }).id;
+    db.prepare(
+      "INSERT INTO sync_warnings (sync_log_id, account_id, account_name, error_code, message) VALUES (?, ?, ?, ?, ?)"
+    ).run(logId, 'acct-extra', 'Test Account', 'ERROR', 'test');
+
+    const status = await caller.sync.status();
+
+    // Existing fields still work
+    expect(status.lastSync).toBeTruthy();
+    expect(status.lastSync!.status).toBe('success');
+    expect(typeof status.errorCount).toBe('number');
+    expect(status.accounts).toHaveLength(3);
+    // Warnings also present
+    expect(status.warnings).toHaveLength(1);
+  });
+
   it('accounts.list returns all accounts with correct shape', async () => {
     const caller = createCaller();
     await caller.sync.trigger();
