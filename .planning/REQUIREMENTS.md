@@ -21,8 +21,8 @@ Requirements for Sync Error Visibility milestone. Each maps to roadmap phases.
 
 ### API
 
-- [ ] **API-01**: tRPC sync.status response includes structured warnings array with accountId, accountName, errorCode, message, and lastSeen
-- [ ] **API-02**: Warnings are queried from sync_warnings table and returned alongside existing sync status data
+- [x] **API-01**: tRPC sync.status response includes structured warnings array with accountId, accountName, errorCode, message, and lastSeen
+- [x] **API-02**: Warnings are queried from sync_warnings table and returned alongside existing sync status data
 
 ### Dashboard UI
 
@@ -69,8 +69,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SYNC-02 | Phase 48 | Complete |
 | SYNC-03 | Phase 48 | Complete |
 | SYNC-04 | Phase 48 | Complete |
-| API-01 | Phase 49 | Pending |
-| API-02 | Phase 49 | Pending |
+| API-01 | Phase 49 | Complete |
+| API-02 | Phase 49 | Complete |
 | DASH-01 | Phase 50 | Pending |
 | DASH-02 | Phase 50 | Pending |
 | DASH-03 | Phase 50 | Pending |

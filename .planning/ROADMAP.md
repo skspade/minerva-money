@@ -139,7 +139,7 @@ Full details: [milestones/v2.7-ROADMAP.md](milestones/v2.7-ROADMAP.md)
 
 - [x] **Phase 47: Database Foundation** - sync_warnings table with UPSERT-compatible schema and foreign key to sync_log (completed 2026-03-27)
 - [x] **Phase 48: Sync Service Warning Pipeline** (1 plan) - Persist per-account warnings, determine partial/success/error status, auto-clear resolved warnings (completed 2026-03-27)
-- [ ] **Phase 49: tRPC Response Extension** - Structured warnings array in sync.status response for client consumption
+- [x] **Phase 49: tRPC Response Extension** (1 plan) - Structured warnings array in sync.status response for client consumption (completed 2026-03-26)
 - [ ] **Phase 50: Dashboard Warning UI** - Amber "Partial" badge, per-account error list, and SimpleFIN reconnect link
 - [ ] **Phase 51: Navbar Warning Indicator** - Amber indicator with hover tooltip showing affected account names
 - [ ] **Phase 52: Agent Tool Update** - Fix existing column name bugs and add warnings to get_sync_status response
@@ -179,7 +179,8 @@ Full details: [milestones/v2.7-ROADMAP.md](milestones/v2.7-ROADMAP.md)
   1. sync.status tRPC response includes a warnings array with accountId, accountName, errorCode, message, and lastSeen per entry
   2. Warnings are queried from sync_warnings and returned alongside existing sync status fields (no separate endpoint)
   3. When no warnings exist, the response includes an empty array (existing UI behavior unchanged)
-**Plans**: TBD
+**Plans**: 1 plan
+- [x] 49-01-PLAN.md — TDD: Extend sync.status with warnings array (completed 2026-03-26)
 
 ### Phase 50: Dashboard Warning UI
 **Goal**: User sees per-account sync errors on the dashboard with actionable next steps
@@ -228,7 +229,7 @@ Phases 47-49 are strictly sequential. Phases 50, 51, 52 depend only on Phase 49 
 | 44-46 | v2.7 | 6/6 | Complete | 2026-03-25 |
 | 47. Database Foundation | 1/1 | Complete   | 2026-03-27 | - |
 | 48. Sync Service Warning Pipeline | 1/1 | Complete    | 2026-03-27 | - |
-| 49. tRPC Response Extension | v2.8 | 0/? | Not started | - |
+| 49. tRPC Response Extension | v2.8 | 1/1 | Complete | 2026-03-26 |
 | 50. Dashboard Warning UI | v2.8 | 0/? | Not started | - |
 | 51. Navbar Warning Indicator | v2.8 | 0/? | Not started | - |
 | 52. Agent Tool Update | v2.8 | 0/? | Not started | - |
