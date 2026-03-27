@@ -1,40 +1,40 @@
 ---
 gsd_state_version: 1.0
-milestone: v2.7
-milestone_name: Manual Accounts
-status: complete
-last_updated: "2026-03-25T21:49:26.492Z"
+milestone: v2.8
+milestone_name: Sync Error Visibility
+status: planning
+last_updated: "2026-03-26"
 progress:
-  total_phases: 3
-  completed_phases: 3
-  total_plans: 6
-  completed_plans: 6
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-25)
+See: .planning/PROJECT.md (updated 2026-03-26)
 
 **Core value:** Accurate, auto-synced financial data with envelope budgeting that lets you see where every dollar goes and how spending trends over time.
-**Current focus:** Planning next milestone
+**Current focus:** Defining requirements for v2.8 Sync Error Visibility
 
 ## Current Position
 
-Phase: 46 of 46 (all complete)
-Plan: 6/6 complete
-Status: Milestone v2.7 shipped
-Last activity: 2026-03-25 - Completed v2.7 Manual Accounts milestone
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-03-26 — Milestone v2.8 started
 
-Progress: [██████████] 100%
+Progress: [░░░░░░░░░░] 0%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 6 (v2.7)
-- Phases: 3/3
-- Requirements satisfied: 21/21
+- Total plans completed: 0 (v2.8)
+- Phases: 0/0
+- Requirements satisfied: 0/0
 
 ## Accumulated Context
 
@@ -43,9 +43,9 @@ Progress: [██████████] 100%
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
-- [v2.7]: Manual accounts use `manual_` prefix + UUID for IDs to avoid SimpleFIN collisions
-- [v2.7]: Balance computed from transaction sums (no manual balance entry) — transactions are source of truth
-- [v2.7]: Inline account creation during import wizard using `__CREATE_NEW__` sentinel pattern
+- [v2.8]: New sync_warnings table (not JSON column) for per-account error persistence
+- [v2.8]: Three-state sync status model: success/partial/error
+- [v2.8]: Dashboard + navbar visibility (not toast notifications)
 
 ### Pending Todos
 
@@ -65,6 +65,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-25
-Stopped at: v2.7 milestone complete
+Last session: 2026-03-26
+Stopped at: Defining requirements for v2.8
 Resume file: None

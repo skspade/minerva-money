@@ -64,7 +64,16 @@ Accurate, auto-synced financial data with envelope budgeting that lets you see w
 
 ### Active
 
-(No active milestone — planning next milestone)
+**Current Milestone: v2.8 Sync Error Visibility**
+
+**Goal:** Surface per-account sync errors in the UI so the user immediately knows when a bank connection needs attention, instead of silently showing "success" when SimpleFIN returns account-level errors.
+
+**Target features:**
+- sync_warnings table to persist per-account errors with history
+- 'partial' sync status when accounts have errors but API call succeeded
+- tRPC sync.status endpoint returns structured warnings
+- Dashboard amber "Partial" badge with account error list and SimpleFIN reconnect link
+- Navbar amber warning indicator with tooltip for affected account count
 
 ### Out of Scope
 
@@ -162,4 +171,4 @@ Accurate, auto-synced financial data with envelope budgeting that lets you see w
 | No index on accounts.source column | Table has ~3 rows at current scale — not needed | ✓ Good — avoid premature optimization |
 
 ---
-*Last updated: 2026-03-25 after v2.7 milestone*
+*Last updated: 2026-03-26 after v2.8 milestone start*
