@@ -141,7 +141,7 @@ Full details: [milestones/v2.7-ROADMAP.md](milestones/v2.7-ROADMAP.md)
 - [x] **Phase 48: Sync Service Warning Pipeline** (1 plan) - Persist per-account warnings, determine partial/success/error status, auto-clear resolved warnings (completed 2026-03-27)
 - [x] **Phase 49: tRPC Response Extension** (1 plan) - Structured warnings array in sync.status response for client consumption (completed 2026-03-26)
 - [x] **Phase 50: Dashboard Warning UI** (1 plan) - Amber "Partial" badge, per-account error list, and SimpleFIN reconnect link (completed 2026-03-27)
-- [ ] **Phase 51: Navbar Warning Indicator** - Amber indicator with hover tooltip showing affected account names
+- [x] **Phase 51: Navbar Warning Indicator** - Amber indicator with hover tooltip showing affected account names (completed 2026-03-27)
 - [ ] **Phase 52: Agent Tool Update** - Fix existing column name bugs and add warnings to get_sync_status response
 
 ## Phase Details
@@ -233,5 +233,5 @@ Phases 47-49 are strictly sequential. Phases 50, 51, 52 depend only on Phase 49 
 | 48. Sync Service Warning Pipeline | 1/1 | Complete    | 2026-03-27 | - |
 | 49. tRPC Response Extension | v2.8 | 1/1 | Complete | 2026-03-26 |
 | 50. Dashboard Warning UI | 1/1 | Complete    | 2026-03-27 | - |
-| 51. Navbar Warning Indicator | v2.8 | 0/? | Not started | - |
+| 51. Navbar Warning Indicator | 1/1 | Complete   | 2026-03-27 | - |
 | 52. Agent Tool Update | v2.8 | 0/? | Not started | - |
