@@ -38,7 +38,7 @@ Requirements for Sync Error Visibility milestone. Each maps to roadmap phases.
 
 ### Agent
 
-- [ ] **AGENT-01**: Agent get_sync_status tool returns sync warnings alongside existing status data
+- [x] **AGENT-01**: Agent get_sync_status tool returns sync warnings alongside existing status data
 
 ## Future Requirements
 
@@ -77,7 +77,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DASH-04 | Phase 50 | Complete |
 | NAV-01 | Phase 51 | Complete |
 | NAV-02 | Phase 51 | Complete |
-| AGENT-01 | Phase 52 | Pending |
+| AGENT-01 | Phase 52 | Complete |
 
 **Coverage:**
 - v2.8 requirements: 15 total
