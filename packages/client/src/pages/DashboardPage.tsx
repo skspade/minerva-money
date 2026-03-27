@@ -211,10 +211,18 @@ export default function DashboardPage() {
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600">Status</span>
-                <span className={`text-sm font-medium ${
-                  syncStatus.lastSync.status === 'success' ? 'text-green-600' : 'text-red-600'
-                }`}>
-                  {syncStatus.lastSync.status}
+                <span className="flex items-center gap-1">
+                  <span className={`text-sm font-medium ${
+                    syncStatus.lastSync.status === 'success' ? 'text-green-600' :
+                    syncStatus.lastSync.status === 'partial' ? 'text-amber-600' : 'text-red-600'
+                  }`}>
+                    {syncStatus.lastSync.status.charAt(0).toUpperCase() + syncStatus.lastSync.status.slice(1)}
+                  </span>
+                  {syncStatus.lastSync.status === 'partial' && (
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+                      Partial
+                    </span>
+                  )}
                 </span>
               </div>
               <div className="flex justify-between">
@@ -225,6 +233,29 @@ export default function DashboardPage() {
                 <span className="text-sm text-gray-600">Transactions added</span>
                 <span className="text-sm">{syncStatus.lastSync.transactionsAdded}</span>
               </div>
+              {syncStatus.warnings && syncStatus.warnings.length > 0 && (
+                <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded">
+                  <div className="space-y-1">
+                    {syncStatus.warnings.map(w => (
+                      <div key={w.accountId} className="text-sm flex justify-between gap-2">
+                        <span className="font-medium text-amber-800">{w.accountName}</span>
+                        <span className="text-amber-700 text-right">{w.message}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {syncStatus.warnings.some(w => /auth|connection|institution/i.test(w.errorCode)) && (
+                    <a
+                      href="https://bridge.simplefin.org/simplefin/my-connections"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-2 inline-flex items-center gap-1 text-sm text-amber-700 underline hover:text-amber-900"
+                    >
+                      Reconnect at SimpleFIN
+                      <span aria-hidden="true">&#8599;</span>
+                    </a>
+                  )}
+                </div>
+              )}
               {syncStatus.lastSync.errorMessage && (
                 <div className="mt-2 p-2 bg-red-50 rounded text-sm text-red-600">
                   {syncStatus.lastSync.errorMessage}
