@@ -138,7 +138,7 @@ Full details: [milestones/v2.7-ROADMAP.md](milestones/v2.7-ROADMAP.md)
 **Milestone Goal:** Surface per-account sync errors in the UI so the user immediately knows when a bank connection needs attention, instead of silently showing "success" when SimpleFIN returns account-level errors.
 
 - [x] **Phase 47: Database Foundation** - sync_warnings table with UPSERT-compatible schema and foreign key to sync_log (completed 2026-03-27)
-- [ ] **Phase 48: Sync Service Warning Pipeline** - Persist per-account warnings, determine partial/success/error status, auto-clear resolved warnings
+- [ ] **Phase 48: Sync Service Warning Pipeline** (1 plan) - Persist per-account warnings, determine partial/success/error status, auto-clear resolved warnings
 - [ ] **Phase 49: tRPC Response Extension** - Structured warnings array in sync.status response for client consumption
 - [ ] **Phase 50: Dashboard Warning UI** - Amber "Partial" badge, per-account error list, and SimpleFIN reconnect link
 - [ ] **Phase 51: Navbar Warning Indicator** - Amber indicator with hover tooltip showing affected account names
@@ -168,7 +168,8 @@ Full details: [milestones/v2.7-ROADMAP.md](milestones/v2.7-ROADMAP.md)
   3. Warnings are automatically cleared (resolved) for accounts that sync successfully in a subsequent run
   4. Connection-level SimpleFIN errors (with conn_id but no account_id) are mapped to the correct accounts
   5. Stale 'running' sync_log entries are cleaned up before each new sync run
-**Plans**: TBD
+**Plans**: 1 plan
+- [ ] 48-01-PLAN.md — TDD: Warning pipeline (persist warnings, partial status, auto-clear, connection mapping, stale cleanup)
 
 ### Phase 49: tRPC Response Extension
 **Goal**: Client can consume structured per-account warnings from the existing sync.status endpoint
