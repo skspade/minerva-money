@@ -446,4 +446,175 @@ describe('sync-service', () => {
       expect(logs[1].status).toBe('success');
     });
   });
+
+  // ===== Re-link Detection Tests =====
+
+  describe('re-link detection', () => {
+    it('detects re-linked account by name+institution and preserves internal ID', async () => {
+      // First sync: account with original SimpleFIN ID
+      const data1: SimpleFINAccountSet = {
+        errors: [],
+        accounts: [{
+          id: 'ACT-old-111', name: 'Checking (9348)', conn_id: 'CONN-1',
+          currency: 'USD', balance: '1000.00', 'balance-date': Date.now() / 1000,
+          transactions: [], org: { name: 'Test Bank' },
+        }],
+      };
+      const client1 = createTestClient(data1);
+      const limiter = createRateLimiter();
+      await runSync(db, client1, limiter, { skipBackup: true });
+
+      // Verify initial state
+      const before = db.prepare('SELECT id, simplefin_id FROM accounts').all() as { id: string; simplefin_id: string }[];
+      expect(before).toHaveLength(1);
+      expect(before[0].id).toBe('ACT-old-111');
+      expect(before[0].simplefin_id).toBe('ACT-old-111');
+
+      // Second sync: same name+institution, new SimpleFIN ID (re-link)
+      const data2: SimpleFINAccountSet = {
+        errors: [],
+        accounts: [{
+          id: 'ACT-new-222', name: 'Checking (9348)', conn_id: 'CONN-1',
+          currency: 'USD', balance: '1500.00', 'balance-date': Date.now() / 1000,
+          transactions: [], org: { name: 'Test Bank' },
+        }],
+      };
+      const client2 = createTestClient(data2);
+      await runSync(db, client2, limiter, { skipBackup: true });
+
+      // Should still be 1 account with old internal ID but new simplefin_id
+      const after = db.prepare('SELECT id, simplefin_id, balance FROM accounts').all() as { id: string; simplefin_id: string; balance: number }[];
+      expect(after).toHaveLength(1);
+      expect(after[0].id).toBe('ACT-old-111');
+      expect(after[0].simplefin_id).toBe('ACT-new-222');
+      expect(after[0].balance).toBe(150000);
+
+      // History should be recorded
+      const history = db.prepare('SELECT * FROM account_id_history').all() as { account_id: string; previous_simplefin_id: string }[];
+      expect(history).toHaveLength(1);
+      expect(history[0].account_id).toBe('ACT-old-111');
+      expect(history[0].previous_simplefin_id).toBe('ACT-old-111');
+    });
+
+    it('new transactions after re-link use the original internal ID', async () => {
+      // First sync with transactions
+      const data1: SimpleFINAccountSet = {
+        errors: [],
+        accounts: [{
+          id: 'ACT-old-111', name: 'Checking (9348)', conn_id: 'CONN-1',
+          currency: 'USD', balance: '1000.00', 'balance-date': Date.now() / 1000,
+          transactions: [{
+            id: 'TXN-1', posted: Math.floor(Date.now() / 1000) - 86400,
+            amount: '-50.00', description: 'Coffee Shop', pending: false,
+          }],
+          org: { name: 'Test Bank' },
+        }],
+      };
+      await runSync(db, createTestClient(data1), createRateLimiter(), { skipBackup: true });
+
+      // Re-link with new transactions
+      const data2: SimpleFINAccountSet = {
+        errors: [],
+        accounts: [{
+          id: 'ACT-new-222', name: 'Checking (9348)', conn_id: 'CONN-1',
+          currency: 'USD', balance: '900.00', 'balance-date': Date.now() / 1000,
+          transactions: [{
+            id: 'TXN-2', posted: Math.floor(Date.now() / 1000),
+            amount: '-25.00', description: 'Grocery Store', pending: false,
+          }],
+          org: { name: 'Test Bank' },
+        }],
+      };
+      await runSync(db, createTestClient(data2), createRateLimiter(), { skipBackup: true });
+
+      // Both transactions should have the original internal ID
+      const txns = db.prepare('SELECT id, account_id FROM transactions ORDER BY id').all() as { id: string; account_id: string }[];
+      expect(txns).toHaveLength(2);
+      expect(txns[0].account_id).toBe('ACT-old-111');
+      expect(txns[1].account_id).toBe('ACT-old-111');
+    });
+
+    it('dedup works across re-link (same transaction not duplicated)', async () => {
+      const txnPosted = Math.floor(Date.now() / 1000) - 86400;
+
+      // First sync with a transaction
+      const data1: SimpleFINAccountSet = {
+        errors: [],
+        accounts: [{
+          id: 'ACT-old-111', name: 'Checking (9348)', conn_id: 'CONN-1',
+          currency: 'USD', balance: '1000.00', 'balance-date': Date.now() / 1000,
+          transactions: [{
+            id: 'TXN-A', posted: txnPosted,
+            amount: '-50.00', description: 'Coffee Shop', pending: false,
+          }],
+          org: { name: 'Test Bank' },
+        }],
+      };
+      await runSync(db, createTestClient(data1), createRateLimiter(), { skipBackup: true });
+
+      // Re-link: same transaction appears with different TXN ID but same content
+      const data2: SimpleFINAccountSet = {
+        errors: [],
+        accounts: [{
+          id: 'ACT-new-222', name: 'Checking (9348)', conn_id: 'CONN-1',
+          currency: 'USD', balance: '1000.00', 'balance-date': Date.now() / 1000,
+          transactions: [{
+            id: 'TXN-B', posted: txnPosted,
+            amount: '-50.00', description: 'Coffee Shop', pending: false,
+          }],
+          org: { name: 'Test Bank' },
+        }],
+      };
+      const result = await runSync(db, createTestClient(data2), createRateLimiter(), { skipBackup: true });
+
+      // Dedup hash is based on internal account ID, so same hash → INSERT OR IGNORE
+      expect(result.transactionsAdded).toBe(0);
+      const txns = db.prepare('SELECT * FROM transactions').all();
+      expect(txns).toHaveLength(1);
+    });
+
+    it('does not auto-merge when name+institution is ambiguous (multiple matches)', async () => {
+      // Insert two accounts with same name+institution manually
+      db.prepare(`
+        INSERT INTO accounts (id, name, institution, type, balance, source, simplefin_id)
+        VALUES (?, ?, ?, ?, ?, 'simplefin', ?)
+      `).run('ACT-1', 'Savings', 'Bank A', 'banking', 0, 'ACT-1');
+      db.prepare(`
+        INSERT INTO accounts (id, name, institution, type, balance, source, simplefin_id)
+        VALUES (?, ?, ?, ?, ?, 'simplefin', ?)
+      `).run('ACT-2', 'Savings', 'Bank A', 'banking', 0, 'ACT-2');
+
+      // Sync a new account with same name+institution but new SimpleFIN ID
+      const data: SimpleFINAccountSet = {
+        errors: [],
+        accounts: [{
+          id: 'ACT-new-3', name: 'Savings', conn_id: 'CONN-1',
+          currency: 'USD', balance: '2000.00', 'balance-date': Date.now() / 1000,
+          transactions: [], org: { name: 'Bank A' },
+        }],
+      };
+      await runSync(db, createTestClient(data), createRateLimiter(), { skipBackup: true });
+
+      // Should have 3 accounts — no merge because ambiguous
+      const accounts = db.prepare('SELECT id FROM accounts ORDER BY id').all() as { id: string }[];
+      expect(accounts).toHaveLength(3);
+    });
+
+    it('new account with unique name+institution creates normally', async () => {
+      const data: SimpleFINAccountSet = {
+        errors: [],
+        accounts: [{
+          id: 'ACT-brand-new', name: 'New Account (1234)', conn_id: 'CONN-1',
+          currency: 'USD', balance: '3000.00', 'balance-date': Date.now() / 1000,
+          transactions: [], org: { name: 'New Bank' },
+        }],
+      };
+      await runSync(db, createTestClient(data), createRateLimiter(), { skipBackup: true });
+
+      const accounts = db.prepare('SELECT id, simplefin_id FROM accounts').all() as { id: string; simplefin_id: string }[];
+      expect(accounts).toHaveLength(1);
+      expect(accounts[0].id).toBe('ACT-brand-new');
+      expect(accounts[0].simplefin_id).toBe('ACT-brand-new');
+    });
+  });
 });

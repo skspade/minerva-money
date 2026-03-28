@@ -70,38 +70,13 @@ export async function runSync(
       accountsByConnId.set(acct.conn_id, list);
     }
 
-    // Track which accounts have errors (for status + auto-clear logic)
-    const errorAccountIds = new Set<string>();
+    // Track which SimpleFIN account IDs have errors (for status + auto-clear logic)
+    const errorSimplefinIds = new Set<string>();
 
-    // Process SimpleFIN error list and write warnings
-    const errList = data.errors ?? data.errlist ?? [];
-    for (const err of errList) {
-      const msg = `SimpleFIN error [${err.code}]: ${err.msg}${err.account_id ? ` (account: ${err.account_id})` : ''}`;
-      result.errors.push(msg);
+    // Map SimpleFIN IDs to internal IDs (built during account processing)
+    const simplefinToInternal = new Map<string, string>();
 
-      if (err.account_id) {
-        // Account-level error
-        const acct = accountById.get(err.account_id);
-        const accountName = acct?.name ?? err.account_id;
-        writeWarning(db, syncLogId, err.account_id, accountName, err.code, err.msg);
-        errorAccountIds.add(err.account_id);
-      } else if (err.conn_id) {
-        // Connection-level error: map to all accounts on this connection
-        const connAccounts = accountsByConnId.get(err.conn_id) ?? [];
-        if (connAccounts.length === 0) {
-          // Edge case: connection failed before returning any accounts
-          writeWarning(db, syncLogId, err.conn_id, err.conn_id, err.code, err.msg);
-          errorAccountIds.add(err.conn_id);
-        } else {
-          for (const acct of connAccounts) {
-            writeWarning(db, syncLogId, acct.id, acct.name, err.code, err.msg);
-            errorAccountIds.add(acct.id);
-          }
-        }
-      }
-    }
-
-    // Process each account sequentially
+    // Process each account sequentially (before errors, so we have the ID mapping)
     for (const rawAccount of data.accounts) {
       if (!rateLimiter.canRequest(rawAccount.id)) {
         result.errors.push(`Rate limit exceeded for account ${rawAccount.name} (${rawAccount.id})`);
@@ -110,29 +85,65 @@ export async function runSync(
 
       try {
         const institution = rawAccount.org?.name ?? rawAccount.conn_id;
-        const txnsAdded = syncAccount(db, rawAccount, institution);
+        const { internalId, transactionsAdded } = syncAccount(db, rawAccount, institution);
+        simplefinToInternal.set(rawAccount.id, internalId);
         result.accountsSynced++;
-        result.transactionsAdded += txnsAdded;
+        result.transactionsAdded += transactionsAdded;
         rateLimiter.increment(rawAccount.id);
       } catch (err) {
         const msg = `Sync failed for account ${rawAccount.name} (${rawAccount.id}): ${err instanceof Error ? err.message : String(err)}`;
         result.errors.push(msg);
-        // Write warning for per-account processing errors
-        writeWarning(db, syncLogId, rawAccount.id, rawAccount.name, 'sync_error', err instanceof Error ? err.message : String(err));
-        errorAccountIds.add(rawAccount.id);
+        const warnId = simplefinToInternal.get(rawAccount.id) ?? rawAccount.id;
+        writeWarning(db, syncLogId, warnId, rawAccount.name, 'sync_error', err instanceof Error ? err.message : String(err));
+        errorSimplefinIds.add(rawAccount.id);
       }
     }
 
-    // Auto-clear warnings for accounts that appeared in this response AND had no errors
-    const responseAccountIds = new Set(data.accounts.map(a => a.id));
-    const accountsToClear = [...responseAccountIds].filter(id => !errorAccountIds.has(id));
-    if (accountsToClear.length > 0) {
-      const placeholders = accountsToClear.map(() => '?').join(',');
-      db.prepare(`DELETE FROM sync_warnings WHERE account_id IN (${placeholders})`).run(...accountsToClear);
+    // Process SimpleFIN error list and write warnings (using internal IDs where available)
+    const errList = data.errors ?? data.errlist ?? [];
+    for (const err of errList) {
+      const msg = `SimpleFIN error [${err.code}]: ${err.msg}${err.account_id ? ` (account: ${err.account_id})` : ''}`;
+      result.errors.push(msg);
+
+      if (err.account_id) {
+        // Account-level error — resolve to internal ID
+        const acct = accountById.get(err.account_id);
+        const accountName = acct?.name ?? err.account_id;
+        const warnId = simplefinToInternal.get(err.account_id) ?? err.account_id;
+        writeWarning(db, syncLogId, warnId, accountName, err.code, err.msg);
+        errorSimplefinIds.add(err.account_id);
+      } else if (err.conn_id) {
+        // Connection-level error: map to all accounts on this connection
+        const connAccounts = accountsByConnId.get(err.conn_id) ?? [];
+        if (connAccounts.length === 0) {
+          // Edge case: connection failed before returning any accounts
+          writeWarning(db, syncLogId, err.conn_id, err.conn_id, err.code, err.msg);
+          errorSimplefinIds.add(err.conn_id);
+        } else {
+          for (const acct of connAccounts) {
+            const warnId = simplefinToInternal.get(acct.id) ?? acct.id;
+            writeWarning(db, syncLogId, warnId, acct.name, err.code, err.msg);
+            errorSimplefinIds.add(acct.id);
+          }
+        }
+      }
+    }
+
+    // Auto-clear warnings using internal IDs for accounts that had no errors
+    const internalIdsToClear: string[] = [];
+    for (const rawAccount of data.accounts) {
+      if (!errorSimplefinIds.has(rawAccount.id)) {
+        const internalId = simplefinToInternal.get(rawAccount.id) ?? rawAccount.id;
+        internalIdsToClear.push(internalId);
+      }
+    }
+    if (internalIdsToClear.length > 0) {
+      const placeholders = internalIdsToClear.map(() => '?').join(',');
+      db.prepare(`DELETE FROM sync_warnings WHERE account_id IN (${placeholders})`).run(...internalIdsToClear);
     }
 
     // Determine sync_log status
-    const hasErrors = errorAccountIds.size > 0;
+    const hasErrors = errorSimplefinIds.size > 0;
     let status: string;
     if (hasErrors && result.accountsSynced > 0) {
       status = 'partial';
@@ -168,25 +179,76 @@ export async function runSync(
   return result;
 }
 
-function syncAccount(db: Database.Database, rawAccount: import('./simplefin-types.js').SimpleFINAccount, institution: string): number {
+interface SyncAccountResult {
+  internalId: string;
+  transactionsAdded: number;
+}
+
+/**
+ * Resolve the internal account ID for an incoming SimpleFIN account.
+ * 1. Exact match on simplefin_id → use that account's id
+ * 2. Name+institution fingerprint match → re-link detected, update simplefin_id
+ * 3. No match → new account, use the SimpleFIN ID as the internal ID
+ */
+function resolveAccountId(
+  db: Database.Database,
+  simplefinId: string,
+  name: string,
+  institution: string,
+): string {
+  // Step 1: exact match on simplefin_id
+  const exact = db.prepare(
+    `SELECT id FROM accounts WHERE simplefin_id = ?`,
+  ).get(simplefinId) as { id: string } | undefined;
+  if (exact) return exact.id;
+
+  // Step 2: re-link detection — match by name + institution among SimpleFIN accounts
+  const candidates = db.prepare(
+    `SELECT id, simplefin_id FROM accounts WHERE name = ? AND institution = ? AND source = 'simplefin'`,
+  ).all(name, institution) as { id: string; simplefin_id: string | null }[];
+
+  if (candidates.length === 1) {
+    const keeper = candidates[0];
+    // Record the old simplefin_id in history
+    if (keeper.simplefin_id) {
+      db.prepare(
+        `INSERT OR IGNORE INTO account_id_history (account_id, previous_simplefin_id) VALUES (?, ?)`,
+      ).run(keeper.id, keeper.simplefin_id);
+    }
+    // Update to new simplefin_id
+    db.prepare(
+      `UPDATE accounts SET simplefin_id = ? WHERE id = ?`,
+    ).run(simplefinId, keeper.id);
+    return keeper.id;
+  }
+
+  // Step 3: ambiguous or no match — treat as new account
+  return simplefinId;
+}
+
+function syncAccount(db: Database.Database, rawAccount: import('./simplefin-types.js').SimpleFINAccount, institution: string): SyncAccountResult {
   const normalized = normalizeAccount(rawAccount, institution);
 
   return db.transaction(() => {
-    // Upsert account
+    // Resolve internal ID (handles re-link detection)
+    const internalId = resolveAccountId(db, normalized.id, normalized.name, institution);
+
+    // Upsert account using the stable internal ID
     db.prepare(`
       INSERT INTO accounts (id, name, institution, type, balance, currency, last_synced, simplefin_id)
       VALUES (?, ?, ?, ?, ?, ?, datetime('now'), ?)
       ON CONFLICT(id) DO UPDATE SET
         name = excluded.name,
         balance = excluded.balance,
+        simplefin_id = excluded.simplefin_id,
         last_synced = datetime('now'),
         updated_at = datetime('now')
     `).run(
-      normalized.id, normalized.name, normalized.institution,
+      internalId, normalized.name, normalized.institution,
       normalized.type, normalized.balance, normalized.currency, normalized.id,
     );
 
-    // Insert transactions with dedup
+    // Insert transactions with dedup — use internal ID so hashes stay stable
     let added = 0;
     const newTransactionIds: string[] = [];
     const txnStmt = db.prepare(`
@@ -195,7 +257,7 @@ function syncAccount(db: Database.Database, rawAccount: import('./simplefin-type
     `);
 
     for (const rawTxn of rawAccount.transactions) {
-      const txn = normalizeTransaction(rawTxn, rawAccount.id);
+      const txn = normalizeTransaction(rawTxn, internalId);
       const info = txnStmt.run(
         txn.id, txn.accountId, txn.date, txn.amount,
         txn.pending ? 1 : 0, txn.payee, txn.memo, txn.dedupHash,
@@ -217,8 +279,8 @@ function syncAccount(db: Database.Database, rawAccount: import('./simplefin-type
     db.prepare(`
       INSERT OR REPLACE INTO balance_snapshots (account_id, date, balance)
       VALUES (?, ?, ?)
-    `).run(normalized.id, today, normalized.balance);
+    `).run(internalId, today, normalized.balance);
 
-    return added;
+    return { internalId, transactionsAdded: added };
   })();
 }
