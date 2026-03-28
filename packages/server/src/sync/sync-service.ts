@@ -184,6 +184,11 @@ interface SyncAccountResult {
   transactionsAdded: number;
 }
 
+interface ResolveResult {
+  internalId: string;
+  isExisting: boolean;
+}
+
 /**
  * Resolve the internal account ID for an incoming SimpleFIN account.
  * 1. Exact match on simplefin_id → use that account's id
@@ -195,12 +200,12 @@ function resolveAccountId(
   simplefinId: string,
   name: string,
   institution: string,
-): string {
+): ResolveResult {
   // Step 1: exact match on simplefin_id
   const exact = db.prepare(
     `SELECT id FROM accounts WHERE simplefin_id = ?`,
   ).get(simplefinId) as { id: string } | undefined;
-  if (exact) return exact.id;
+  if (exact) return { internalId: exact.id, isExisting: true };
 
   // Step 2: re-link detection — match by name + institution among SimpleFIN accounts
   const candidates = db.prepare(
@@ -219,11 +224,11 @@ function resolveAccountId(
     db.prepare(
       `UPDATE accounts SET simplefin_id = ? WHERE id = ?`,
     ).run(simplefinId, keeper.id);
-    return keeper.id;
+    return { internalId: keeper.id, isExisting: true };
   }
 
   // Step 3: ambiguous or no match — treat as new account
-  return simplefinId;
+  return { internalId: simplefinId, isExisting: false };
 }
 
 function syncAccount(db: Database.Database, rawAccount: import('./simplefin-types.js').SimpleFINAccount, institution: string): SyncAccountResult {
@@ -231,22 +236,27 @@ function syncAccount(db: Database.Database, rawAccount: import('./simplefin-type
 
   return db.transaction(() => {
     // Resolve internal ID (handles re-link detection)
-    const internalId = resolveAccountId(db, normalized.id, normalized.name, institution);
+    const { internalId, isExisting } = resolveAccountId(db, normalized.id, normalized.name, institution);
 
-    // Upsert account using the stable internal ID
-    db.prepare(`
-      INSERT INTO accounts (id, name, institution, type, balance, currency, last_synced, simplefin_id)
-      VALUES (?, ?, ?, ?, ?, ?, datetime('now'), ?)
-      ON CONFLICT(id) DO UPDATE SET
-        name = excluded.name,
-        balance = excluded.balance,
-        simplefin_id = excluded.simplefin_id,
-        last_synced = datetime('now'),
-        updated_at = datetime('now')
-    `).run(
-      internalId, normalized.name, normalized.institution,
-      normalized.type, normalized.balance, normalized.currency, normalized.id,
-    );
+    // Insert or update account — separate paths to avoid SQLite UNIQUE constraint
+    // conflict when ON CONFLICT(id) can't handle a simultaneous simplefin_id conflict
+    // on the same row (e.g. after re-link cleanup where id ≠ simplefin_id).
+    if (isExisting) {
+      db.prepare(`
+        UPDATE accounts SET
+          name = ?, balance = ?, simplefin_id = ?,
+          last_synced = datetime('now'), updated_at = datetime('now')
+        WHERE id = ?
+      `).run(normalized.name, normalized.balance, normalized.id, internalId);
+    } else {
+      db.prepare(`
+        INSERT INTO accounts (id, name, institution, type, balance, currency, last_synced, simplefin_id)
+        VALUES (?, ?, ?, ?, ?, ?, datetime('now'), ?)
+      `).run(
+        internalId, normalized.name, normalized.institution,
+        normalized.type, normalized.balance, normalized.currency, normalized.id,
+      );
+    }
 
     // Insert transactions with dedup — use internal ID so hashes stay stable
     let added = 0;

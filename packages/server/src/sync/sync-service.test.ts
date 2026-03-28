@@ -600,6 +600,54 @@ describe('sync-service', () => {
       expect(accounts).toHaveLength(3);
     });
 
+    it('subsequent syncs work after re-link (id ≠ simplefin_id)', async () => {
+      // First sync: establish account
+      const data1: SimpleFINAccountSet = {
+        errors: [],
+        accounts: [{
+          id: 'ACT-old-111', name: 'Checking (9348)', conn_id: 'CONN-1',
+          currency: 'USD', balance: '1000.00', 'balance-date': Date.now() / 1000,
+          transactions: [], org: { name: 'Test Bank' },
+        }],
+      };
+      await runSync(db, createTestClient(data1), createRateLimiter(), { skipBackup: true });
+
+      // Second sync: re-link gives new SimpleFIN ID
+      const data2: SimpleFINAccountSet = {
+        errors: [],
+        accounts: [{
+          id: 'ACT-new-222', name: 'Checking (9348)', conn_id: 'CONN-1',
+          currency: 'USD', balance: '1500.00', 'balance-date': Date.now() / 1000,
+          transactions: [], org: { name: 'Test Bank' },
+        }],
+      };
+      await runSync(db, createTestClient(data2), createRateLimiter(), { skipBackup: true });
+
+      // Verify id ≠ simplefin_id
+      const acct = db.prepare('SELECT id, simplefin_id FROM accounts').get() as { id: string; simplefin_id: string };
+      expect(acct.id).toBe('ACT-old-111');
+      expect(acct.simplefin_id).toBe('ACT-new-222');
+
+      // Third sync: same new ID — this was failing with UNIQUE constraint error
+      const data3: SimpleFINAccountSet = {
+        errors: [],
+        accounts: [{
+          id: 'ACT-new-222', name: 'Checking (9348)', conn_id: 'CONN-1',
+          currency: 'USD', balance: '2000.00', 'balance-date': Date.now() / 1000,
+          transactions: [], org: { name: 'Test Bank' },
+        }],
+      };
+      const result = await runSync(db, createTestClient(data3), createRateLimiter(), { skipBackup: true });
+
+      expect(result.errors).toHaveLength(0);
+      expect(result.accountsSynced).toBe(1);
+
+      const after = db.prepare('SELECT id, simplefin_id, balance FROM accounts').get() as { id: string; simplefin_id: string; balance: number };
+      expect(after.id).toBe('ACT-old-111');
+      expect(after.simplefin_id).toBe('ACT-new-222');
+      expect(after.balance).toBe(200000);
+    });
+
     it('new account with unique name+institution creates normally', async () => {
       const data: SimpleFINAccountSet = {
         errors: [],
