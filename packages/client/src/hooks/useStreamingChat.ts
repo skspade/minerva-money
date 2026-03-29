@@ -46,10 +46,12 @@ export interface StreamHandlers {
   onDone: (text: string, sessionId: string) => void;
   onError: (message: string) => void;
   onSession: (sessionId: string) => void;
+  onConversation: (conversationId: string) => void;
 }
 
 export interface StreamOptions {
   sessionId?: string;
+  conversationId?: string;
   model?: string;
   signal?: AbortSignal;
 }
@@ -64,12 +66,12 @@ export async function processStream(
   handlers: StreamHandlers,
   options: StreamOptions = {},
 ): Promise<void> {
-  const { sessionId, model, signal } = options;
+  const { sessionId, conversationId, model, signal } = options;
 
   const response = await fetch('/api/chat/stream', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, sessionId, model }),
+    body: JSON.stringify({ message, sessionId, model, conversationId }),
     signal,
   });
 
@@ -106,6 +108,9 @@ export async function processStream(
             capturedSessionId = event.sessionId;
             handlers.onSession(event.sessionId);
             break;
+          case 'conversation':
+            handlers.onConversation(event.conversationId);
+            break;
           case 'text-delta':
             handlers.onTextDelta(event.text);
             break;
@@ -133,10 +138,11 @@ export async function processStream(
 
 export interface UseStreamingChatOptions {
   onComplete: (text: string, sessionId: string) => void;
+  onConversation?: (conversationId: string) => void;
 }
 
 export interface UseStreamingChatReturn {
-  send: (message: string, sessionId?: string, model?: string) => void;
+  send: (message: string, conversationId?: string, model?: string) => void;
   streamingText: string;
   activeTool: string | null;
   isStreaming: boolean;
@@ -155,10 +161,12 @@ export function useStreamingChat(options: UseStreamingChatOptions): UseStreaming
   const abortRef = useRef<AbortController | null>(null);
   const onCompleteRef = useRef(options.onComplete);
   onCompleteRef.current = options.onComplete;
+  const onConversationRef = useRef(options.onConversation);
+  onConversationRef.current = options.onConversation;
 
   const trpc = useTRPC();
 
-  function send(message: string, sessionId?: string, model?: string) {
+  function send(message: string, conversationId?: string, model?: string) {
     // Abort previous request
     abortRef.current?.abort();
     const controller = new AbortController();
@@ -184,16 +192,18 @@ export function useStreamingChat(options: UseStreamingChatOptions): UseStreaming
         setIsStreaming(false);
       },
       onSession: () => {}, // sessionId captured internally by processStream
+      onConversation: (id) => onConversationRef.current?.(id),
     };
 
-    processStream(message, handlers, { sessionId, model, signal: controller.signal }).catch(
+    processStream(message, handlers, { conversationId, model, signal: controller.signal }).catch(
       async (err) => {
         // Intentional abort — don't fall back
         if (controller.signal.aborted) return;
 
         // Fallback to tRPC
         try {
-          const data = await trpc.agent.chat.mutate({ message, sessionId, model });
+          // @ts-expect-error tRPC v11 proxy .mutate() requires useMutation hook; fallback is best-effort
+          const data = await trpc.agent.chat.mutate({ message, sessionId: conversationId, model }) as { response: string; sessionId: string };
           setIsStreaming(false);
           onCompleteRef.current(data.response, data.sessionId);
         } catch (fallbackErr) {

@@ -119,6 +119,7 @@ describe('useStreamingChat (integration)', () => {
       onDone: vi.fn(),
       onError: vi.fn(),
       onSession: vi.fn(),
+      onConversation: vi.fn(),
     };
 
     await processStream('Hello', handlers, { sessionId: 'sess-1', model: 'claude-sonnet-4-20250514' });
@@ -146,6 +147,7 @@ describe('useStreamingChat (integration)', () => {
       onDone: vi.fn(),
       onError: vi.fn(),
       onSession: vi.fn(),
+      onConversation: vi.fn(),
     };
 
     await processStream('test', handlers);
@@ -169,6 +171,7 @@ describe('useStreamingChat (integration)', () => {
       onDone: vi.fn(),
       onError: vi.fn(),
       onSession: vi.fn(),
+      onConversation: vi.fn(),
     };
 
     await processStream('test', handlers);
@@ -192,6 +195,7 @@ describe('useStreamingChat (integration)', () => {
       onDone,
       onError: vi.fn(),
       onSession: vi.fn(),
+      onConversation: vi.fn(),
     };
 
     await processStream('test', handlers);
@@ -213,6 +217,7 @@ describe('useStreamingChat (integration)', () => {
       onDone: vi.fn(),
       onError: vi.fn(),
       onSession,
+      onConversation: vi.fn(),
     };
 
     await processStream('test', handlers);
@@ -231,6 +236,7 @@ describe('useStreamingChat (integration)', () => {
       onDone: vi.fn(),
       onError,
       onSession: vi.fn(),
+      onConversation: vi.fn(),
     };
 
     await processStream('test', handlers);
@@ -248,6 +254,7 @@ describe('useStreamingChat (integration)', () => {
       onDone: vi.fn(),
       onError: vi.fn(),
       onSession: vi.fn(),
+      onConversation: vi.fn(),
     };
 
     await expect(processStream('test', handlers)).rejects.toThrow('Network error');
@@ -271,6 +278,7 @@ describe('useStreamingChat (integration)', () => {
       onDone: vi.fn(),
       onError: vi.fn(),
       onSession: vi.fn(),
+      onConversation: vi.fn(),
     };
 
     await expect(processStream('test', handlers)).rejects.toThrow();
@@ -293,6 +301,7 @@ describe('useStreamingChat (integration)', () => {
       onDone: vi.fn(),
       onError: vi.fn(),
       onSession: vi.fn(),
+      onConversation: vi.fn(),
     };
 
     await expect(processStream('test', handlers)).rejects.toThrow();
@@ -313,6 +322,7 @@ describe('useStreamingChat (integration)', () => {
       onDone,
       onError: vi.fn(),
       onSession: vi.fn(),
+      onConversation: vi.fn(),
     };
 
     await processStream('test', handlers, { sessionId: 'existing-sess-123' });
@@ -333,8 +343,81 @@ describe('useStreamingChat (integration)', () => {
       onDone: vi.fn(),
       onError: vi.fn(),
       onSession: vi.fn(),
+      onConversation: vi.fn(),
     };
 
     await expect(processStream('test', handlers, { signal: controller.signal })).rejects.toThrow();
+  });
+
+  it('fires onConversation with conversationId from conversation event', async () => {
+    mockFetchSuccess([
+      { type: 'conversation', conversationId: 'conv-123' },
+      { type: 'done', text: 'ok' },
+    ]);
+
+    const { processStream } = await import('./useStreamingChat');
+    const onConversation = vi.fn();
+    const handlers = {
+      onTextDelta: vi.fn(),
+      onToolStart: vi.fn(),
+      onToolEnd: vi.fn(),
+      onDone: vi.fn(),
+      onError: vi.fn(),
+      onSession: vi.fn(),
+      onConversation,
+    };
+
+    await processStream('test', handlers);
+    expect(onConversation).toHaveBeenCalledWith('conv-123');
+  });
+
+  it('includes conversationId in fetch body when provided', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'content-type': 'text/event-stream' }),
+      body: createSSEStream([{ type: 'done', text: 'ok' }]),
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const { processStream } = await import('./useStreamingChat');
+    const handlers = {
+      onTextDelta: vi.fn(),
+      onToolStart: vi.fn(),
+      onToolEnd: vi.fn(),
+      onDone: vi.fn(),
+      onError: vi.fn(),
+      onSession: vi.fn(),
+      onConversation: vi.fn(),
+    };
+
+    await processStream('Hello', handlers, { conversationId: 'conv-456' });
+
+    const body = JSON.parse(fetchSpy.mock.calls[0][1].body);
+    expect(body.conversationId).toBe('conv-456');
+  });
+
+  it('omits conversationId from fetch body when not provided', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'content-type': 'text/event-stream' }),
+      body: createSSEStream([{ type: 'done', text: 'ok' }]),
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const { processStream } = await import('./useStreamingChat');
+    const handlers = {
+      onTextDelta: vi.fn(),
+      onToolStart: vi.fn(),
+      onToolEnd: vi.fn(),
+      onDone: vi.fn(),
+      onError: vi.fn(),
+      onSession: vi.fn(),
+      onConversation: vi.fn(),
+    };
+
+    await processStream('Hello', handlers);
+
+    const body = JSON.parse(fetchSpy.mock.calls[0][1].body);
+    expect(body.conversationId).toBeUndefined();
   });
 });
