@@ -155,7 +155,7 @@ Full details: [milestones/v2.8-ROADMAP.md](milestones/v2.8-ROADMAP.md)
 - [x] **Phase 53: Schema, Service, and tRPC Router** - Data layer foundation with full CRUD and conversation management API (completed 2026-03-29)
 - [x] **Phase 54: SSE Integration and Conversation Resume** - Server persists messages during streaming and resumes SDK sessions (completed 2026-03-29)
 - [ ] **Phase 55: Client Conversation Lifecycle** - URL routing, conversation state, and message loading in ChatPage
-- [ ] **Phase 56: Sidebar UI and Mobile** - Conversation list, inline management, and responsive overlay
+- [x] **Phase 56: Sidebar UI and Mobile** - Conversation list, inline management, and responsive overlay (completed 2026-03-29)
 - [ ] **Phase 57: Retention Cleanup** - Scheduled purge of old conversations and SDK session files
 
 ## Phase Details
@@ -244,5 +244,5 @@ Phases 53-56 are strictly sequential. Phase 57 depends only on Phase 53 and can 
 | 53. Schema, Service, and tRPC Router | 2/2 | Complete    | 2026-03-29 | - |
 | 54. SSE Integration and Conversation Resume | 3/3 | Complete    | 2026-03-29 | - |
 | 55. Client Conversation Lifecycle | v2.9 | 0/0 | Not started | - |
-| 56. Sidebar UI and Mobile | v2.9 | 0/0 | Not started | - |
+| 56. Sidebar UI and Mobile | v2.9 | Complete    | 2026-03-29 | - |
 | 57. Retention Cleanup | v2.9 | 0/0 | Not started | - |
