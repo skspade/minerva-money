@@ -42,8 +42,9 @@ describe('chat-history-service', () => {
       const title = generateTitle(longMessage);
       expect(title.length).toBeLessThanOrEqual(63); // 60 + "..."
       expect(title).toMatch(/\.\.\.$/);
-      // Should not cut mid-word
-      expect(title.replace('...', '')).not.toMatch(/\S$/);
+      // Should cut at a word boundary — the text before "..." should end with a complete word
+      const withoutEllipsis = title.replace('...', '');
+      expect(withoutEllipsis).not.toMatch(/\s$/); // No trailing space before "..."
     });
 
     it('returns "New conversation" for empty string', () => {
