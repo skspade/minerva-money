@@ -14,6 +14,7 @@ export const agentRouter = router({
       message: z.string(),
       sessionId: z.string().optional(),
       model: z.string().optional(),
+      conversationId: z.string().uuid().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       if (input.model && !isValidModelId(input.model)) {
@@ -22,6 +23,6 @@ export const agentRouter = router({
           message: `Invalid model: ${input.model}. Valid models: ${MODELS.map(m => m.id).join(', ')}`,
         });
       }
-      return chat(ctx.db, ctx, input.message, input.sessionId, input.model as ModelId | undefined);
+      return chat(ctx.db, ctx, input.message, input.sessionId, input.model as ModelId | undefined, input.conversationId);
     }),
 });
