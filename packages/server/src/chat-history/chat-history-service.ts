@@ -147,9 +147,22 @@ export function updateSdkSessionId(
   return result.changes > 0;
 }
 
-export function purgeOldConversations(db: Database.Database, retentionDays: number): number {
+export interface PurgeResult {
+  deletedCount: number;
+  sessionIds: string[];
+}
+
+export function purgeOldConversations(db: Database.Database, retentionDays: number): PurgeResult {
+  // Query session IDs BEFORE deletion (CASCADE would remove the data)
+  const expiredSessions = db.prepare(
+    `SELECT sdk_session_id FROM chat_conversations WHERE updated_at < datetime('now', '-${retentionDays} days') AND sdk_session_id IS NOT NULL`,
+  ).all() as { sdk_session_id: string }[];
+
+  const sessionIds = expiredSessions.map((row) => row.sdk_session_id);
+
   const result = db.prepare(
     `DELETE FROM chat_conversations WHERE updated_at < datetime('now', '-${retentionDays} days')`,
   ).run();
-  return result.changes;
+
+  return { deletedCount: result.changes, sessionIds };
 }

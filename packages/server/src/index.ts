@@ -8,6 +8,7 @@ import { getSimpleFINClient } from './sync/simplefin-client.js';
 import { createRateLimiter } from './sync/rate-limiter.js';
 import { startSyncScheduler, stopSyncScheduler } from './sync/sync-scheduler.js';
 import { startBudgetScheduler, stopBudgetScheduler } from './budget/budget-scheduler.js';
+import { startChatCleanupScheduler, stopChatCleanupScheduler } from './chat-history/chat-cleanup-scheduler.js';
 import type { Context } from './sync/trpc.js';
 import { createChatStreamHandler } from './agent/chat-stream-handler.js';
 
@@ -47,6 +48,7 @@ if (process.env.NODE_ENV !== 'test') {
 
   startSyncScheduler(db);
   startBudgetScheduler(db);
+  startChatCleanupScheduler(db);
 
   const server = app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
@@ -55,6 +57,7 @@ if (process.env.NODE_ENV !== 'test') {
   process.on('SIGTERM', () => {
     stopSyncScheduler();
     stopBudgetScheduler();
+    stopChatCleanupScheduler();
     const forceExit = setTimeout(() => process.exit(0), 5000);
     forceExit.unref();
     server.close(() => process.exit(0));

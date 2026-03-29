@@ -364,8 +364,10 @@ describe('chat-history-service', () => {
   });
 
   describe('purgeOldConversations', () => {
-    it('returns 0 when no conversations to purge', () => {
-      expect(purgeOldConversations(db, 90)).toBe(0);
+    it('returns deletedCount 0 and empty sessionIds when no conversations to purge', () => {
+      const result = purgeOldConversations(db, 90);
+      expect(result.deletedCount).toBe(0);
+      expect(result.sessionIds).toEqual([]);
     });
 
     it('deletes conversations older than retention threshold', () => {
@@ -378,8 +380,8 @@ describe('chat-history-service', () => {
         "UPDATE chat_conversations SET updated_at = datetime('now', '-100 days') WHERE id = ?",
       ).run(conv.id);
 
-      const deleted = purgeOldConversations(db, 90);
-      expect(deleted).toBe(1);
+      const result = purgeOldConversations(db, 90);
+      expect(result.deletedCount).toBe(1);
       expect(getConversation(db, conv.id)).toBeNull();
     });
 
@@ -393,7 +395,7 @@ describe('chat-history-service', () => {
           "UPDATE chat_conversations SET updated_at = datetime('now', '-100 days') WHERE id = ?",
         ).run(conv.id);
       }
-      expect(purgeOldConversations(db, 90)).toBe(3);
+      expect(purgeOldConversations(db, 90).deletedCount).toBe(3);
     });
 
     it('does not delete conversations within retention threshold', () => {
@@ -412,6 +414,44 @@ describe('chat-history-service', () => {
       purgeOldConversations(db, 90);
       expect(getConversation(db, recent.id)).not.toBeNull();
       expect(getConversation(db, old.id)).toBeNull();
+    });
+
+    it('returns session IDs of purged conversations that have sdk_session_id set', () => {
+      const conv1 = createConversation(db, {
+        model: 'claude-sonnet-4-20250514',
+        firstMessage: 'Old 1',
+      });
+      const conv2 = createConversation(db, {
+        model: 'claude-sonnet-4-20250514',
+        firstMessage: 'Old 2',
+      });
+      updateSdkSessionId(db, conv1.id, 'session-aaa');
+      updateSdkSessionId(db, conv2.id, 'session-bbb');
+
+      db.prepare(
+        "UPDATE chat_conversations SET updated_at = datetime('now', '-100 days') WHERE id IN (?, ?)",
+      ).run(conv1.id, conv2.id);
+
+      const result = purgeOldConversations(db, 90);
+      expect(result.deletedCount).toBe(2);
+      expect(result.sessionIds).toHaveLength(2);
+      expect(result.sessionIds).toContain('session-aaa');
+      expect(result.sessionIds).toContain('session-bbb');
+    });
+
+    it('filters out conversations without sdk_session_id from sessionIds', () => {
+      const conv = createConversation(db, {
+        model: 'claude-sonnet-4-20250514',
+        firstMessage: 'Old without session',
+      });
+      // Do NOT set sdk_session_id — it remains null
+      db.prepare(
+        "UPDATE chat_conversations SET updated_at = datetime('now', '-100 days') WHERE id = ?",
+      ).run(conv.id);
+
+      const result = purgeOldConversations(db, 90);
+      expect(result.deletedCount).toBe(1);
+      expect(result.sessionIds).toEqual([]);
     });
   });
 });
