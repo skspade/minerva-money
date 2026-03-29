@@ -136,6 +136,17 @@ export function renameConversation(
   return result.changes > 0;
 }
 
+export function updateSdkSessionId(
+  db: Database.Database,
+  conversationId: string,
+  sdkSessionId: string,
+): boolean {
+  const result = db.prepare(
+    'UPDATE chat_conversations SET sdk_session_id = ? WHERE id = ?',
+  ).run(sdkSessionId, conversationId);
+  return result.changes > 0;
+}
+
 export function purgeOldConversations(db: Database.Database, retentionDays: number): number {
   const result = db.prepare(
     `DELETE FROM chat_conversations WHERE updated_at < datetime('now', '-${retentionDays} days')`,

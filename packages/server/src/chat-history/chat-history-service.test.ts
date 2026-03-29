@@ -8,6 +8,7 @@ import {
   getConversation,
   deleteConversation,
   renameConversation,
+  updateSdkSessionId,
   purgeOldConversations,
 } from './chat-history-service.js';
 import type Database from 'better-sqlite3';
@@ -332,6 +333,33 @@ describe('chat-history-service', () => {
 
     it('returns false when conversation does not exist', () => {
       expect(renameConversation(db, 'non-existent-id', 'Title')).toBe(false);
+    });
+  });
+
+  describe('updateSdkSessionId', () => {
+    it('updates sdk_session_id on existing conversation and returns true', () => {
+      const conv = createConversation(db, {
+        model: 'claude-sonnet-4-20250514',
+        firstMessage: 'Hello',
+      });
+      expect(updateSdkSessionId(db, conv.id, 'sdk-session-abc')).toBe(true);
+      const fetched = getConversation(db, conv.id);
+      expect(fetched!.sdk_session_id).toBe('sdk-session-abc');
+    });
+
+    it('returns false for non-existent conversation', () => {
+      expect(updateSdkSessionId(db, 'non-existent-id', 'sdk-session-abc')).toBe(false);
+    });
+
+    it('overwrites previously set sdk_session_id', () => {
+      const conv = createConversation(db, {
+        model: 'claude-sonnet-4-20250514',
+        firstMessage: 'Hello',
+      });
+      updateSdkSessionId(db, conv.id, 'first-session');
+      updateSdkSessionId(db, conv.id, 'second-session');
+      const fetched = getConversation(db, conv.id);
+      expect(fetched!.sdk_session_id).toBe('second-session');
     });
   });
 
