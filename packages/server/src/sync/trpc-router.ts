@@ -1,6 +1,7 @@
 import { router, publicProcedure } from './trpc.js';
 import { agentRouter } from '../agent/agent-router.js';
 import { importRouter } from '../import/import-router.js';
+import { chatHistoryRouter } from '../chat-history/chat-history-router.js';
 import { runSync } from './sync-service.js';
 import { createAccount, updateAccount, deleteAccount } from '../accounts/accounts-service.js';
 import { resolveBackupDir } from '../backup/backup.js';
@@ -536,6 +537,7 @@ export const appRouter = router({
   reports: reportsRouter,
   agent: agentRouter,
   import: importRouter,
+  chatHistory: chatHistoryRouter,
 });
 
 export type AppRouter = typeof appRouter;
