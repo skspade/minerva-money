@@ -58,9 +58,9 @@ Requirements for Chat History milestone. Each maps to roadmap phases.
 
 ### Navigation
 
-- [ ] **NAV-01**: URL routing supports /chat and /chat/:conversationId for direct linking
-- [ ] **NAV-02**: Browser back/forward navigates between conversations
-- [ ] **NAV-03**: Invalid conversationId in URL redirects to /chat
+- [x] **NAV-01**: URL routing supports /chat and /chat/:conversationId for direct linking
+- [x] **NAV-02**: Browser back/forward navigates between conversations
+- [x] **NAV-03**: Invalid conversationId in URL redirects to /chat
 
 ### Cleanup
 
