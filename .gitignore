@@ -6,3 +6,9 @@ dist/
 *.sqlite
 *.sqlite3
 backups/
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
