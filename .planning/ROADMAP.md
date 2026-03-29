@@ -170,7 +170,9 @@ Full details: [milestones/v2.8-ROADMAP.md](milestones/v2.8-ROADMAP.md)
   3. User can delete a conversation via tRPC and all associated messages are CASCADE-deleted
   4. User can rename a conversation title via tRPC
   5. Conversation titles are auto-generated from the first user message, truncated at ~60 characters on a word boundary
-**Plans**: TBD
+**Plans**: 2 plans
+  - [ ] 53-01-PLAN.md — Migration + chat history service (TDD)
+  - [ ] 53-02-PLAN.md — tRPC chatHistory router + appRouter integration
 
 ### Phase 54: SSE Integration and Conversation Resume
 **Goal**: Every chat exchange is persisted to a conversation, and returning to a conversation resumes the SDK session with full context
@@ -232,7 +234,7 @@ Phases 53-56 are strictly sequential. Phase 57 depends only on Phase 53 and can 
 | 38-43 | v2.6 | 6/6 | Complete | 2026-03-25 |
 | 44-46 | v2.7 | 6/6 | Complete | 2026-03-25 |
 | 47-52 | v2.8 | 6/6 | Complete | 2026-03-28 |
-| 53. Schema, Service, and tRPC Router | v2.9 | 0/0 | Not started | - |
+| 53. Schema, Service, and tRPC Router | v2.9 | 0/2 | Planned | - |
 | 54. SSE Integration and Conversation Resume | v2.9 | 0/0 | Not started | - |
 | 55. Client Conversation Lifecycle | v2.9 | 0/0 | Not started | - |
 | 56. Sidebar UI and Mobile | v2.9 | 0/0 | Not started | - |
