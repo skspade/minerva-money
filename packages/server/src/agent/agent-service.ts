@@ -3,13 +3,26 @@ import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import type Database from 'better-sqlite3';
 import type { SSEEvent } from '@minerva/shared';
 import type { Context } from '../sync/trpc.js';
+import { getConversation } from '../chat-history/chat-history-service.js';
 import { createMcpServer } from './mcp-server.js';
 import { getSystemPrompt } from './system-prompt.js';
 import { DEFAULT_MODEL_ID, TIMEOUT_MS, type ModelId } from './models.js';
 
+/**
+ * Shared state object between the chatStream generator and its caller (the handler).
+ * The generator populates these fields during iteration; the handler reads them after.
+ */
+export interface StreamState {
+  sessionId: string;
+  fullText: string;
+  toolCalls: Array<{ tool: string; result?: unknown }>;
+  conversationId?: string;
+}
+
 export interface ChatResult {
   response: string;
   sessionId: string;
+  conversationId?: string;
 }
 
 export async function chat(
@@ -18,6 +31,7 @@ export async function chat(
   message: string,
   sessionId?: string,
   model: ModelId = DEFAULT_MODEL_ID,
+  conversationId?: string,
 ): Promise<ChatResult> {
   const mcpServer = createMcpServer(db, ctx);
   const systemPrompt = getSystemPrompt();
@@ -56,12 +70,14 @@ export async function chat(
     return {
       response: `I encountered an error processing your request: ${errMsg}. Please try again.`,
       sessionId: resultSessionId,
+      conversationId,
     };
   }
 
   return {
     response: resultText || 'I was unable to generate a response. Please try again.',
     sessionId: resultSessionId,
+    conversationId,
   };
 }
 
@@ -85,18 +101,44 @@ async function collectResponse(
 }
 
 /**
+ * Build a fallback prompt that includes recent conversation history when
+ * SDK session resume fails and we need to start a new session.
+ * Limits to last 20 messages and truncates individual messages at 500 chars.
+ */
+export function buildFallbackPrompt(
+  messages: Array<{ role: string; content: string }>,
+  userMessage: string,
+): string {
+  const recent = messages.slice(-20);
+  if (recent.length === 0) return userMessage;
+
+  const contextLines = recent.map(m => {
+    const truncated = m.content.length > 500 ? m.content.slice(0, 500) + '...' : m.content;
+    return `${m.role === 'user' ? 'User' : 'Assistant'}: ${truncated}`;
+  });
+  return `[Previous conversation context - last ${recent.length} messages]\n${contextLines.join('\n')}\n[End of context]\n\n${userMessage}`;
+}
+
+/**
  * Stream chat responses as a sequence of typed SSE events.
  *
  * Iterates the Agent SDK Query with `includePartialMessages: true`,
  * yielding SSEEvent objects for session init, text deltas, tool calls,
  * completion, and errors. Handles abort signals and idle timeouts.
+ *
+ * Uses a shared StreamState object so the caller can read accumulated
+ * sessionId, fullText, and toolCalls after the generator completes.
+ *
+ * When state.sessionId is set on entry (resume case), passes it as
+ * options.resume to the SDK. If resume fails, gracefully falls back
+ * to a new session and injects conversation context if available.
  */
 export async function* chatStream(
   db: Database.Database,
   ctx: Context,
   message: string,
   signal: AbortSignal,
-  sessionId?: string,
+  state: StreamState = { sessionId: '', fullText: '', toolCalls: [] },
   model: ModelId = DEFAULT_MODEL_ID,
 ): AsyncGenerator<SSEEvent> {
   const mcpServer = createMcpServer(db, ctx);
@@ -114,14 +156,37 @@ export async function* chatStream(
     includePartialMessages: true,
   };
 
-  if (sessionId) {
-    options.resume = sessionId;
+  let queryStream: AsyncIterable<SDKMessage> & { close(): void };
+  const initialSessionId = state.sessionId;
+
+  // Attempt resume if session ID is set; fall back to new session on failure
+  if (state.sessionId) {
+    try {
+      queryStream = query({ prompt: message, options: { ...options, resume: state.sessionId } }) as AsyncIterable<SDKMessage> & { close(): void };
+    } catch (error) {
+      console.warn('SDK resume failed, falling back to new session:', error instanceof Error ? error.message : error);
+      state.sessionId = '';
+
+      // Inject conversation context on fallback
+      let fallbackMessage = message;
+      if (state.conversationId) {
+        try {
+          const conv = getConversation(db, state.conversationId);
+          if (conv?.messages?.length) {
+            fallbackMessage = buildFallbackPrompt(conv.messages, message);
+          }
+        } catch {
+          // Silently continue without context if DB lookup fails
+        }
+      }
+
+      queryStream = query({ prompt: fallbackMessage, options }) as AsyncIterable<SDKMessage> & { close(): void };
+    }
+  } else {
+    queryStream = query({ prompt: message, options }) as AsyncIterable<SDKMessage> & { close(): void };
   }
 
-  const queryStream = query({ prompt: message, options }) as AsyncIterable<SDKMessage> & { close(): void };
-
   // Track state
-  let fullText = '';
   const activeTools = new Set<string>();
   let idleTimedOut = false;
 
@@ -151,7 +216,8 @@ export async function* chatStream(
 
       // Session init
       if (msg.type === 'system' && 'subtype' in msg && msg.subtype === 'init') {
-        yield { type: 'session', sessionId: (msg as { session_id: string }).session_id };
+        state.sessionId = (msg as { session_id: string }).session_id;
+        yield { type: 'session', sessionId: state.sessionId };
         continue;
       }
 
@@ -163,7 +229,7 @@ export async function* chatStream(
         if (event.type === 'content_block_delta') {
           const delta = event.delta as { type: string; text?: string } | undefined;
           if (delta && delta.type === 'text_delta' && delta.text) {
-            fullText += delta.text;
+            state.fullText += delta.text;
             yield { type: 'text-delta', text: delta.text };
           }
         }
@@ -174,6 +240,7 @@ export async function* chatStream(
           if (contentBlock && contentBlock.type === 'tool_use' && contentBlock.name) {
             if (!activeTools.has(contentBlock.name)) {
               activeTools.add(contentBlock.name);
+              state.toolCalls.push({ tool: contentBlock.name });
               yield { type: 'tool-start', tool: contentBlock.name };
             }
           }
@@ -184,7 +251,12 @@ export async function* chatStream(
 
       // Tool end (user message with tool result)
       if (msg.type === 'user' && 'tool_use_result' in msg && msg.tool_use_result !== undefined) {
+        // Update tool call results
         for (const toolName of activeTools) {
+          const toolCall = state.toolCalls.find(tc => tc.tool === toolName && tc.result === undefined);
+          if (toolCall) {
+            toolCall.result = (msg as { tool_use_result: unknown }).tool_use_result;
+          }
           yield { type: 'tool-end', tool: toolName };
         }
         activeTools.clear();
@@ -193,7 +265,7 @@ export async function* chatStream(
 
       // Result success
       if (msg.type === 'result' && 'subtype' in msg && msg.subtype === 'success') {
-        yield { type: 'done', text: fullText || (msg as { result: string }).result };
+        yield { type: 'done', text: state.fullText || (msg as { result: string }).result };
         continue;
       }
 
@@ -203,7 +275,7 @@ export async function* chatStream(
         yield {
           type: 'error',
           message: errors?.join('; ') || 'Agent error',
-          partialText: fullText || undefined,
+          partialText: state.fullText || undefined,
         };
         continue;
       }
@@ -216,7 +288,7 @@ export async function* chatStream(
       yield {
         type: 'error',
         message: `Agent query idle timeout after ${timeoutMs / 1000} seconds (model: ${model})`,
-        partialText: fullText || undefined,
+        partialText: state.fullText || undefined,
       };
     }
   } catch (error) {
@@ -225,7 +297,7 @@ export async function* chatStream(
     yield {
       type: 'error',
       message: errMsg,
-      partialText: fullText || undefined,
+      partialText: state.fullText || undefined,
     };
   } finally {
     if (idleTimer) clearTimeout(idleTimer);
