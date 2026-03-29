@@ -6,6 +6,7 @@ export function toCents(dollars: number): Cents {
 
 export type {
   SSESessionEvent,
+  SSEConversationEvent,
   SSETextDeltaEvent,
   SSEToolStartEvent,
   SSEToolEndEvent,

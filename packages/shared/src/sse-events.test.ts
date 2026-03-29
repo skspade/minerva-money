@@ -1,6 +1,7 @@
 import { describe, it, expect, expectTypeOf } from 'vitest';
 import type {
   SSESessionEvent,
+  SSEConversationEvent,
   SSETextDeltaEvent,
   SSEToolStartEvent,
   SSEToolEndEvent,
@@ -14,6 +15,14 @@ describe('SSE Event Types', () => {
   it('should accept a valid session event', () => {
     const event: SSEEvent = { type: 'session', sessionId: 'abc-123' };
     expect(event.type).toBe('session');
+  });
+
+  it('should accept a valid conversation event', () => {
+    const event: SSEEvent = { type: 'conversation', conversationId: 'conv-123' };
+    expect(event.type).toBe('conversation');
+    if (event.type === 'conversation') {
+      expect(event.conversationId).toBe('conv-123');
+    }
   });
 
   it('should accept a valid text-delta event', () => {
@@ -60,16 +69,17 @@ describe('SSE Event Types', () => {
     }
   });
 
-  it('should have SSEEventType covering all 6 event types', () => {
+  it('should have SSEEventType covering all 7 event types', () => {
     const types: SSEEventType[] = [
       'session',
+      'conversation',
       'text-delta',
       'tool-start',
       'tool-end',
       'done',
       'error',
     ];
-    expect(types).toHaveLength(6);
+    expect(types).toHaveLength(7);
   });
 
   it('should narrow types correctly in exhaustive switch', () => {
@@ -77,6 +87,8 @@ describe('SSE Event Types', () => {
       switch (event.type) {
         case 'session':
           return event.sessionId;
+        case 'conversation':
+          return event.conversationId;
         case 'text-delta':
           return event.text;
         case 'tool-start':
@@ -102,6 +114,7 @@ describe('SSE Event Types', () => {
 
   it('should have correct type relationships', () => {
     expectTypeOf<SSESessionEvent>().toMatchTypeOf<SSEEvent>();
+    expectTypeOf<SSEConversationEvent>().toMatchTypeOf<SSEEvent>();
     expectTypeOf<SSETextDeltaEvent>().toMatchTypeOf<SSEEvent>();
     expectTypeOf<SSEToolStartEvent>().toMatchTypeOf<SSEEvent>();
     expectTypeOf<SSEToolEndEvent>().toMatchTypeOf<SSEEvent>();

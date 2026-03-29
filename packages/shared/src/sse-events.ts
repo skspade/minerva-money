@@ -12,6 +12,12 @@ export interface SSESessionEvent {
   readonly sessionId: string;
 }
 
+/** Emitted early in the stream to identify the conversation. Sent after session event, before text deltas. */
+export interface SSEConversationEvent {
+  readonly type: 'conversation';
+  readonly conversationId: string;
+}
+
 /** Emitted for each incremental text token from the LLM. */
 export interface SSETextDeltaEvent {
   readonly type: 'text-delta';
@@ -49,6 +55,7 @@ export interface SSEErrorEvent {
  */
 export type SSEEvent =
   | SSESessionEvent
+  | SSEConversationEvent
   | SSETextDeltaEvent
   | SSEToolStartEvent
   | SSEToolEndEvent
