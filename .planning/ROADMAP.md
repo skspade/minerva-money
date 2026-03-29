@@ -211,7 +211,9 @@ Full details: [milestones/v2.8-ROADMAP.md](milestones/v2.8-ROADMAP.md)
   3. The active conversation is visually highlighted; clicking another conversation loads it
   4. User can rename a conversation inline and delete a conversation with a confirmation prompt
   5. On screens below 768px, the sidebar is hidden by default and toggles as an overlay via a history icon in the chat header; selecting a conversation auto-closes the overlay
-**Plans**: TBD
+**Plans**: 2 plans
+  - [ ] 56-01-PLAN.md — Sidebar display helper functions (TDD)
+  - [ ] 56-02-PLAN.md — ConversationSidebar component and ChatPage layout integration
 
 ### Phase 57: Retention Cleanup
 **Goal**: Old conversations are automatically purged to prevent unbounded database and disk growth
