@@ -9,27 +9,27 @@ Requirements for Chat History milestone. Each maps to roadmap phases.
 
 ### Schema
 
-- [ ] **SCHEMA-01**: chat_conversations table persists conversation metadata with id (UUID), title, model, sdk_session_id, created_at, and updated_at columns
-- [ ] **SCHEMA-02**: chat_messages table persists per-message data with conversation_id FK (CASCADE delete), role, content, tool_calls (JSON), and created_at
-- [ ] **SCHEMA-03**: Index on chat_messages(conversation_id, created_at) for efficient retrieval
+- [x] **SCHEMA-01**: chat_conversations table persists conversation metadata with id (UUID), title, model, sdk_session_id, created_at, and updated_at columns
+- [x] **SCHEMA-02**: chat_messages table persists per-message data with conversation_id FK (CASCADE delete), role, content, tool_calls (JSON), and created_at
+- [x] **SCHEMA-03**: Index on chat_messages(conversation_id, created_at) for efficient retrieval
 
 ### Service
 
-- [ ] **SVC-01**: Chat history service creates conversations with UUID and stores SDK session ID
-- [ ] **SVC-02**: Chat history service appends messages (user + assistant) with optional tool_calls JSON after each exchange
-- [ ] **SVC-03**: Chat history service auto-generates conversation title from first user message (~60 chars, truncated at word boundary)
-- [ ] **SVC-04**: Chat history service lists conversations ordered by updated_at DESC with message count
-- [ ] **SVC-05**: Chat history service returns full conversation with all messages for browsing and display
-- [ ] **SVC-06**: Chat history service deletes conversations (CASCADE handles messages)
-- [ ] **SVC-07**: Chat history service renames conversation title
-- [ ] **SVC-08**: Chat history service purges conversations older than configurable retention threshold
+- [x] **SVC-01**: Chat history service creates conversations with UUID and stores SDK session ID
+- [x] **SVC-02**: Chat history service appends messages (user + assistant) with optional tool_calls JSON after each exchange
+- [x] **SVC-03**: Chat history service auto-generates conversation title from first user message (~60 chars, truncated at word boundary)
+- [x] **SVC-04**: Chat history service lists conversations ordered by updated_at DESC with message count
+- [x] **SVC-05**: Chat history service returns full conversation with all messages for browsing and display
+- [x] **SVC-06**: Chat history service deletes conversations (CASCADE handles messages)
+- [x] **SVC-07**: Chat history service renames conversation title
+- [x] **SVC-08**: Chat history service purges conversations older than configurable retention threshold
 
 ### API
 
-- [ ] **API-01**: tRPC chat.history.list query returns conversation list for sidebar
-- [ ] **API-02**: tRPC chat.history.get query returns conversation with all messages
-- [ ] **API-03**: tRPC chat.history.delete mutation removes a conversation
-- [ ] **API-04**: tRPC chat.history.updateTitle mutation renames a conversation
+- [x] **API-01**: tRPC chat.history.list query returns conversation list for sidebar
+- [x] **API-02**: tRPC chat.history.get query returns conversation with all messages
+- [x] **API-03**: tRPC chat.history.delete mutation removes a conversation
+- [x] **API-04**: tRPC chat.history.updateTitle mutation renames a conversation
 - [ ] **API-05**: SSE endpoint accepts optional conversationId in request body
 - [ ] **API-06**: SSE stream emits conversation event with conversationId early in response
 - [ ] **API-07**: Agent service persists user message and assistant response (with tool calls) after each exchange
@@ -96,21 +96,21 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SCHEMA-01 | Phase 53 | Pending |
-| SCHEMA-02 | Phase 53 | Pending |
-| SCHEMA-03 | Phase 53 | Pending |
-| SVC-01 | Phase 53 | Pending |
-| SVC-02 | Phase 53 | Pending |
-| SVC-03 | Phase 53 | Pending |
-| SVC-04 | Phase 53 | Pending |
-| SVC-05 | Phase 53 | Pending |
-| SVC-06 | Phase 53 | Pending |
-| SVC-07 | Phase 53 | Pending |
-| SVC-08 | Phase 53 | Pending |
-| API-01 | Phase 53 | Pending |
-| API-02 | Phase 53 | Pending |
-| API-03 | Phase 53 | Pending |
-| API-04 | Phase 53 | Pending |
+| SCHEMA-01 | Phase 53 | Done |
+| SCHEMA-02 | Phase 53 | Done |
+| SCHEMA-03 | Phase 53 | Done |
+| SVC-01 | Phase 53 | Done |
+| SVC-02 | Phase 53 | Done |
+| SVC-03 | Phase 53 | Done |
+| SVC-04 | Phase 53 | Done |
+| SVC-05 | Phase 53 | Done |
+| SVC-06 | Phase 53 | Done |
+| SVC-07 | Phase 53 | Done |
+| SVC-08 | Phase 53 | Done |
+| API-01 | Phase 53 | Done |
+| API-02 | Phase 53 | Done |
+| API-03 | Phase 53 | Done |
+| API-04 | Phase 53 | Done |
 | API-05 | Phase 54 | Pending |
 | API-06 | Phase 54 | Pending |
 | API-07 | Phase 54 | Pending |
