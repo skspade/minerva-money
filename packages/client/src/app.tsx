@@ -25,6 +25,7 @@ export default function App() {
           <Route path="budget" element={<BudgetPage />} />
           <Route path="reports" element={<ReportsPage />} />
           <Route path="chat" element={<ChatPage />} />
+          <Route path="chat/:conversationId" element={<ChatPage />} />
           <Route path="import" element={<ImportPage />} />
         </Route>
       </Routes>
