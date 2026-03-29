@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useParams, useNavigate } from 'react-router';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTRPC } from '../trpc';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -49,19 +50,76 @@ function parseConfirmation(content: string): {
 }
 
 export default function ChatPage() {
+  const { conversationId: urlConversationId } = useParams<{ conversationId: string }>();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const trpc = useTRPC();
+
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [sessionId, setSessionId] = useState<string | undefined>();
+  const [conversationId, setConversationId] = useState<string | undefined>(urlConversationId);
   const [respondedConfirmations, setRespondedConfirmations] = useState<Set<number>>(new Set());
   const [selectedModel, setSelectedModel] = useState<string>('claude-sonnet-4-20250514');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageContainerRef = useRef<HTMLDivElement>(null);
   const userScrolledUpRef = useRef(false);
-  const trpc = useTRPC();
   const { data: models } = useQuery(trpc.agent.models.queryOptions());
 
-  const onComplete = useCallback((text: string, sid: string) => {
-    setSessionId(sid);
+  // Fetch conversation data when URL has a conversationId
+  const { data: conversation, error: convError, isLoading: convLoading } = useQuery(
+    trpc.chatHistory.get.queryOptions(
+      { conversationId: urlConversationId! },
+      { enabled: !!urlConversationId },
+    ),
+  );
+
+  // Redirect on invalid conversation ID (NOT_FOUND from tRPC)
+  useEffect(() => {
+    if (convError) {
+      navigate('/chat', { replace: true });
+    }
+  }, [convError, navigate]);
+
+  // Load conversation messages when data arrives
+  useEffect(() => {
+    if (!conversation) return;
+    const loadedMessages: ChatMessage[] = conversation.messages
+      .filter(m => m.role === 'user' || m.role === 'assistant')
+      .map(m => {
+        if (m.role === 'assistant') {
+          const { textContent, confirmation } = parseConfirmation(m.content);
+          return { role: 'assistant' as const, content: textContent, confirmation };
+        }
+        return { role: m.role as MessageRole, content: m.content, confirmation: null };
+      });
+    setMessages(loadedMessages);
+    setSelectedModel(conversation.model);
+    // Mark all loaded confirmations as already responded (historical confirmations are display-only)
+    const confirmedIndices = new Set(
+      loadedMessages
+        .map((m, i) => m.confirmation ? i : -1)
+        .filter(i => i >= 0),
+    );
+    setRespondedConfirmations(confirmedIndices);
+    setConversationId(conversation.id);
+  }, [conversation]);
+
+  // Handle conversation switch via browser back/forward
+  useEffect(() => {
+    if (urlConversationId !== conversationId) {
+      setMessages([]);
+      setRespondedConfirmations(new Set());
+      setConversationId(urlConversationId);
+    }
+    if (!urlConversationId) {
+      // Navigated back to /chat — clear everything for fresh chat
+      setMessages([]);
+      setRespondedConfirmations(new Set());
+      setConversationId(undefined);
+    }
+  }, [urlConversationId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const onComplete = useCallback((text: string, _sessionId: string) => {
     const { textContent, confirmation } = parseConfirmation(text);
     setMessages((prev) => [
       ...prev,
@@ -69,7 +127,14 @@ export default function ChatPage() {
     ]);
   }, []);
 
-  const { send, streamingText, activeTool, isStreaming, error } = useStreamingChat({ onComplete });
+  const onConversation = useCallback((newConversationId: string) => {
+    setConversationId(newConversationId);
+    navigate(`/chat/${newConversationId}`, { replace: true });
+    // Pre-invalidate chatHistory.list so Phase 56 sidebar sees new conversations
+    queryClient.invalidateQueries({ queryKey: trpc.chatHistory.list.queryKey() });
+  }, [navigate, queryClient, trpc.chatHistory.list]);
+
+  const { send, streamingText, activeTool, isStreaming, error } = useStreamingChat({ onComplete, onConversation });
 
   // Append error messages reactively
   useEffect(() => {
@@ -117,7 +182,7 @@ export default function ChatPage() {
       ...prev,
       { role: 'user', content: messageText, confirmation: null },
     ]);
-    send(messageText, sessionId, selectedModel);
+    send(messageText, conversationId, selectedModel);
   }
 
   function handleConfirm(index: number) {
@@ -133,8 +198,9 @@ export default function ChatPage() {
   function handleModelChange(e: React.ChangeEvent<HTMLSelectElement>) {
     setSelectedModel(e.target.value);
     setMessages([]);
-    setSessionId(undefined);
+    setConversationId(undefined);
     setRespondedConfirmations(new Set());
+    navigate('/chat', { replace: true });
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -148,7 +214,15 @@ export default function ChatPage() {
     <div className="fixed inset-0 top-0 md:top-[56px] bottom-[calc(env(safe-area-inset-bottom)+60px)] md:bottom-0 flex flex-col bg-gray-50 z-10">
       {/* Message area */}
       <div ref={messageContainerRef} className="flex-1 overflow-y-auto overscroll-contain p-4">
-        {messages.length === 0 && !isStreaming ? (
+        {convLoading && urlConversationId ? (
+          <div className="flex items-center justify-center h-full">
+            <div className="flex items-center gap-1">
+              <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:0ms]" />
+              <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:150ms]" />
+              <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:300ms]" />
+            </div>
+          </div>
+        ) : messages.length === 0 && !isStreaming ? (
           <div className="flex flex-col items-center justify-center h-full text-center">
             <h2 className="text-2xl font-semibold text-gray-800 mb-2">
               Ask Minerva anything about your finances
