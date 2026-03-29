@@ -197,7 +197,9 @@ Full details: [milestones/v2.8-ROADMAP.md](milestones/v2.8-ROADMAP.md)
   2. Browser back and forward buttons navigate between previously visited conversations
   3. Navigating to /chat/:invalidId redirects to /chat without an error screen
   4. After sending the first message in a new chat, the browser URL updates to /chat/:newConversationId without a full page reload
-**Plans**: TBD
+**Plans**: 2 plans
+  - [ ] 55-01-PLAN.md — Streaming chat hook conversationId support
+  - [ ] 55-02-PLAN.md — ChatPage conversation lifecycle and routing
 
 ### Phase 56: Sidebar UI and Mobile
 **Goal**: Users can browse, manage, and switch between conversations from a sidebar that works on both desktop and mobile
