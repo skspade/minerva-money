@@ -10,13 +10,16 @@
     "build": "npm run build --workspace=packages/shared && npm run build --workspace=packages/server && npm run build --workspace=packages/client",
     "start:prod": "node --env-file=.env packages/server/dist/index.js",
     "test": "vitest run",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
     "lint": "eslint packages/*/src"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "@typescript-eslint/eslint-plugin": "^8.18.0",
+    "@typescript-eslint/parser": "^8.18.0",
     "concurrently": "^9.1.0",
     "eslint": "^9.17.0",
-    "@typescript-eslint/parser": "^8.18.0",
-    "@typescript-eslint/eslint-plugin": "^8.18.0",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
   }
