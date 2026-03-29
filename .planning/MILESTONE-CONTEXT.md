@@ -1,30 +1,34 @@
 # Milestone Context
 
-**Source:** Brainstorm session (Sync Error Visibility)
-**Design:** .planning/designs/2026-03-26-sync-error-visibility-design.md
+**Source:** Brainstorm session (Adding chat history to the chat functionality)
+**Design:** .planning/designs/2026-03-28-chat-history-design.md
 
 ## Milestone Goal
 
-Surface per-account sync errors in the UI so the user immediately knows when a bank connection needs attention, instead of silently showing "success" when SimpleFIN returns account-level errors.
+Add persistent chat history so users can browse past conversations and resume them with full agent context. Uses a hybrid approach: SQLite stores all messages for browsing, and the Claude Agent SDK session is lazily rebuilt from stored messages only when the user resumes chatting.
 
 ## Features
 
 ### Database Schema
 
-New `sync_warnings` table to persist per-account errors alongside each sync_log entry. Supports error history tracking. New `'partial'` status value for sync_log when accounts have errors but the API call succeeded.
+Two new tables (`chat_conversations`, `chat_messages`) in migration 008. Conversations track title, model, and timestamps. Messages store role, content, and tool call data (JSON) for SDK context rebuild. CASCADE delete from conversations to messages. Index on `(conversation_id, created_at)`.
 
-### Sync Service Changes
+### Service Layer
 
-Persist per-account warnings to `sync_warnings` table. Set sync status to `'partial'` when errors exist but sync didn't fail. Parse SimpleFIN error list with account IDs. Return structured warnings in SyncResult type.
+New `chat-history-service.ts` module with CRUD operations: createConversation, addMessage, listConversations, getConversation, deleteConversation, purgeOldConversations. Integrates with existing agent service — `chatStream()` and `chat()` gain `conversationId` parameter and persist messages after each exchange.
 
-### tRPC API Changes
+### API Layer (tRPC + SSE)
 
-Extend `sync.status` response with `warnings` array containing accountId, accountName, and message. Query `sync_warnings` joined to latest sync_log entry.
+New `chat.history` tRPC router with list, get, delete, and updateTitle endpoints. SSE endpoint gains `conversationId` in request body and emits new `{type: 'conversation'}` event. Resume flow: server loads stored messages, creates new SDK session with injected history.
 
-### Dashboard UI Changes
+### Client UI
 
-Amber "Partial" badge on sync status card. Account warnings list with simplified error messages. Link to SimpleFIN dashboard (bridge.simplefin.org) for reconnection. Clean display when no warnings.
+Conversation sidebar (left panel) with "New Chat" button, auto-titled conversation list, and rename/delete actions. Mobile: sidebar as toggleable overlay. URL routing: `/chat` and `/chat/:conversationId`. Lazy SDK rebuild — no agent session created until user sends a message in a resumed conversation.
 
-### Navbar SyncStatus Changes
+### SDK Context Rebuild Strategy
 
-Amber warning indicator when latest sync is partial. Tooltip showing count of affected accounts. Four-state display: running, success, partial, error.
+On resume: load messages from DB, build SDK `messages` array with user/assistant/tool_result turns, pass as conversation history to new SDK session. Store tool calls as JSON (`{toolName, toolUseId, input, output}`). Context window management: inject last 20 turns max, display all in UI.
+
+### Scheduled Cleanup & Configuration
+
+Daily 3 AM croner job purges conversations older than 90 days (configurable via `CHAT_RETENTION_DAYS` env var). No new dependencies — uses crypto.randomUUID(), existing croner infrastructure.
