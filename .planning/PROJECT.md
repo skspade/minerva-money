@@ -62,18 +62,29 @@ Accurate, auto-synced financial data with envelope budgeting that lets you see w
 - ✓ Dashboard/reporting integration with "Manual" badges and "Last imported" labels — v2.7
 - ✓ Agent create_account tool with duplicate detection and system prompt guidance — v2.7
 
+- ✓ sync_warnings table persists per-account errors with UPSERT schema — v2.8
+- ✓ Sync service writes warnings, determines partial/success/error status, auto-clears resolved — v2.8
+- ✓ tRPC sync.status endpoint returns structured warnings array — v2.8
+- ✓ Dashboard amber "Partial" badge with per-account error list and SimpleFIN reconnect link — v2.8
+- ✓ Navbar amber warning indicator with tooltip for affected account count — v2.8
+- ✓ Agent get_sync_status returns warnings and fixes column name bugs — v2.8
+
 ### Active
 
-**Current Milestone: v2.8 Sync Error Visibility**
+**Current Milestone: v2.9 Chat History**
 
-**Goal:** Surface per-account sync errors in the UI so the user immediately knows when a bank connection needs attention, instead of silently showing "success" when SimpleFIN returns account-level errors.
+**Goal:** Add persistent chat history so users can browse past conversations and resume them with full agent context, using SQLite for storage and lazy SDK session rebuild on resume.
 
 **Target features:**
-- sync_warnings table to persist per-account errors with history
-- 'partial' sync status when accounts have errors but API call succeeded
-- tRPC sync.status endpoint returns structured warnings
-- Dashboard amber "Partial" badge with account error list and SimpleFIN reconnect link
-- Navbar amber warning indicator with tooltip for affected account count
+- chat_conversations and chat_messages tables for persistence
+- Chat history service with CRUD operations and auto-titling
+- tRPC chat.history router (list, get, delete, rename)
+- SSE endpoint gains conversationId for message persistence
+- Conversation sidebar with auto-titled list, rename, delete
+- SDK context rebuild from stored messages on conversation resume
+- Scheduled cleanup of old conversations (configurable retention)
+- Mobile-responsive sidebar (overlay on small screens)
+- URL routing for conversations (/chat/:conversationId)
 
 ### Out of Scope
 
@@ -86,7 +97,6 @@ Accurate, auto-synced financial data with envelope budgeting that lets you see w
 - Financial advice / recommendations — liability risk; agent answers data questions only
 - Voice input/output — text-only chat sufficient
 - Agent-initiated proactive alerts — dashboard already shows budget status
-- Persistent chat history database — SDK sessions handle within-session continuity
 - Category deletion/rename via agent — UI concern with sort ordering; creation is safe but destructive ops stay in UI
 - Multi-agent orchestration — single agent sufficient
 - Stop button for streaming — deferred to future milestone (STOP-01)
@@ -98,7 +108,7 @@ Accurate, auto-synced financial data with envelope budgeting that lets you see w
 
 ## Context
 
-- Shipped v2.7 with 22,030 LOC TypeScript across 46 phases (9 milestones)
+- Shipped v2.8 with sync error visibility across 52 phases (10 milestones)
 - Tech stack: React + Tailwind / Express + tRPC / SQLite via better-sqlite3 / TanStack Query / Claude Agent SDK / csv-parse
 - Replacing Monarch Money with a self-hosted alternative (CSV import with account filtering enables selective data migration)
 - Agent now supports model selection (Haiku/Sonnet/Opus), category creation, account creation, and real-time token-by-token streaming with tool activity indicators
@@ -171,4 +181,4 @@ Accurate, auto-synced financial data with envelope budgeting that lets you see w
 | No index on accounts.source column | Table has ~3 rows at current scale — not needed | ✓ Good — avoid premature optimization |
 
 ---
-*Last updated: 2026-03-26 after v2.8 milestone start*
+*Last updated: 2026-03-28 after v2.9 milestone start*

@@ -11,7 +11,8 @@
 - ✅ **v2.5 Chat Enhancements** — Phases 33-37 (shipped 2026-03-24)
 - ✅ **v2.6 Streaming Chat** — Phases 38-43 (shipped 2026-03-25)
 - ✅ **v2.7 Manual Accounts** — Phases 44-46 (shipped 2026-03-25)
-- 🚧 **v2.8 Sync Error Visibility** — Phases 47-52 (in progress)
+- ✅ **v2.8 Sync Error Visibility** — Phases 47-52 (shipped 2026-03-28)
+- 🚧 **v2.9 Chat History** — Phases 53-57 (in progress)
 
 ## Phases
 
@@ -133,91 +134,91 @@ Full details: [milestones/v2.7-ROADMAP.md](milestones/v2.7-ROADMAP.md)
 
 </details>
 
-### 🚧 v2.8 Sync Error Visibility (In Progress)
+<details>
+<summary>✅ v2.8 Sync Error Visibility (Phases 47-52) — SHIPPED 2026-03-28</summary>
 
-**Milestone Goal:** Surface per-account sync errors in the UI so the user immediately knows when a bank connection needs attention, instead of silently showing "success" when SimpleFIN returns account-level errors.
+- [x] Phase 47: Database Foundation (1/1 plan) — completed 2026-03-27
+- [x] Phase 48: Sync Service Warning Pipeline (1/1 plan) — completed 2026-03-27
+- [x] Phase 49: tRPC Response Extension (1/1 plan) — completed 2026-03-26
+- [x] Phase 50: Dashboard Warning UI (1/1 plan) — completed 2026-03-27
+- [x] Phase 51: Navbar Warning Indicator (1/1 plan) — completed 2026-03-27
+- [x] Phase 52: Agent Tool Update (1/1 plan) — completed 2026-03-27
 
-- [x] **Phase 47: Database Foundation** - sync_warnings table with UPSERT-compatible schema and foreign key to sync_log (completed 2026-03-27)
-- [x] **Phase 48: Sync Service Warning Pipeline** (1 plan) - Persist per-account warnings, determine partial/success/error status, auto-clear resolved warnings (completed 2026-03-27)
-- [x] **Phase 49: tRPC Response Extension** (1 plan) - Structured warnings array in sync.status response for client consumption (completed 2026-03-26)
-- [x] **Phase 50: Dashboard Warning UI** (1 plan) - Amber "Partial" badge, per-account error list, and SimpleFIN reconnect link (completed 2026-03-27)
-- [x] **Phase 51: Navbar Warning Indicator** - Amber indicator with hover tooltip showing affected account names (completed 2026-03-27)
-- [x] **Phase 52: Agent Tool Update** - Fix existing column name bugs and add warnings to get_sync_status response (completed 2026-03-27)
+Full details: [milestones/v2.8-ROADMAP.md](milestones/v2.8-ROADMAP.md)
+
+</details>
+
+### 🚧 v2.9 Chat History (In Progress)
+
+**Milestone Goal:** Add persistent chat history so users can browse past conversations and resume them with full agent context, using SQLite for storage and SDK session resume for context continuity.
+
+- [ ] **Phase 53: Schema, Service, and tRPC Router** - Data layer foundation with full CRUD and conversation management API
+- [ ] **Phase 54: SSE Integration and Conversation Resume** - Server persists messages during streaming and resumes SDK sessions
+- [ ] **Phase 55: Client Conversation Lifecycle** - URL routing, conversation state, and message loading in ChatPage
+- [ ] **Phase 56: Sidebar UI and Mobile** - Conversation list, inline management, and responsive overlay
+- [ ] **Phase 57: Retention Cleanup** - Scheduled purge of old conversations and SDK session files
 
 ## Phase Details
 
-### Phase 47: Database Foundation
-**Goal**: Sync warnings can be persisted and queried without unbounded table growth
-**Depends on**: Nothing (first phase of v2.8)
-**Requirements**: SCHEMA-01, SCHEMA-02
+### Phase 53: Schema, Service, and tRPC Router
+**Goal**: Conversations and messages can be created, queried, and managed through the tRPC API
+**Depends on**: Nothing (first phase of v2.9)
+**Requirements**: SCHEMA-01, SCHEMA-02, SCHEMA-03, SVC-01, SVC-02, SVC-03, SVC-04, SVC-05, SVC-06, SVC-07, SVC-08, API-01, API-02, API-03, API-04
 **Success Criteria** (what must be TRUE):
-  1. A sync_warnings table exists with account_id, account_name, error_code, message, first_seen, last_seen, and occurrence_count columns
-  2. Each sync_warnings row references a sync_log entry via foreign key with CASCADE delete
-  3. The table uses a UNIQUE constraint on account_id enabling UPSERT (one active row per account, not append-only)
-  4. Migration 007 applies cleanly on both fresh and existing databases
-**Plans**: 1 plan
-- [ ] 47-01-PLAN.md — Create sync_warnings table via migration 007 with schema tests
+  1. User can call tRPC chat.history.list and receive a list of conversations ordered by most recent, each with title, model, message count, and timestamps
+  2. User can call tRPC chat.history.get with a conversation ID and receive the full message history including role, content, and tool_calls JSON
+  3. User can delete a conversation via tRPC and all associated messages are CASCADE-deleted
+  4. User can rename a conversation title via tRPC
+  5. Conversation titles are auto-generated from the first user message, truncated at ~60 characters on a word boundary
+**Plans**: TBD
 
-### Phase 48: Sync Service Warning Pipeline
-**Goal**: Per-account sync errors are persisted and the sync_log accurately reflects partial success
-**Depends on**: Phase 47
-**Requirements**: SYNC-01, SYNC-02, SYNC-03, SYNC-04
+### Phase 54: SSE Integration and Conversation Resume
+**Goal**: Every chat exchange is persisted to a conversation, and returning to a conversation resumes the SDK session with full context
+**Depends on**: Phase 53
+**Requirements**: API-05, API-06, API-07, RESUME-01, RESUME-02, RESUME-03
 **Success Criteria** (what must be TRUE):
-  1. When SimpleFIN returns account-level errors, a warning row is written to sync_warnings for each affected account
-  2. sync_log status is 'partial' when some accounts have errors but the API call itself succeeded
-  3. Warnings are automatically cleared (resolved) for accounts that sync successfully in a subsequent run
-  4. Connection-level SimpleFIN errors (with conn_id but no account_id) are mapped to the correct accounts
-  5. Stale 'running' sync_log entries are cleaned up before each new sync run
-**Plans**: 1 plan
-- [ ] 48-01-PLAN.md — TDD: Warning pipeline (persist warnings, partial status, auto-clear, connection mapping, stale cleanup)
+  1. Sending a message without a conversationId creates a new conversation and the SSE stream emits a conversation event with the new conversationId
+  2. Sending a message with an existing conversationId appends to that conversation and resumes the SDK session via the stored sdk_session_id
+  3. Both user and assistant messages (with tool_calls) are persisted after each exchange -- verifiable by calling chat.history.get
+  4. When the SDK session JSONL file is missing on disk, the conversation gracefully falls back to a new session without returning an error to the user
+**Plans**: TBD
 
-### Phase 49: tRPC Response Extension
-**Goal**: Client can consume structured per-account warnings from the existing sync.status endpoint
-**Depends on**: Phase 48
-**Requirements**: API-01, API-02
+### Phase 55: Client Conversation Lifecycle
+**Goal**: Users can navigate between conversations via URL and the chat UI loads the correct conversation state
+**Depends on**: Phase 54
+**Requirements**: NAV-01, NAV-02, NAV-03
 **Success Criteria** (what must be TRUE):
-  1. sync.status tRPC response includes a warnings array with accountId, accountName, errorCode, message, and lastSeen per entry
-  2. Warnings are queried from sync_warnings and returned alongside existing sync status fields (no separate endpoint)
-  3. When no warnings exist, the response includes an empty array (existing UI behavior unchanged)
-**Plans**: 1 plan
-- [x] 49-01-PLAN.md — TDD: Extend sync.status with warnings array (completed 2026-03-26)
+  1. Navigating to /chat/:conversationId loads that conversation's messages and displays them in the chat area
+  2. Browser back and forward buttons navigate between previously visited conversations
+  3. Navigating to /chat/:invalidId redirects to /chat without an error screen
+  4. After sending the first message in a new chat, the browser URL updates to /chat/:newConversationId without a full page reload
+**Plans**: TBD
 
-### Phase 50: Dashboard Warning UI
-**Goal**: User sees per-account sync errors on the dashboard with actionable next steps
-**Depends on**: Phase 49
-**Requirements**: DASH-01, DASH-02, DASH-03, DASH-04
+### Phase 56: Sidebar UI and Mobile
+**Goal**: Users can browse, manage, and switch between conversations from a sidebar that works on both desktop and mobile
+**Depends on**: Phase 55
+**Requirements**: SIDE-01, SIDE-02, SIDE-03, SIDE-04, SIDE-05, SIDE-06, SIDE-07, MOBILE-01, MOBILE-02, MOBILE-03
 **Success Criteria** (what must be TRUE):
-  1. Dashboard sync card shows an amber "Partial" badge when the latest sync status is 'partial'
-  2. Each affected account is listed by name with a simplified error message
-  3. A SimpleFIN reconnect link appears when connection errors exist
-  4. When no warnings exist, the sync card renders identically to before (no visual regression)
-**Plans**: 1 plan
-- [ ] 50-01-PLAN.md — Amber partial badge, per-account warning list, and SimpleFIN reconnect link
+  1. A sidebar displays all conversations grouped by recency ("Today", "Yesterday", "Previous 7 days", "Older") with relative timestamps and model badges
+  2. Clicking "New Chat" navigates to /chat and starts a fresh conversation
+  3. The active conversation is visually highlighted; clicking another conversation loads it
+  4. User can rename a conversation inline and delete a conversation with a confirmation prompt
+  5. On screens below 768px, the sidebar is hidden by default and toggles as an overlay via a history icon in the chat header; selecting a conversation auto-closes the overlay
+**Plans**: TBD
 
-### Phase 51: Navbar Warning Indicator
-**Goal**: User is alerted to sync problems from any page without navigating to the dashboard
-**Depends on**: Phase 49
-**Requirements**: NAV-01, NAV-02
+### Phase 57: Retention Cleanup
+**Goal**: Old conversations are automatically purged to prevent unbounded database and disk growth
+**Depends on**: Phase 53
+**Requirements**: CLEAN-01, CLEAN-02
 **Success Criteria** (what must be TRUE):
-  1. Navbar SyncStatus component shows an amber warning indicator when the latest sync is 'partial'
-  2. Hovering over the indicator reveals a tooltip with the count and names of affected accounts
-**Plans**: 1 plan
-  - [ ] 51-01-PLAN.md — Add amber warning indicator and tooltip to SyncStatus component
-
-### Phase 52: Agent Tool Update
-**Goal**: Agent accurately reports sync status including warnings and fixes pre-existing query bugs
-**Depends on**: Phase 49
-**Requirements**: AGENT-01
-**Success Criteria** (what must be TRUE):
-  1. Agent get_sync_status tool returns active sync warnings alongside existing status data
-  2. Pre-existing column name bugs in query-tools.ts are fixed (transactions_updated -> transactions_added, error -> error_message)
-**Plans**: 1 plan
-- [ ] 52-01-PLAN.md — Fix column name bugs and add sync warnings to get_sync_status
+  1. A croner job runs daily at 3 AM and deletes conversations older than CHAT_RETENTION_DAYS (default 90)
+  2. Cleanup removes both SQLite rows (CASCADE handles messages) and the associated SDK session JSONL files from disk
+**Plans**: TBD
 
 ## Progress
 
 **Execution Order:**
-Phases 47-49 are strictly sequential. Phases 50, 51, 52 depend only on Phase 49 and are independent of each other.
+Phases 53-56 are strictly sequential. Phase 57 depends only on Phase 53 and can run after Phase 53 or in parallel with later phases.
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -230,9 +231,9 @@ Phases 47-49 are strictly sequential. Phases 50, 51, 52 depend only on Phase 49 
 | 33-37 | v2.5 | 5/5 | Complete | 2026-03-24 |
 | 38-43 | v2.6 | 6/6 | Complete | 2026-03-25 |
 | 44-46 | v2.7 | 6/6 | Complete | 2026-03-25 |
-| 47. Database Foundation | 1/1 | Complete   | 2026-03-27 | - |
-| 48. Sync Service Warning Pipeline | 1/1 | Complete    | 2026-03-27 | - |
-| 49. tRPC Response Extension | v2.8 | 1/1 | Complete | 2026-03-26 |
-| 50. Dashboard Warning UI | 1/1 | Complete    | 2026-03-27 | - |
-| 51. Navbar Warning Indicator | 1/1 | Complete    | 2026-03-27 | - |
-| 52. Agent Tool Update | 1/1 | Complete    | 2026-03-27 | - |
+| 47-52 | v2.8 | 6/6 | Complete | 2026-03-28 |
+| 53. Schema, Service, and tRPC Router | v2.9 | 0/0 | Not started | - |
+| 54. SSE Integration and Conversation Resume | v2.9 | 0/0 | Not started | - |
+| 55. Client Conversation Lifecycle | v2.9 | 0/0 | Not started | - |
+| 56. Sidebar UI and Mobile | v2.9 | 0/0 | Not started | - |
+| 57. Retention Cleanup | v2.9 | 0/0 | Not started | - |

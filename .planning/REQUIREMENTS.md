@@ -96,48 +96,48 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SCHEMA-01 | — | Pending |
-| SCHEMA-02 | — | Pending |
-| SCHEMA-03 | — | Pending |
-| SVC-01 | — | Pending |
-| SVC-02 | — | Pending |
-| SVC-03 | — | Pending |
-| SVC-04 | — | Pending |
-| SVC-05 | — | Pending |
-| SVC-06 | — | Pending |
-| SVC-07 | — | Pending |
-| SVC-08 | — | Pending |
-| API-01 | — | Pending |
-| API-02 | — | Pending |
-| API-03 | — | Pending |
-| API-04 | — | Pending |
-| API-05 | — | Pending |
-| API-06 | — | Pending |
-| API-07 | — | Pending |
-| RESUME-01 | — | Pending |
-| RESUME-02 | — | Pending |
-| RESUME-03 | — | Pending |
-| SIDE-01 | — | Pending |
-| SIDE-02 | — | Pending |
-| SIDE-03 | — | Pending |
-| SIDE-04 | — | Pending |
-| SIDE-05 | — | Pending |
-| SIDE-06 | — | Pending |
-| SIDE-07 | — | Pending |
-| MOBILE-01 | — | Pending |
-| MOBILE-02 | — | Pending |
-| MOBILE-03 | — | Pending |
-| NAV-01 | — | Pending |
-| NAV-02 | — | Pending |
-| NAV-03 | — | Pending |
-| CLEAN-01 | — | Pending |
-| CLEAN-02 | — | Pending |
+| SCHEMA-01 | Phase 53 | Pending |
+| SCHEMA-02 | Phase 53 | Pending |
+| SCHEMA-03 | Phase 53 | Pending |
+| SVC-01 | Phase 53 | Pending |
+| SVC-02 | Phase 53 | Pending |
+| SVC-03 | Phase 53 | Pending |
+| SVC-04 | Phase 53 | Pending |
+| SVC-05 | Phase 53 | Pending |
+| SVC-06 | Phase 53 | Pending |
+| SVC-07 | Phase 53 | Pending |
+| SVC-08 | Phase 53 | Pending |
+| API-01 | Phase 53 | Pending |
+| API-02 | Phase 53 | Pending |
+| API-03 | Phase 53 | Pending |
+| API-04 | Phase 53 | Pending |
+| API-05 | Phase 54 | Pending |
+| API-06 | Phase 54 | Pending |
+| API-07 | Phase 54 | Pending |
+| RESUME-01 | Phase 54 | Pending |
+| RESUME-02 | Phase 54 | Pending |
+| RESUME-03 | Phase 54 | Pending |
+| NAV-01 | Phase 55 | Pending |
+| NAV-02 | Phase 55 | Pending |
+| NAV-03 | Phase 55 | Pending |
+| SIDE-01 | Phase 56 | Pending |
+| SIDE-02 | Phase 56 | Pending |
+| SIDE-03 | Phase 56 | Pending |
+| SIDE-04 | Phase 56 | Pending |
+| SIDE-05 | Phase 56 | Pending |
+| SIDE-06 | Phase 56 | Pending |
+| SIDE-07 | Phase 56 | Pending |
+| MOBILE-01 | Phase 56 | Pending |
+| MOBILE-02 | Phase 56 | Pending |
+| MOBILE-03 | Phase 56 | Pending |
+| CLEAN-01 | Phase 57 | Pending |
+| CLEAN-02 | Phase 57 | Pending |
 
 **Coverage:**
 - v2.9 requirements: 36 total
-- Mapped to phases: 0
-- Unmapped: 36
+- Mapped to phases: 36
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-28*
-*Last updated: 2026-03-28 after initial definition*
+*Last updated: 2026-03-28 after roadmap creation*

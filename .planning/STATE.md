@@ -1,40 +1,40 @@
 ---
 gsd_state_version: 1.0
-milestone: v2.8
-milestone_name: Sync Error Visibility
-status: unknown
-last_updated: "2026-03-27T04:20:37.771Z"
+milestone: v2.9
+milestone_name: Chat History
+status: ready_to_plan
+last_updated: "2026-03-28"
 progress:
-  total_phases: 14
-  completed_phases: 14
-  total_plans: 18
-  completed_plans: 18
+  total_phases: 5
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-26)
+See: .planning/PROJECT.md (updated 2026-03-28)
 
 **Core value:** Accurate, auto-synced financial data with envelope budgeting that lets you see where every dollar goes and how spending trends over time.
-**Current focus:** v2.8 Sync Error Visibility — Phase 50 Dashboard Warning UI
+**Current focus:** v2.9 Chat History — Phase 53 (Schema, Service, and tRPC Router)
 
 ## Current Position
 
-Phase: 50 of 52 (Dashboard Warning UI) — fourth of 6 phases in v2.8
-Plan: 0 of ? in current phase
+Phase: 53 (1 of 5 in v2.9)
+Plan: 0 of 0 in current phase (not yet planned)
 Status: Ready to plan
-Last activity: 2026-03-26 — Phase 49 tRPC Response Extension complete
+Last activity: 2026-03-28 — Roadmap created for v2.9 Chat History (5 phases, 36 requirements)
 
-Progress: [█████░░░░░] 50%
+Progress: [░░░░░░░░░░] 0%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 3 (v2.8)
-- Phases: 3/6
-- Requirements satisfied: 8/15
+- Total plans completed: 0 (v2.9)
+- Phases: 0/5
+- Requirements satisfied: 0/36
 
 ## Accumulated Context
 
@@ -43,9 +43,12 @@ Progress: [█████░░░░░] 50%
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
-- [v2.8]: UPSERT schema design for sync_warnings (one row per account, not append-only) to prevent unbounded table growth
-- [v2.8]: Extend existing sync.status endpoint (not new endpoint) so existing cache invalidation covers warnings automatically
-- [v2.8]: Three-state sync status model: success/partial/error
+- [v2.9]: SDK `resume` option loads from JSONL files on disk — no `messages` parameter on `query()`. Use `sdk_session_id` + `resume`, NOT message array injection.
+- [v2.9]: `chat_conversations` includes `sdk_session_id` column bridging SQLite display layer and SDK filesystem context layer.
+- [v2.9]: Migration number is 009 (008-account-relink.sql already exists).
+- [v2.9]: Persist user message BEFORE starting stream, persist assistant message BEFORE emitting `done` SSE event.
+- [v2.9]: Auto-generated titles from first user message (truncated at word boundary, ~60 chars).
+- [v2.9]: 90-day default retention with configurable CHAT_RETENTION_DAYS env var.
 
 ### Pending Todos
 
@@ -53,8 +56,8 @@ None.
 
 ### Blockers/Concerns
 
-- SimpleFIN reconnect URL needs verification before shipping (three different URLs cited in research)
-- Schema design conflict resolved: UPSERT approach from PITFALLS.md adopted over append-only model
+- SDK `system` init event field name for session ID capture needs verification during Phase 54 execution.
+- SDK session file path encoding needs confirmation during Phase 57 for JSONL file cleanup.
 
 ### Quick Tasks Completed
 
@@ -66,6 +69,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-26
-Stopped at: Phase 49 tRPC Response Extension complete, ready for Phase 50
+Last session: 2026-03-28
+Stopped at: Roadmap created for v2.9 milestone
 Resume file: None
