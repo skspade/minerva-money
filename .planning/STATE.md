@@ -18,14 +18,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-28)
 
 **Core value:** Accurate, auto-synced financial data with envelope budgeting that lets you see where every dollar goes and how spending trends over time.
-**Current focus:** v2.9 Chat History — Phase 53 (Schema, Service, and tRPC Router)
+**Current focus:** v2.9 Chat History — Phase 57 (Retention Cleanup) complete
 
 ## Current Position
 
-Phase: 53 (1 of 5 in v2.9)
-Plan: 0 of 0 in current phase (not yet planned)
-Status: Ready to plan
-Last activity: 2026-03-28 — Roadmap created for v2.9 Chat History (5 phases, 36 requirements)
+Phase: 57 (5 of 5 in v2.9)
+Plan: 1 of 1 in current phase (complete)
+Status: Phase 57 complete
+Last activity: 2026-03-28 — Phase 57 Retention Cleanup implemented
 
 Progress: [░░░░░░░░░░] 0%
 

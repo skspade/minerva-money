@@ -222,7 +222,8 @@ Full details: [milestones/v2.8-ROADMAP.md](milestones/v2.8-ROADMAP.md)
 **Success Criteria** (what must be TRUE):
   1. A croner job runs daily at 3 AM and deletes conversations older than CHAT_RETENTION_DAYS (default 90)
   2. Cleanup removes both SQLite rows (CASCADE handles messages) and the associated SDK session JSONL files from disk
-**Plans**: TBD
+**Plans**:
+  - [x] 57-01-PLAN.md — Retention cleanup scheduler and purge enhancement
 
 ## Progress
 
@@ -245,4 +246,4 @@ Phases 53-56 are strictly sequential. Phase 57 depends only on Phase 53 and can 
 | 54. SSE Integration and Conversation Resume | 3/3 | Complete    | 2026-03-29 | - |
 | 55. Client Conversation Lifecycle | v2.9 | 0/0 | Not started | - |
 | 56. Sidebar UI and Mobile | v2.9 | Complete    | 2026-03-29 | - |
-| 57. Retention Cleanup | v2.9 | 0/0 | Not started | - |
+| 57. Retention Cleanup | v2.9 | 1/1 | Complete    | 2026-03-28 |

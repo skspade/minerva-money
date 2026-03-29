@@ -64,8 +64,8 @@ Requirements for Chat History milestone. Each maps to roadmap phases.
 
 ### Cleanup
 
-- [ ] **CLEAN-01**: Croner job runs daily at 3 AM purging conversations older than CHAT_RETENTION_DAYS (default 90)
-- [ ] **CLEAN-02**: Retention cleanup removes both SQLite rows and associated SDK session JSONL files
+- [x] **CLEAN-01**: Croner job runs daily at 3 AM purging conversations older than CHAT_RETENTION_DAYS (default 90)
+- [x] **CLEAN-02**: Retention cleanup removes both SQLite rows and associated SDK session JSONL files
 
 ## Future Requirements
 
@@ -130,8 +130,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MOBILE-01 | Phase 56 | Pending |
 | MOBILE-02 | Phase 56 | Pending |
 | MOBILE-03 | Phase 56 | Pending |
-| CLEAN-01 | Phase 57 | Pending |
-| CLEAN-02 | Phase 57 | Pending |
+| CLEAN-01 | Phase 57 | Complete |
+| CLEAN-02 | Phase 57 | Complete |
 
 **Coverage:**
 - v2.9 requirements: 36 total
