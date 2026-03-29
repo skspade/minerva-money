@@ -6,6 +6,8 @@ import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useStreamingChat } from '../hooks/useStreamingChat';
 import { getToolLabel } from '../utils/tool-labels';
+import ConversationSidebar from '../components/ConversationSidebar';
+import { History } from 'lucide-react';
 
 type MessageRole = 'user' | 'assistant' | 'error';
 
@@ -63,6 +65,7 @@ export default function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageContainerRef = useRef<HTMLDivElement>(null);
   const userScrolledUpRef = useRef(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const { data: models } = useQuery(trpc.agent.models.queryOptions());
 
   // Fetch conversation data when URL has a conversationId
@@ -211,9 +214,52 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="fixed inset-0 top-0 md:top-[56px] bottom-[calc(env(safe-area-inset-bottom)+60px)] md:bottom-0 flex flex-col bg-gray-50 z-10">
-      {/* Message area */}
-      <div ref={messageContainerRef} className="flex-1 overflow-y-auto overscroll-contain p-4">
+    <div className="fixed inset-0 top-0 md:top-[56px] bottom-[calc(env(safe-area-inset-bottom)+60px)] md:bottom-0 flex bg-gray-50 z-10">
+      {/* Desktop sidebar - always visible on md+ */}
+      <div className="hidden md:flex md:flex-col md:min-w-[280px] md:max-w-[280px] border-r border-gray-200 bg-white overflow-y-auto">
+        <ConversationSidebar
+          conversationId={conversationId}
+          isStreaming={isStreaming}
+        />
+      </div>
+
+      {/* Mobile sidebar overlay */}
+      {sidebarOpen && (
+        <div className="fixed inset-0 z-50 md:hidden">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setSidebarOpen(false)}
+          />
+          {/* Sidebar panel */}
+          <div className="absolute inset-y-0 left-0 w-[280px] bg-white shadow-xl overflow-y-auto">
+            <ConversationSidebar
+              conversationId={conversationId}
+              isStreaming={isStreaming}
+              onClose={() => setSidebarOpen(false)}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Chat area */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Mobile header with history toggle */}
+        <div className="flex items-center px-3 py-2 border-b border-gray-200 bg-white md:hidden">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="p-2 -ml-1 rounded-lg hover:bg-gray-100 text-gray-600"
+            aria-label="Open conversation history"
+          >
+            <History size={20} />
+          </button>
+          <span className="ml-2 text-sm font-medium text-gray-700 truncate">
+            {conversationId ? 'Chat' : 'New Chat'}
+          </span>
+        </div>
+
+        {/* Message area */}
+        <div ref={messageContainerRef} className="flex-1 overflow-y-auto overscroll-contain p-4">
         {convLoading && urlConversationId ? (
           <div className="flex items-center justify-center h-full">
             <div className="flex items-center gap-1">
@@ -371,6 +417,7 @@ export default function ChatPage() {
           </div>
         </div>
       </div>
+      </div>{/* end chat area */}
     </div>
   );
 }
