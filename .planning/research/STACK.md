@@ -1,230 +1,143 @@
-# Technology Stack
+# Stack Research
 
-**Project:** Minerva Money v2.8 -- Sync Error Visibility
-**Researched:** 2026-03-26
+**Domain:** Persistent chat history for existing budgeting app with Claude Agent SDK
+**Researched:** 2026-03-28
 **Confidence:** HIGH
 
-## Core Finding: Zero New Dependencies Required
+## Key Finding: Zero New Dependencies Required
 
-Every capability needed for sync error visibility is already present in the current stack. This milestone adds a migration, extends an existing tRPC response, and builds UI with existing Tailwind utilities and lucide-react icons.
+Every capability needed for chat history persistence is already available in the existing stack. No new npm packages are needed.
 
----
+## Existing Stack (Verified in Codebase)
 
-## Recommended Stack
+| Technology | Version | Relevance to Chat History |
+|------------|---------|--------------------------|
+| react-router | ^7.13.1 | Already installed. Supports `/chat/:conversationId` via `useParams` and `useNavigate` -- neither used yet but available |
+| better-sqlite3 | ^11.7.0 | TEXT columns store JSON strings natively. No special JSON column type needed -- SQLite treats all JSON as TEXT |
+| Node.js | 22.19.0 | `crypto.randomUUID()` stable since Node 19. Already used in `accounts-service.ts` and `category-service.ts` |
+| croner | ^10.0.1 | Already used for sync (6AM/6PM) and budget funding (15th/last). Add one more schedule for retention cleanup |
+| @anthropic-ai/claude-agent-sdk | ^0.2.81 | Supports `messages` array parameter for context injection on session creation |
+| Zod | ^4.3.6 | Already validates SSE request body. Extend schema with optional `conversationId` |
+| @minerva/shared | workspace | SSE event types defined here. Add `SSEConversationEvent` to discriminated union |
 
-### Core Technologies (All Existing -- No Changes)
+## What to Use (All Built-In)
 
-| Technology | Version | Purpose | Integration Point |
-|------------|---------|---------|-------------------|
-| better-sqlite3 | ^11.7.0 | New `sync_warnings` table via migration 007 | `packages/server/migrations/007-sync-warnings.sql` |
-| @trpc/server + zod | ^11.14.1 / ^4.3.6 | Extend `sync.status` response with warnings array | `packages/server/src/sync/trpc-router.ts` |
-| @tanstack/react-query | ^5.95.0 | Consume extended sync.status response (auto-typed) | Client components already call `trpc.sync.status.queryOptions()` |
-| tailwindcss | ^4.2.2 | Amber badges, CSS-only tooltips via `group-hover` | `SyncStatus.tsx`, `DashboardPage.tsx` |
-| lucide-react | ^1.0.1 | `AlertTriangle` icon for warning indicator | Already used in 4 client files |
+### UUID Generation: `crypto.randomUUID()`
 
-### What NOT to Add
+**Confidence:** HIGH -- already used in two server modules.
 
-| Library | Why Not |
-|---------|---------|
-| @radix-ui/react-tooltip | One tooltip does not justify a component library. Project convention: "all custom Tailwind components (no component library)". Tailwind `group-hover` achieves the same result. |
-| @radix-ui/react-popover | Same reasoning. Simple hover dropdown built with Tailwind is adequate for showing 1-3 account warnings. |
-| react-hot-toast / sonner | Sync warnings are persistent state, not ephemeral notifications. They belong in the sync status response and render inline until the underlying connection is fixed. |
-| Any notification/alert library | A warning badge is 3 lines of JSX. The project has zero component library dependencies and should stay that way. |
+```typescript
+import { randomUUID } from 'node:crypto';
+const conversationId = randomUUID();
+```
 
----
+Pattern already established in `accounts-service.ts` (line 62) and `import-service.ts` (line 392). Use the same `import { randomUUID } from 'node:crypto'` pattern for consistency.
 
-## Integration Points
+### JSON Storage in SQLite: TEXT Columns
 
-### 1. SQLite Migration (007-sync-warnings.sql)
+**Confidence:** HIGH -- standard SQLite pattern.
 
-**Pattern:** Numbered SQL file in `packages/server/migrations/`. The migration runner (`migrate.ts`) reads files sorted by name, applies each in a transaction, and sets `PRAGMA user_version` to the file number. Current user_version is 6 (from `006-account-source.sql`).
+The `tool_calls` column stores a JSON array as a plain TEXT column. SQLite has no native JSON column type -- TEXT is the correct choice. The app already uses `JSON.stringify()` / `JSON.parse()` throughout (tool helpers, SSE handler, SimpleFIN client).
 
-**Schema:**
+No need for SQLite JSON functions (`json_extract`, `json_each`) -- the JSON is opaque storage, only parsed server-side in TypeScript. This avoids coupling to SQLite's JSON1 extension.
 
 ```sql
-CREATE TABLE sync_warnings (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  sync_log_id INTEGER NOT NULL REFERENCES sync_log(id) ON DELETE CASCADE,
-  account_id TEXT REFERENCES accounts(id) ON DELETE SET NULL,
-  account_name TEXT NOT NULL,
-  error_code TEXT,
-  error_message TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE INDEX idx_sync_warnings_sync_log_id ON sync_warnings(sync_log_id);
+tool_calls TEXT  -- JSON array, nullable, parsed in TypeScript only
 ```
 
-**Design rationale:**
-- **`sync_log_id` FK:** Ties each warning to a specific sync run. Enables "get warnings for the latest sync" queries and CASCADE cleanup.
-- **`account_id` nullable:** SimpleFIN errors may reference connection-level issues without a specific account ID. Also handles cases where the errored account does not yet exist in the `accounts` table (first-sync failure).
-- **`account_name` denormalized:** Because `account_id` can be NULL or reference a non-existent account, the name must be stored directly. SimpleFIN's error objects include account identifying info.
-- **`ON DELETE SET NULL` for account_id:** If an account is removed, the warning history remains readable via `account_name`.
-- **`ON DELETE CASCADE` for sync_log_id:** When sync logs are eventually pruned, associated warnings clean up automatically.
-- **Index on `sync_log_id`:** Primary query pattern is "get all warnings for sync log X".
-- **No new column on `sync_log`:** The existing `status TEXT` column gains a `'partial'` value. TEXT columns in SQLite have no enum constraint -- no migration needed for this.
+### URL Routing: react-router v7 `useParams` + `useNavigate`
 
-**Confidence:** HIGH -- follows exact conventions of migrations 001-006 (datetime defaults, TEXT timestamps, INTEGER PRIMARY KEY AUTOINCREMENT, foreign keys with ON DELETE).
+**Confidence:** HIGH -- react-router v7 already installed and used for all page routing.
 
-### 2. Sync Service Changes (sync-service.ts)
+Current routing in `app.tsx` uses `BrowserRouter` + `Routes` + `Route` from `react-router` (v7). Adding a parameterized route is a one-line change:
 
-**Current behavior:** `runSync()` collects errors in `result.errors: string[]` and writes a single `error_message` string to `sync_log`. Per-account errors from SimpleFIN's `errlist` are stringified but not persisted per-account.
+```tsx
+<Route path="chat" element={<ChatPage />} />
+<Route path="chat/:conversationId" element={<ChatPage />} />
+```
 
-**Required changes:**
+ChatPage uses `useParams()` to read `conversationId` and `useNavigate()` to update URL on new conversation creation. Both hooks are standard react-router v7 exports. No other page in the app uses `useParams` yet, but this is the standard pattern.
 
-1. After processing all accounts, write per-account warnings to `sync_warnings` table
-2. Set `sync_log.status` based on outcome:
-   - All accounts synced: `'success'` (unchanged)
-   - API call failed entirely (catch block): `'error'` (unchanged)
-   - Some accounts synced + some had errors: `'partial'` (NEW)
-   - Zero accounts synced but API call succeeded: `'partial'` (the call worked but no data came through)
+**Important:** Both routes render the same `ChatPage` component. The bare `/chat` route shows a new conversation; `/chat/:conversationId` loads an existing one.
 
-**SimpleFIN error data available** (from `simplefin-types.ts`):
+### Date/Time Handling: ISO 8601 Strings
+
+**Confidence:** HIGH -- established codebase pattern.
+
+All existing timestamps in the database use ISO 8601 TEXT format (e.g., `datetime('now')` in SQL, `new Date().toISOString()` in TypeScript). Continue this pattern for `created_at` and `updated_at` columns.
+
+For the sidebar's relative time display ("2h ago", "Yesterday"), write a simple utility function. Do NOT add a library like `date-fns` or `dayjs` for this -- the logic is ~20 lines:
+
 ```typescript
-interface SimpleFINError {
-  code: string;      // -> sync_warnings.error_code
-  msg: string;       // -> sync_warnings.error_message
-  conn_id?: string;  // connection identifier
-  account_id?: string; // -> sync_warnings.account_id (if present)
+function relativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString();
 }
 ```
 
-The `data.errors` (or `data.errlist`) array is already iterated in `sync-service.ts` lines 38-42. Currently it only pushes string messages to `result.errors[]`. The change: also INSERT into `sync_warnings` for each error.
+### SSE Event Extension: New `conversation` Event Type
 
-**Confidence:** HIGH -- straightforward extension of existing error handling logic with well-defined input types.
+**Confidence:** HIGH -- direct extension of existing shared types.
 
-### 3. tRPC Response Extension (sync.status)
+Add to `packages/shared/src/sse-events.ts`:
 
-**Current response** (trpc-router.ts lines 80-119):
 ```typescript
-{
-  lastSync: { startedAt, completedAt, status, errorMessage, accountsSynced, transactionsAdded } | null,
-  errorCount: number,
-  accounts: { id, name, balance, last_synced, source }[],
+export interface SSEConversationEvent {
+  readonly type: 'conversation';
+  readonly conversationId: string;
 }
+
+export type SSEEvent =
+  | SSESessionEvent
+  | SSEConversationEvent  // new
+  | SSETextDeltaEvent
+  | SSEToolStartEvent
+  | SSEToolEndEvent
+  | SSEDoneEvent
+  | SSEErrorEvent;
 ```
 
-**Extended response -- add `warnings` field:**
-```typescript
-{
-  lastSync: { ... },     // unchanged
-  errorCount: number,    // unchanged
-  accounts: [...],       // unchanged
-  warnings: {            // NEW -- only for latest sync
-    accountId: string | null;
-    accountName: string;
-    errorCode: string | null;
-    errorMessage: string;
-  }[],
-}
-```
+This follows the established discriminated union pattern. The client's existing `switch (event.type)` handler just needs a new `case 'conversation':` branch.
 
-**Why additive-only:**
-- Adding a field is backward-compatible (tRPC infers types; existing client code ignores new fields until updated)
-- Empty array when no warnings -- existing UI paths unchanged
-- No input schema changes
-- TanStack Query picks up new field automatically on next refetch
+### Migration File: `009-chat-history.sql`
 
-**Query pattern:** JOIN `sync_warnings` to the latest `sync_log` entry. Only return warnings for the most recent sync (users care about current state, not history).
+**Note:** The design document references `008_chat_history.sql` but migration 008 already exists (`008-account-relink.sql`). The actual file must be `009-chat-history.sql`.
 
-**Confidence:** HIGH -- tRPC return types are inferred. Adding a field requires zero codegen or schema registration.
+### Scheduled Cleanup: Existing croner Infrastructure
 
-### 4. UI Patterns (All Tailwind, No Libraries)
+**Confidence:** HIGH -- croner already manages two job types.
 
-**Color convention already established in codebase:**
-- Green (`text-green-600`): success, positive values
-- Red (`text-red-600`): errors, negative values
-- Amber/Yellow (`text-yellow-600`): warnings -- already used for "Local only" backup status (DashboardPage line 259)
-- Gray: neutral states, manual badges
-
-#### A. Dashboard "Partial" Badge
-
-Follows the existing badge pattern from DashboardPage line 103 (Manual badge):
-
-```tsx
-<span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
-  Partial
-</span>
-```
-
-#### B. Dashboard Warning List
-
-Renders inline in the existing Sync Status card (DashboardPage lines 182-267). Warnings display as a list below the status row, with each affected account name and error message. Includes a "Reconnect on SimpleFIN" link.
-
-#### C. Navbar Warning Indicator (SyncStatus.tsx)
-
-Use `AlertTriangle` from lucide-react (already a dependency, used in 4 files):
-
-```tsx
-import { AlertTriangle } from 'lucide-react';
-```
-
-#### D. Tooltip Pattern (CSS-only, no library)
-
-**Recommended: Tailwind `group-hover` pattern**
-
-```tsx
-<div className="relative group">
-  <AlertTriangle className="w-4 h-4 text-amber-400" />
-  <div className="absolute right-0 top-full mt-1 hidden group-hover:block
-    bg-gray-800 text-white text-xs rounded px-3 py-2 w-64 z-50 shadow-lg">
-    {warnings.map(w => (
-      <div key={w.accountName}>{w.accountName}: {w.errorMessage}</div>
-    ))}
-  </div>
-</div>
-```
-
-**Why CSS-only:** Zero JS state, works immediately, sufficient for desktop navbar hover. The current codebase already uses native `title` attributes for simple tooltips (SyncStatus.tsx line 38). The `group-hover` pattern is a step up that allows styled multi-line content.
-
-**Mobile consideration:** The desktop navbar is `hidden md:block` (Layout.tsx line 9). Mobile uses `BottomTabBar`. The tooltip only needs hover behavior on desktop. If mobile needs warning visibility, the dashboard card (always visible) serves that purpose.
-
-**Confidence:** HIGH -- all patterns verified against existing codebase. Tailwind `group-hover` is a core utility available in all Tailwind versions.
-
-### 5. SimpleFIN Reconnect Link
-
-The dashboard warning card should include a link to the SimpleFIN Bridge portal:
-
-```tsx
-<a href="https://bridge.simplefin.org/"
-   target="_blank"
-   rel="noopener noreferrer"
-   className="text-sm text-blue-600 hover:text-blue-800 underline">
-  Reconnect on SimpleFIN
-</a>
-```
-
-**Why:** When SimpleFIN reports account-level errors, the fix is to re-authenticate the bank connection on SimpleFIN's portal. Providing a direct link reduces friction. No OAuth or API integration needed.
-
-**Confidence:** MEDIUM -- the SimpleFIN Bridge URL is `https://bridge.simplefin.org/` based on SimpleFIN documentation. Should be verified against current production.
-
----
+Add a third croner schedule in `packages/server/src/index.ts` alongside existing sync and budget funding jobs. Schedule: daily at 3 AM. The `CHAT_RETENTION_DAYS` environment variable (default 90) controls the threshold. No new dependency -- croner ^10.0.1 supports unlimited concurrent schedules.
 
 ## Alternatives Considered
 
-| Decision | Recommended | Alternative | Why Not Alternative |
-|----------|-------------|-------------|---------------------|
-| Warning storage | New `sync_warnings` table | JSON column on `sync_log` | Separate table enables per-account queries, proper foreign keys, and indexing. `json_extract()` in SQLite is less clean and harder to type. |
-| Partial status | `'partial'` string in existing `status` TEXT column | New `has_warnings` boolean column | Reusing the status column is simpler -- no migration for the column, and the UI already switches on status values (`success`/`error`/`running`). |
-| Tooltip | CSS `group-hover` | Radix tooltip / Headless UI | Project convention is zero component libraries. CSS hover is sufficient for showing 1-3 account names in a desktop navbar. |
-| Warning scope | Latest sync only | Rolling history with pagination | YAGNI. The user cares about current state. Historical warnings have no actionable value. Can add history view later if needed. |
-| Warning display | Inline in dashboard card | Toast notifications | Warnings persist until the bank connection is fixed. Toasts disappear. The user needs to see warnings on every page load, not just when they fire. |
+| Recommended | Alternative | Why Not |
+|-------------|-------------|---------|
+| `crypto.randomUUID()` | `uuid` npm package | Built-in is sufficient, already used in codebase, zero dependencies |
+| `crypto.randomUUID()` | `nanoid` | UUIDs are the established pattern in this codebase (accounts, imports). Nanoid's shorter IDs add no value for conversation IDs |
+| Plain TEXT for JSON | SQLite JSON1 functions | Over-engineering. JSON is opaque storage -- only TypeScript reads it. No need for SQL-level JSON queries |
+| react-router `useParams` | Query params (`?id=...`) | URL params are cleaner for resource identification, standard REST-like pattern, better for browser history |
+| Custom `relativeTime()` | `date-fns` / `dayjs` | One function needed, ~20 lines. Adding a date library for this is overkill |
+| ISO 8601 TEXT timestamps | Unix epoch integers | ISO 8601 is the established pattern in all existing tables. Consistency matters more than minor performance |
+| Two `<Route>` elements | Single `<Route path="chat/:conversationId?">` | Optional params work in react-router v7, but two explicit routes are clearer and match the codebase's flat style |
 
----
+## What NOT to Add
 
-## File Changes Summary
-
-| File | Change Type | Purpose |
-|------|-------------|---------|
-| `packages/server/migrations/007-sync-warnings.sql` | NEW | Create `sync_warnings` table + index |
-| `packages/server/src/sync/sync-service.ts` | MODIFY | Write warnings to table, set `'partial'` status |
-| `packages/server/src/sync/trpc-router.ts` | MODIFY | Add `warnings[]` to `sync.status` response |
-| `packages/client/src/components/SyncStatus.tsx` | MODIFY | Amber `AlertTriangle` icon + group-hover tooltip for partial status |
-| `packages/client/src/pages/DashboardPage.tsx` | MODIFY | Amber "Partial" badge, warning list, SimpleFIN reconnect link |
-| `packages/server/src/sync/sync-service.test.ts` | MODIFY | Test partial status logic and warning insertion |
-| `packages/server/src/sync/trpc-router.test.ts` | MODIFY | Test warnings in sync.status response |
-
----
+| Avoid | Why | Use Instead |
+|-------|-----|-------------|
+| `uuid` npm package | Node 22 has `crypto.randomUUID()` built-in, already used in codebase | `import { randomUUID } from 'node:crypto'` |
+| `date-fns` or `dayjs` | Only need relative time formatting for sidebar -- not worth a dependency | Custom 20-line utility |
+| `nanoid` | UUIDs are the established ID format in this codebase | `crypto.randomUUID()` |
+| `@tanstack/react-router` | Already using react-router v7, which handles the needed routing fine | Existing react-router |
+| SQLite JSON1 extension queries | Tool calls JSON is opaque storage, never queried at SQL level | `JSON.parse()` in TypeScript |
+| Any WebSocket library | SSE is the established streaming pattern, unidirectional is sufficient | Existing Express SSE + fetch ReadableStream |
+| Any component library for sidebar | Project convention: all custom Tailwind components, no component library | Tailwind + custom JSX |
 
 ## Installation
 
@@ -232,20 +145,42 @@ The dashboard warning card should include a link to the SimpleFIN Bridge portal:
 # Nothing to install. Zero new dependencies for this milestone.
 ```
 
----
+## Version Compatibility
+
+| Existing Package | Chat History Feature | Compatible |
+|-----------------|---------------------|------------|
+| react-router ^7.13.1 | `useParams`, `useNavigate` for `/chat/:conversationId` | Yes -- standard v7 hooks |
+| better-sqlite3 ^11.7.0 | TEXT columns with JSON, CASCADE foreign keys, composite indexes | Yes -- standard SQLite features |
+| @anthropic-ai/claude-agent-sdk ^0.2.81 | `messages` array for context rebuild on session creation | Yes -- core SDK feature |
+| Zod ^4.3.6 | Optional `conversationId` field in request schema | Yes -- `.optional()` is standard |
+| croner ^10.0.1 | Additional scheduled job for retention cleanup | Yes -- supports multiple schedules |
+| @minerva/shared (workspace) | New `SSEConversationEvent` type in union | Yes -- just a type addition |
+
+## Integration Points Summary
+
+| Change | File(s) | Nature |
+|--------|---------|--------|
+| New SSE event type | `packages/shared/src/sse-events.ts` | Add `SSEConversationEvent` to union |
+| Route parameter | `packages/client/src/app.tsx` | Add `chat/:conversationId` route |
+| URL hooks | `packages/client/src/pages/ChatPage.tsx` | Import `useParams`, `useNavigate` from react-router |
+| New migration | `packages/server/migrations/009-chat-history.sql` | Two tables, one index, CASCADE FK |
+| New service module | `packages/server/src/chat/chat-history-service.ts` | CRUD + purge functions using `randomUUID` |
+| New tRPC router | `packages/server/src/chat/chat-history-router.ts` | Nested under main router as `chat.history` |
+| SSE handler extension | `packages/server/src/agent/chat-stream-handler.ts` | Accept/emit `conversationId`, persist messages |
+| New cron job | `packages/server/src/index.ts` | Daily 3 AM retention cleanup via croner |
+| Relative time utility | `packages/client/src/utils/relative-time.ts` | Pure function, ~20 lines |
 
 ## Sources
 
-- Codebase: `packages/server/src/db/migrate.ts` -- migration runner pattern (user_version, numbered files, transactional apply) -- HIGH confidence
-- Codebase: `packages/server/migrations/001-006` -- naming conventions, schema patterns -- HIGH confidence
-- Codebase: `packages/server/src/sync/sync-service.ts` lines 38-42 -- current SimpleFIN error handling -- HIGH confidence
-- Codebase: `packages/server/src/sync/simplefin-types.ts` -- `SimpleFINError` shape with `code`, `msg`, `account_id` -- HIGH confidence
-- Codebase: `packages/server/src/sync/trpc-router.ts` lines 80-119 -- current `sync.status` response shape -- HIGH confidence
-- Codebase: `packages/client/src/components/SyncStatus.tsx` -- current navbar sync display, native `title` tooltip usage -- HIGH confidence
-- Codebase: `packages/client/src/components/Layout.tsx` -- navbar structure, `hidden md:block` responsive pattern -- HIGH confidence
-- Codebase: `packages/client/src/pages/DashboardPage.tsx` -- sync status card, amber color usage, badge patterns -- HIGH confidence
-- Codebase: lucide-react usage in 4 client files -- confirms availability without new install -- HIGH confidence
+- Codebase: `packages/server/src/accounts/accounts-service.ts` line 1, 62 -- confirmed `randomUUID` import and usage pattern -- HIGH
+- Codebase: `packages/server/src/import/import-service.ts` line 2, 392 -- confirmed second `randomUUID` usage -- HIGH
+- Codebase: `packages/client/src/app.tsx` -- confirmed react-router v7 with BrowserRouter, Routes, Route pattern -- HIGH
+- Codebase: `packages/client/package.json` line 27 -- confirmed react-router ^7.13.1 -- HIGH
+- Codebase: `packages/shared/src/sse-events.ts` -- confirmed discriminated union on `type` field, 6 existing event types -- HIGH
+- Codebase: `packages/server/migrations/` -- confirmed 8 migration files exist (001 through 008), next is 009 -- HIGH
+- Codebase: JSON usage throughout server (tool-helpers.ts, chat-stream-handler.ts, simplefin-client.ts) -- confirmed `JSON.stringify`/`JSON.parse` pattern, no JSON1 SQL usage -- HIGH
+- Runtime: `node --version` = v22.19.0 -- `crypto.randomUUID()` stable since Node 19 -- HIGH
 
 ---
-*Stack research for: Minerva Money v2.8 Sync Error Visibility*
-*Researched: 2026-03-26*
+*Stack research for: Minerva Money v2.9 Chat History Persistence*
+*Researched: 2026-03-28*

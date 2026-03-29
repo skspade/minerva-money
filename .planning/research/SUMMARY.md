@@ -1,186 +1,194 @@
 # Project Research Summary
 
-**Project:** Minerva Money v2.8 — Sync Error Visibility
-**Domain:** Personal budgeting app — sync status observability
-**Researched:** 2026-03-26
+**Project:** Minerva Money v2.9 — Chat History Persistence
+**Domain:** Persistent conversation history for Claude Agent SDK-backed chat interface
+**Researched:** 2026-03-28
 **Confidence:** HIGH
 
 ## Executive Summary
 
-Minerva Money v2.8 addresses a silent failure mode in the SimpleFIN sync pipeline: per-account errors are already parsed from the API response but are never persisted or surfaced to the user. The app currently reports "success" in sync_log even when individual bank connections fail, leaving the user with stale data and no indicator that anything went wrong. The fix is a bottom-up, strictly additive change: a new `sync_warnings` table, a third `'partial'` status value in sync_log, an extended tRPC `sync.status` response, and amber warning indicators in two existing UI surfaces (navbar and dashboard card).
+Adding persistent chat history to Minerva Money's existing AI chat interface is a well-scoped milestone with zero new dependencies. Every required capability — UUID generation, JSON storage, URL routing, SSE streaming, scheduled cleanup — is already present in the codebase. The recommended approach follows the same layered pattern established by every other feature: SQLite migration, service module with CRUD functions, tRPC router as a thin wrapper, and client-side React state tied to URL params. The critical architectural insight from research is that the Claude Agent SDK already persists conversation sessions as JSONL files on disk via its `resume` mechanism — which means SQLite stores the display layer (messages for the sidebar and conversation view), while the SDK handles the context layer for LLM continuity. These two layers stay in sync because every exchange produces both.
 
-The recommended approach requires zero new dependencies. Every capability needed — SQLite persistence, tRPC response extension, Tailwind styling, lucide-react icons — is already in the stack. The six affected files span three layers (database, service/API, client) but all changes are additive: new rows, new fields, new conditional branches. The existing TanStack Query cache invalidation wiring already covers the new data because warnings are returned inside the existing `sync.status` response rather than a new endpoint.
+The primary technical risk is the design document's "SDK context rebuild from stored messages" approach, which is architecturally impossible: `query()` has no `messages` parameter. The SDK's `Options` type has `resume: string` (a session ID) but no way to inject an arbitrary message history array. Any implementation that follows the design doc literally will fail to compile. The fix is already known: add an `sdk_session_id` column to `chat_conversations`, store the SDK session ID from the init event, and pass it to `options.resume` on subsequent messages. This is simpler than the design doc's approach, not harder.
 
-The primary risks are schema design choices made in the first phase that cannot be safely changed without a new migration. Two decisions must be made correctly at migration time: the table design should use an UPSERT pattern (one row per account, not append-only per sync run) to prevent unbounded table growth, and the sync service must mark stale `'running'` entries as `'error'` before starting a new sync to prevent the navbar from getting stuck in a permanent "Syncing..." state. Both are one-line fixes that are cheap now and costly to retrofit. There is also a pre-existing agent tool bug (wrong column names in `get_sync_status`) that must be fixed in the same pass to avoid propagating broken queries into the new warning data.
+The only High-complexity feature in the milestone is conversation resumption, and with the correct SDK approach it reduces to a lookup and a parameter pass. The remaining features — sidebar UI, message persistence, URL routing, retention cleanup — all follow established patterns in this codebase and carry low-to-medium complexity. The milestone is buildable in a clean sequence of five phases with clear verification points at each phase boundary.
 
 ## Key Findings
 
 ### Recommended Stack
 
-No new dependencies are required for this milestone. The entire implementation uses existing stack components: better-sqlite3 for the new migration and warning queries, tRPC + Zod for the additive response extension, TanStack Query for automatic client-side refresh, Tailwind `group-hover` for the CSS-only navbar tooltip, and lucide-react's `AlertTriangle` icon (already used in 4 client files). The project convention of zero component libraries should be maintained — Radix UI, Headless UI, and toast libraries are all explicitly out of scope for this milestone.
+No new dependencies are needed. The entire feature builds on packages already installed and patterns already established. `crypto.randomUUID()` (Node 22 built-in, already used in two server modules) generates conversation IDs. `better-sqlite3` TEXT columns store JSON for tool calls. `react-router` v7's `useParams` and `useNavigate` handle URL routing. `croner` adds a third scheduled job for retention cleanup. The `@anthropic-ai/claude-agent-sdk` `resume` option provides SDK context continuity via its existing JSONL session file mechanism.
 
 Full details: `.planning/research/STACK.md`
 
 **Core technologies:**
-- **better-sqlite3** (migration 007): New `sync_warnings` table with FK to `sync_log` and CASCADE cleanup — follows conventions of migrations 001-006
-- **tRPC + Zod**: Additive `warnings[]` field on existing `sync.status` response — no codegen, types inferred automatically
-- **TanStack Query**: Consumes new `warnings` field with zero new wiring — existing `sync.status` invalidation already covers it
-- **Tailwind CSS**: Amber-600/amber-50 for warnings; `group-hover` for CSS-only navbar tooltip — no JS state needed
-- **lucide-react**: `AlertTriangle` icon for navbar indicator — already a dependency, already used in 4 files
+- `better-sqlite3 ^11.7.0`: Two new tables (`chat_conversations`, `chat_messages`) with CASCADE foreign key — standard SQLite pattern already proven across 8 migrations
+- `@anthropic-ai/claude-agent-sdk ^0.2.81`: `resume: sessionId` in query options handles context continuity from disk-persisted session files — no message array reconstruction needed
+- `react-router ^7.13.1`: `useParams()` + `useNavigate()` for `/chat/:conversationId` deep links — both hooks already in the package, not yet used in any page
+- `croner ^10.0.1`: Third croner job for daily 3 AM retention cleanup alongside existing sync and budget funding jobs
+- `crypto.randomUUID()` (built-in): Consistent UUID pattern already established in `accounts-service.ts` and `import-service.ts`
 
 ### Expected Features
 
-The feature set forms a strict dependency chain. All table-stakes features are low complexity because the data source (SimpleFIN error parsing in sync-service.ts lines 38-42) and the UI surfaces (SyncStatus, DashboardPage sync card) already exist. This is a plumbing milestone: connect data that's already parsed to surfaces that already exist.
+The feature set forms a dependency chain. All table-stakes features are achievable because the existing codebase already has SSE streaming, session management, and a working ChatPage — this milestone adds persistence and browsing on top of working foundations.
 
 Full details: `.planning/research/FEATURES.md`
 
 **Must have (table stakes):**
-- `sync_warnings` table migration — without persistence, errors vanish on page refresh
-- `'partial'` status in sync_log — the core problem: binary success/error does not capture partial failure
-- Auto-clear warnings for accounts that successfully sync — stale warnings are worse than no warnings; must ship with warning writes, not as a follow-up
-- `warnings[]` in tRPC `sync.status` response — client needs structured data, not strings; additive field, backward-compatible
-- Dashboard amber "Partial" badge and per-account error list — primary UI surface with SimpleFIN reconnect link
-- Navbar amber warning indicator — ensures visibility from any page without navigating to dashboard
+- Conversation list sidebar — universal pattern in all major chat apps; users expect to browse and resume past conversations
+- Message persistence across page refresh — the fundamental promise of "chat history"
+- Conversation resumption with SDK context — without this, history is a read-only log, not a useful feature
+- New Chat button — clear mechanism to start a fresh conversation
+- Auto-generated titles from first user message — truncated at word boundary; sufficient for MVP with manual rename as escape hatch
+- Delete and rename conversation — standard management actions expected by any chat UI
+- Mobile-responsive sidebar overlay — app is accessed from home network on mobile devices
+- URL routing per conversation (`/chat/:conversationId`) — browser back/forward must navigate between conversations
 
-**Should have (differentiators):**
-- Navbar tooltip with affected account names on hover — trivial to add alongside the indicator, high convenience
-- `occurrence_count` column in migration — free to include in the initial migration, useful context later, hard to retrofit
-- Agent `get_sync_status` tool updated with warnings + fix existing column name bug — consistent with existing agent coverage and resolves documented tech debt
+**Should have (polish, low effort):**
+- Keyboard shortcuts (Cmd+Shift+O new chat, Cmd+Shift+S sidebar toggle) — power user quality-of-life, ~10 lines of code
+- Context window management (last 20 turns via SDK resume) — prevents quality degradation on long conversations
+- Relative timestamp grouping in sidebar ("Today", "Yesterday", "Previous 7 days") — more scannable than flat list; pure display logic
+- Conversation SSE event for optimistic URL update — client gets `conversationId` before stream completes
+- Automatic retention cleanup via croner — prevents unbounded database and disk growth
 
-**Defer:**
-- Account-level staleness indicators — data already exists in `accounts.last_synced`, purely a polish pass; zero backend work
-- Historical sync error views — no actionable user value; the fix is always "re-auth or wait"
-- Push/email notifications — explicitly out of scope per PROJECT.md; in-app indicator is sufficient for a single-user home server
+**Defer to future milestone:**
+- Search across conversations — overkill at 90-day retention with ~100 conversations max
+- LLM-generated titles — cost and latency for marginal benefit over first-message truncation
+- Message editing or regeneration — complex, orthogonal to history persistence
+- Folders, tags, pinned conversations — premature organization for single-user scale
+- Stop/cancel generation button — already deferred in PROJECT.md as STOP-01
 
 ### Architecture Approach
 
-The architecture is a strict bottom-up dependency chain with no parallelism between the first three layers: the database table must exist before the service writes to it, the service must write warnings before the tRPC endpoint can expose them, and the endpoint shape must be finalized before client components can consume it. Within the client layer, the three UI changes (SyncStatus navbar, DashboardPage, agent tool) are independent and can be done in any order. The single most important architectural decision is to extend the existing `sync.status` response rather than create a new endpoint — this ensures all existing cache invalidation sites in SyncButton and DashboardPage automatically cover warning freshness without any additional wiring.
+The feature fits cleanly into the existing service-first layered architecture. A new `chat/` module under `packages/server/src/` handles CRUD and scheduling. The existing `agent/` module gains `conversationId` awareness. The client gains a `ConversationSidebar` component and URL param handling in `ChatPage`. The key architectural decision: the `chat_conversations` table stores `sdk_session_id` as the bridge between the SQLite display layer and the SDK's filesystem context layer. Client state is simplified — it tracks only `conversationId`; the server looks up the corresponding SDK session ID internally, eliminating the current client-managed `sessionId` state.
 
 Full details: `.planning/research/ARCHITECTURE.md`
 
 **Major components:**
-1. `migrations/007-sync-warnings.sql` (NEW) — new table with FK to sync_log, index on sync_log_id; UPSERT-compatible design (one row per account)
-2. `sync-service.ts` `runSync()` (MODIFY) — persist warnings per account, determine partial/success/error status, clean stale running entries before each sync
-3. `trpc-router.ts` `syncRouter.status` (MODIFY) — JOIN to sync_warnings for latest sync, extend response with `warnings[]`; additive, non-breaking
-4. `SyncStatus.tsx` (MODIFY) — amber `'partial'` branch with account count and group-hover tooltip; desktop-only per existing navbar pattern
-5. `DashboardPage.tsx` (MODIFY) — amber badge, account error list, SimpleFIN reconnect link; new conditional section below existing status details
-6. `query-tools.ts` `get_sync_status` (MODIFY) — fix existing column name bugs (`transactions_updated` -> `transactions_added`, `error` -> `error_message`), add active warnings to agent response
+1. `chat-history-service.ts` (NEW) — SQLite CRUD: createConversation, addMessage, listConversations, getConversation, deleteConversation, updateConversationTitle, purgeOldConversations
+2. `chat-history-router.ts` (NEW) — tRPC thin wrapper registered as `chat` namespace in `appRouter`
+3. `agent-service.ts` (MODIFY) — gains `conversationId` param, creates/loads conversations, persists messages atomically after exchange, emits `conversation` SSE event, stores `sdk_session_id`
+4. `ConversationSidebar.tsx` (NEW) — conversation list, new chat button, inline rename, delete with confirmation, mobile overlay
+5. `ChatPage.tsx` (MODIFY) — layout split into sidebar + chat area, URL param integration, conversation loading on mount/param change, remove client-managed `sessionId`
+6. `chat-cleanup-scheduler.ts` (NEW) — croner job deleting old conversation SQLite rows AND their SDK session JSONL files from disk
 
 ### Critical Pitfalls
 
 Full details: `.planning/research/PITFALLS.md`
 
-1. **Success status masking per-account errors** — Distinguish three error sources: SimpleFIN API errors (source 1, persist as warnings), per-account processing failures (source 2, persist as warnings), and rate-limit skips (source 3, operational behavior — NOT warnings). Only sources 1 and 2 trigger `'partial'` status.
+1. **Design doc assumes a `messages` parameter that does not exist on `query()`** — Add `sdk_session_id` column to `chat_conversations` and use `options.resume: sessionId` instead. SQLite messages serve display only, not SDK context rebuild. Any code constructing a messages array for SDK injection will fail to compile.
 
-2. **Unbounded sync_warnings table growth** — Use an UPSERT pattern with `UNIQUE(account_id)` and a `resolved_at` column instead of append-only rows. "Active" warnings are those with `resolved_at IS NULL`. Without this, twice-daily syncs with a broken connection produce 720+ rows per year per affected account.
+2. **SDK session files accumulate unbounded on disk** — The retention job must delete `~/.claude/projects/<encoded-cwd>/<sdk_session_id>.jsonl` files for each purged conversation, not only the SQLite rows. Failure to do this will result in unchecked disk growth over months.
 
-3. **Stale 'running' entries breaking the UI permanently** — Add one cleanup statement at the start of `runSync()` to mark any existing `running` rows as `error`. Server crashes leave `running` rows that cause the navbar to show "Syncing..." indefinitely.
+3. **Stream vs. persistence race condition** — Persist the user message before starting the stream. Persist the assistant message before emitting the `done` SSE event. Both writes must complete before the client receives `done`. If `done` is emitted first, the sidebar may show a conversation with 0 messages.
 
-4. **Connection-level SimpleFIN errors without account_id** — SimpleFIN errors have optional `account_id`. Connection-level errors have `conn_id` but no `account_id`. These must be mapped to all accounts belonging to that connection via the accounts array in the SimpleFIN response, or silently dropped if no matching accounts are found (store with `account_id = NULL`).
+4. **Conversation switch during active stream corrupts state** — For v2.9: disable sidebar clicks while streaming. The `onComplete` callback captures a `conversationId` closure that becomes stale after a switch, potentially appending one conversation's response to another's message list.
 
-5. **Agent tool propagating existing column name bugs** — `query-tools.ts` already queries wrong column names. Fix the pre-existing bug in the same phase as the warning additions — copying from the broken query into new warning code doubles the damage.
+5. **URL routing creates stale state on browser back/forward** — React Router does not unmount/remount `ChatPage` when only the `conversationId` param changes. Use a `useEffect` watching the param (or a `key` prop on the route) to clear message state and refetch on param change.
 
 ## Implications for Roadmap
 
-Based on research, the dependency chain is strictly bottom-up with three sequential phases and one parallel execution window in the final phase.
+Based on research, the build order follows a strict dependency chain. Each phase is independently testable before the next begins.
 
-### Phase 1: Database Foundation
+### Phase 1: Schema and Service Layer
 
-**Rationale:** Everything depends on the table existing. Schema design choices here are the only irreversible decisions in this milestone — getting the UPSERT design right now prevents an unbounded growth problem that would require a new migration to fix.
-**Delivers:** `sync_warnings` table with UPSERT-compatible schema (`UNIQUE(account_id)`, `resolved_at` column, `occurrence_count`), index on sync_log_id
-**Addresses:** Table stakes item 1 (persistence); differentiator item 2 (occurrence_count free to add now)
-**Avoids:** Pitfall 2 (unbounded growth — UPSERT design), Pitfall 8 (nullable account_id allows connection-level errors), Pitfall 7 (migration applied to shared production DB — back up before running dev with new migration)
+**Rationale:** Everything else depends on the data layer. No UI or protocol changes needed. Can be built and tested in complete isolation via unit tests and direct tRPC calls.
+**Delivers:** Migration `009-chat-history.sql` with two tables and CASCADE FK; complete CRUD service with JSON validation; tRPC `chat.*` router registered as 12th namespace in `appRouter`
+**Addresses:** Message persistence foundation, conversation CRUD (list, get, delete, rename), retention purge function
+**Avoids:** Pitfall 5 (JSON corruption) — try-catch in `addMessage()` and `getConversation()`; Pitfall 6 (CASCADE without FK) — verified with a test deleting a conversation and asserting messages are gone
 
-### Phase 2: Sync Service Changes
+### Phase 2: SSE Protocol and Server Integration
 
-**Rationale:** Must come after migration (table must exist). Determines data quality for all downstream consumers. All UI work depends on this logic being correct. Stale running entry cleanup must land here because it becomes user-visible once the navbar prominently shows sync status.
-**Delivers:** Per-account warnings written to DB, `'partial'` status in sync_log, auto-clear warnings for accounts that succeed, stale `running` entry cleanup, rate-limit skips correctly excluded from warnings
-**Addresses:** Table stakes items 2-3 (partial status, auto-clear on success)
-**Avoids:** Pitfall 1 (success masking — correct partial status logic with three error sources), Pitfall 3 (stale running entries — mark as error before starting new sync), Pitfall 8 (conn_id without account_id — map to accounts array)
+**Rationale:** Server must be able to create and persist conversations before the client can display them. This phase is independently testable via curl without any client changes.
+**Delivers:** Working end-to-end conversation persistence — new conversations created on first message, `sdk_session_id` stored from SDK init event, messages persisted atomically after each exchange, `conversation` SSE event emitted, SDK `resume` path operational for returning conversationId
+**Addresses:** Message persistence mechanism, conversation resumption (SDK `resume` path), SSE protocol extension with new `SSEConversationEvent` type
+**Avoids:** Pitfall 1 (messages parameter doesn't exist) — use `options.resume: sdk_session_id`; Pitfall 3 (persistence race) — persist assistant message before emitting `done`
 
-### Phase 3: tRPC Response Extension
+### Phase 3: Client — Conversation Lifecycle
 
-**Rationale:** Must come after service changes (data must be populated to test). Finalizing the response shape unblocks all three client-layer changes simultaneously.
-**Delivers:** `warnings[]` field in `sync.status` response; additive extension that does not break existing consumers; empty array when no warnings keeps existing UI paths unchanged
-**Addresses:** Table stakes item 4 (structured warnings to client)
-**Avoids:** Pitfall 5 (stale warning state — warnings inside existing endpoint, not a new one; all existing invalidation sites cover it automatically with zero new wiring)
+**Rationale:** Once the server creates and persists conversations, the client needs to handle `conversationId` state and URL routing. This phase makes the feature work end-to-end without sidebar.
+**Delivers:** `useStreamingChat` handles `conversation` SSE event and propagates `conversationId`; `ChatPage` reads `conversationId` from URL params and loads conversation on mount; `App.tsx` gains `/chat/:conversationId` route; browser URL updates after new conversation creation; client stops managing `sessionId`
+**Addresses:** URL routing per conversation, browser back/forward navigation, client state simplification
+**Avoids:** Pitfall 8 (stale state on URL param change) — `useEffect` or `key` prop on route triggers data refetch when param changes
 
-### Phase 4: Client Layer (Three Independent Sub-Tasks)
+### Phase 4: Sidebar and Polish
 
-**Rationale:** All three changes depend only on Phase 3's response shape and are independent of each other. Can be implemented in any order; landing them together avoids half-visible UI states in production.
-**Delivers:** Complete user-visible sync error visibility across all app surfaces
+**Rationale:** Sidebar is pure UI on top of working conversation CRUD. Can be styled and iterated independently. Mobile overlay adds responsive complexity that benefits from the rest of the layout being stable first.
+**Delivers:** `ConversationSidebar` with conversation list, new chat, inline rename, delete confirmation; ChatPage layout split into flex row; mobile overlay at < 768px; relative timestamp grouping; keyboard shortcuts (Cmd+Shift+O, Cmd+Shift+S)
+**Addresses:** All table-stakes UI features; "should have" polish items (timestamp grouping, keyboard shortcuts)
+**Avoids:** Pitfall 4 (conversation switch during stream) — disable sidebar clicks while `isStreaming` is true; Pitfall 7 (model change loses context) — navigate to `/chat` on model change rather than resetting state; Pitfall 10 (mobile overlay close timing) — batch state updates in same synchronous handler
 
-**Phase 4a — Dashboard UI:**
-- Amber "Partial" badge, per-account error list, SimpleFIN reconnect link
-- Avoids Pitfall 9 (use amber-600/amber-50, distinct from existing yellow-600 backup indicator)
+### Phase 5: Retention Cleanup
 
-**Phase 4b — Navbar indicator:**
-- Amber `SyncStatus` branch with account count; group-hover CSS-only tooltip with account names
-- Avoids Pitfall 11 (desktop-only indicator; no changes to BottomTabBar)
-
-**Phase 4c — Agent tool:**
-- Fix pre-existing column name bugs (`transactions_updated` -> `transactions_added`, `error` -> `error_message`)
-- Add active warnings to `get_sync_status` response
-- Avoids Pitfall 6 (propagating wrong column names into new warning queries)
+**Rationale:** Least urgent. Conversations accumulate slowly for a single user. Can ship without it for the initial release but should land before v2.9 is considered complete.
+**Delivers:** Croner job at daily 3 AM; `purgeOldConversations()` deletes both SQLite rows and SDK JSONL files from disk; `CHAT_RETENTION_DAYS` env var (default 90)
+**Addresses:** Automatic retention, prevents unbounded database growth and SDK session file accumulation
+**Avoids:** Pitfall 2 (SDK session files accumulate) — query `sdk_session_id` values before DELETE, then delete matching JSONL files via `fs.unlink()` with error swallowing
 
 ### Phase Ordering Rationale
 
-- Phases 1-3 are strictly sequential: table must exist before service writes, service must write before router exposes, router shape must be finalized before client consumes
-- Phase 4 is a parallel execution window — all three client changes are independent once the response shape is locked
-- The UPSERT schema design (Phase 1) and stale-running-entry cleanup (Phase 2) are one-line additions that are free now and require a new migration to retrofit later
-- Returning warnings inside `sync.status` (not a new endpoint) is the single most consequential architectural decision — it eliminates the need to audit and update invalidation sites in SyncButton, DashboardPage, and any future sync trigger
+- Schema must come first: every other phase depends on the tables existing
+- Server integration before client: the client cannot display conversations the server cannot yet create
+- Conversation lifecycle before sidebar: URL and state management must work correctly before adding multi-conversation navigation
+- Sidebar before cleanup: cleanup is independent but lowest priority — at twice-daily use, conversations won't overflow in the time it takes to build the rest
+- The FEATURES.md critical path confirms this order: Schema -> Service -> SSE integration + persistence -> SDK resume path -> sidebar UI
+- Note on migration numbering: use `009-chat-history.sql` — `008-account-relink.sql` already exists
 
 ### Research Flags
 
-No phases require a `/gsd:research-phase` call. All research is complete and implementation-ready.
+Phases with well-documented patterns (skip additional research-phase):
+- **Phase 1:** SQLite schema, better-sqlite3 CRUD, tRPC router nesting — all established patterns in this codebase with direct analogs in existing modules
+- **Phase 3:** React Router hooks — `useParams` and `useNavigate` are standard v7; URL param routing is trivial
+- **Phase 4:** React component patterns, Tailwind responsive layout — standard; mobile overlay is a well-known pattern
+- **Phase 5:** Croner scheduling — already used in two places; third job requires no research
 
-Phases with well-documented patterns:
-- **Phase 1 (Migration):** Follows exact conventions of migrations 001-006; schema fully specified with rationale
-- **Phase 2 (Sync service):** Code touch points identified with exact line numbers; SimpleFIN error types confirmed against simplefin-types.ts
-- **Phase 3 (tRPC):** Additive extension; response shape fully specified in ARCHITECTURE.md
-- **Phase 4 (Client UI):** All Tailwind patterns verified against existing codebase; no new libraries; exact code snippets provided in STACK.md and ARCHITECTURE.md
+Phase warranting attention during execution (not a blocker, but verify early):
+- **Phase 2:** SDK `resume` mechanism — verified from SDK type definitions, but the exact field name for `sdk_session_id` capture from the SDK's `system` init message event should be confirmed early in Phase 2 execution before building the rest of the server integration
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | All findings from direct codebase inspection; zero new dependencies means no third-party uncertainty |
-| Features | HIGH | SimpleFIN protocol spec consulted; error object shape confirmed against simplefin-types.ts; scope tightly bounded by PROJECT.md |
-| Architecture | HIGH | All touch points identified with exact file paths and line numbers from codebase inspection |
-| Pitfalls | HIGH | Based on direct analysis of existing code paths (sync-service.ts status logic, query-tools.ts column names, SyncStatus.tsx polling) — not speculation |
+| Stack | HIGH | All packages verified in codebase; versions confirmed; zero new dependencies; patterns already in use in multiple modules |
+| Features | HIGH | Core features derived from codebase analysis of current gaps; UI patterns from ChatGPT/Claude.ai consensus; anti-features well-reasoned with specific rationale |
+| Architecture | HIGH | SDK behavior verified from local `sdk.d.ts` type definitions; component map derived from direct codebase inspection; data flow fully specified; anti-patterns identified with exact error scenarios |
+| Pitfalls | HIGH | Pitfall 1 (the critical one) verified from SDK type definitions and documentation; remaining pitfalls from direct codebase analysis of existing code paths in agent-service.ts, chat-stream-handler.ts, useStreamingChat.ts, ChatPage.tsx |
 
 **Overall confidence:** HIGH
 
 ### Gaps to Address
 
-- **Schema design conflict (UPSERT vs append-only):** PITFALLS.md recommends UPSERT with `resolved_at` (one row per account, bounded table); STACK.md and ARCHITECTURE.md describe an append-only model where "active warnings = latest sync's rows." These are in conflict. The UPSERT approach from PITFALLS.md prevents unbounded growth and produces simpler queries — it should be adopted. Confirm this resolution before Phase 1 begins.
-- **SimpleFIN reconnect URL:** Three research files cite slightly different URLs (`https://bridge.simplefin.org/`, `https://bridge.simplefin.org/reconnect`, `https://beta-bridge.simplefin.org/`). Verify the correct URL against production SimpleFIN before shipping the reconnect link. Low risk — a wrong URL is a one-line fix with no data implications.
+- **SDK `system` init event field name for session ID capture:** The `sdk_session_id` must be captured from the SDK's initial `system` message in the `chatStream()` generator. The exact field name and event shape should be confirmed against the actual SDK event during Phase 2 execution (type definitions indicate `system` event type but the session ID extraction point needs verification against the live event structure).
+- **SDK session file path encoding:** The encoded `cwd` in `~/.claude/projects/<encoded-cwd>/` replaces non-alphanumeric characters with `-`. The exact encoding must be confirmed when implementing retention cleanup in Phase 5 to ensure JSONL file paths are constructed correctly.
+- **SDK `resume` failure mode:** When implementing the fallback path (session file missing), the correct detection mechanism needs to be confirmed during Phase 2 — whether the SDK throws on `resume` with a missing session ID, or whether a pre-check via `listSessions()` is preferred. A `try/catch` with fallback to a new session is the expected approach based on the architecture research, but the exact error type/message from the SDK is not yet confirmed.
 
 ## Sources
 
 ### Primary (HIGH confidence)
 
-- Codebase: `packages/server/src/sync/sync-service.ts` — runSync() status logic (lines 62-66, 76-83), error handling (lines 38-49), per-account processing (lines 44-61)
-- Codebase: `packages/server/src/sync/simplefin-types.ts` — SimpleFINError shape with optional account_id and conn_id fields
-- Codebase: `packages/server/src/sync/trpc-router.ts` — current sync.status response shape (lines 80-119)
-- Codebase: `packages/server/migrations/001-006` — migration naming conventions, schema patterns, datetime defaults
-- Codebase: `packages/server/src/db/migrate.ts` — migration runner (user_version, sorted files, transactional apply)
-- Codebase: `packages/client/src/components/SyncStatus.tsx` — 30-second polling (line 24), current status rendering (lines 28-49)
-- Codebase: `packages/client/src/components/SyncButton.tsx` — query invalidation on sync success (lines 11-15)
-- Codebase: `packages/client/src/pages/DashboardPage.tsx` — sync status card (lines 182-267), amber/yellow color usage (line 258-259), sync mutation invalidation (lines 33-37)
-- Codebase: `packages/server/src/agent/tools/query-tools.ts` — get_sync_status existing column name bug (line 257)
-- Codebase: `packages/client/src/components/Layout.tsx` — navbar hidden on mobile (line 9), SyncStatus placement (lines 98-99)
+- Codebase: `packages/server/src/agent/agent-service.ts` — `chatStream()` generator, `resume` usage at lines 37/118, SDK session handling
+- Codebase: `packages/server/src/agent/chat-stream-handler.ts` — SSE streaming pipeline, event pass-through pattern
+- Codebase: `packages/client/src/hooks/useStreamingChat.ts` — current single-conversation state model, abort-then-fallback pattern
+- Codebase: `packages/client/src/pages/ChatPage.tsx` — current session state at line 54, model change handler at lines 133-138
+- Codebase: `packages/shared/src/sse-events.ts` — discriminated union with 6 event types
+- Codebase: `packages/server/migrations/` — confirmed 8 migrations exist (001-008), next is 009
+- Codebase: `packages/server/src/accounts/accounts-service.ts`, `import-service.ts` — `randomUUID` import and usage pattern
+- SDK: `node_modules/@anthropic-ai/claude-agent-sdk/sdk.d.ts` — `Options` type confirming `resume` field and absence of `messages` parameter
+- Runtime: Node 22.19.0 confirmed via `node --version` — `crypto.randomUUID()` stable since Node 19
 
 ### Secondary (MEDIUM confidence)
 
-- [SimpleFIN Protocol specification](https://www.simplefin.org/protocol.html) — error codes (gen.*, con.*, act.*), AccountSet response structure, error object fields
-- [Actual Budget PR #4007](https://github.com/actualbudget/actual/pull/4007) — handling removed/failed SimpleFIN accounts gracefully (real-world pattern corroboration)
-- [Actual Budget issue #5346](https://github.com/actualbudget/actual/issues/5346) — real-world SimpleFIN sync error patterns
+- [Claude Agent SDK Sessions documentation](https://platform.claude.com/docs/en/agent-sdk/sessions) — disk-based JSONL persistence, `resume` mechanism, session ID as the resume key
+- [Claude Agent SDK TypeScript Reference](https://platform.claude.com/docs/en/agent-sdk/typescript) — full `Options` type reference confirming no `messages` field; `persistSession` defaults to `true`
+- [Conversational AI UI comparison 2025](https://intuitionlabs.ai/articles/conversational-ai-ui-comparison-2025) — sidebar patterns across ChatGPT, Claude.ai, Gemini
+- [ChatGPT UX case study — conversation history management](https://shooka95k.com/portfolio-items/chat-gpt-history-and-chat-management-ux-case-study/) — sidebar layout and management patterns
+- [Message persistence in real-time chat applications](https://dev.to/hexshift/implementing-message-persistence-in-real-time-chat-applications-18eo) — persist-then-publish pattern, schema design
 
 ### Tertiary (LOW confidence)
 
-- SimpleFIN reconnect URL — cited as `https://bridge.simplefin.org/` (STACK.md), `https://bridge.simplefin.org/reconnect` (PITFALLS.md), `https://beta-bridge.simplefin.org/` (FEATURES.md); requires verification before shipping
+- [Vercel AI Chatbot auto title generation discussion](https://github.com/vercel/ai-chatbot/issues/242) — community patterns for title generation timing
+- [HuggingFace Chat UI title generation optimization](https://github.com/huggingface/chat-ui/issues/947) — documented problems with LLM-generated titles justifying first-message truncation approach
 
 ---
-*Research completed: 2026-03-26*
+*Research completed: 2026-03-28*
 *Ready for roadmap: yes*

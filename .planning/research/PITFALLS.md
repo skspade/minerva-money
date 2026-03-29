@@ -1,306 +1,385 @@
 # Domain Pitfalls
 
-**Domain:** Sync error visibility — per-account warnings, partial sync status, dashboard/navbar indicators
-**Researched:** 2026-03-26
-**Confidence:** HIGH (based on direct codebase analysis of sync pipeline, sync_log schema, SyncStatus component, DashboardPage, and SimpleFIN response types)
+**Domain:** Chat history persistence — SDK context rebuild, message storage, conversation browsing/resume
+**Researched:** 2026-03-28
+**Confidence:** HIGH (based on direct codebase analysis of agent-service.ts, chat-stream-handler.ts, ChatPage.tsx, useStreamingChat.ts, SSE event protocol, and verified Claude Agent SDK documentation)
 
 ---
 
 ## Critical Pitfalls
 
-### Pitfall 1: "Success" Status Masking Per-Account Errors
+### Pitfall 1: Design Document Assumes a `messages` Parameter That Does Not Exist on `query()`
 
 **What goes wrong:**
-The current `runSync()` (sync-service.ts lines 62-66) writes `status = 'success'` to sync_log whenever the SimpleFIN API call itself succeeds — even when individual accounts have errors. The SimpleFIN response can include per-account errors in the `errors`/`errlist` array (e.g., bank connection expired, institution down), and individual `syncAccount()` calls can throw. These errors are pushed to `result.errors[]` but the sync_log row is still marked `'success'`. The sync_log only gets `'error'` status when the entire `client.fetchAccounts()` call fails (line 76-83). This means the current system silently reports "success" for partial syncs — the exact problem v2.8 aims to fix.
+The design document (section "SDK Context Rebuild Strategy") says "Pass this array as the `messages` option when creating a new SDK session." The Claude Agent SDK's `query()` function does NOT accept a `messages` parameter. The `Options` type has `resume` (session ID string), `continue` (boolean), and `forkSession` (boolean) -- but no way to inject an arbitrary message history array. The design's context rebuild approach as written is impossible.
 
 **Why it happens:**
-The status field was designed as a binary: the API call worked or it didn't. Per-account granularity was never modeled. The `result.errors` array is returned to the caller but never persisted.
+The design conflates the Claude Messages API (which accepts a `messages` array) with the Claude Agent SDK (which manages conversations via disk-persisted JSONL session files). The SDK's `resume` option works by reading the session transcript from `~/.claude/projects/<encoded-cwd>/<session-id>.jsonl`, not by accepting in-memory message arrays.
 
 **Consequences:**
-If you add a `'partial'` status but only check the `result.errors` array length, you miss errors that were caught during `syncAccount()` processing. If you check both the SimpleFIN `errList` and the per-account catch blocks but forget that `result.errors` also includes rate-limit messages (line 48-49), you'll flag rate-limited accounts as "errors" when they're actually expected behavior.
+If implementation follows the design document literally, the context rebuild code will not compile. The developer will discover this at coding time and either: (a) hack a workaround that's fragile, (b) restructure the approach mid-phase, causing cascading delays, or (c) stuff conversation history into the prompt string, losing tool call context and wasting tokens.
 
-**Prevention:**
-Distinguish between three error sources in the sync pipeline:
-1. SimpleFIN API-level errors (`data.errors`/`data.errlist`) — these are connection/institution problems
-2. Per-account processing failures (the catch block on line 57-60) — these are app-level bugs
-3. Rate-limit skips (line 47-49) — these are expected behavior, not errors
+**How to avoid:**
+Use the SDK's native session persistence. The current code already uses `resume` with SDK session IDs (agent-service.ts line 37) and does NOT set `persistSession: false`, so SDK sessions already persist to disk as JSONL files. The correct approach:
 
-Only sources 1 and 2 should produce warnings. Source 3 is operational. The `'partial'` status should be set when `result.accountsSynced > 0` AND warnings exist from sources 1 or 2.
+1. Store the SDK `sessionId` (from the `system` init message) in the `chat_conversations` table alongside the app-level conversation ID
+2. On resume, pass the stored SDK session ID to `options.resume` -- the SDK loads full context from its JSONL file automatically
+3. Store messages in SQLite for UI display only (sidebar list, conversation browsing, message rendering), NOT for SDK context rebuild
+4. The `tool_calls` column in `chat_messages` is still useful for displaying tool activity in historical conversations, but it does not need to round-trip through the SDK
 
-**Detection:**
-- sync_log shows `status = 'success'` but `result.errors` is non-empty
-- Dashboard shows green "Success" when a bank connection is actually broken
+This is simpler, more reliable, and avoids the entire class of message format mismatch bugs.
+
+**Warning signs:**
+- Code trying to construct `{role: 'user', content: [{type: 'text', text: '...'}]}` objects for SDK injection
+- TypeScript compilation errors about `messages` not existing on `Options`
+- Any attempt to write a "message format converter" between SQLite rows and SDK types
 
 **Phase to address:**
-First phase — sync service changes. This is the foundational logic that everything else depends on.
+Schema design phase. Add `sdk_session_id` column to `chat_conversations`. This changes the entire architecture of resume -- from "reconstruct messages" to "pass session ID."
 
 ---
 
-### Pitfall 2: sync_warnings Table Without Cleanup Creates Unbounded Growth
+### Pitfall 2: SDK Session Files Accumulate Unbounded on Disk
 
 **What goes wrong:**
-A `sync_warnings` table that stores per-account errors with history but has no retention policy will grow without bound. With twice-daily syncs and a persistently broken bank connection, that's ~60 warning rows per month per broken account. Over a year, that's 720+ rows for one account. The table is queried on every page load (SyncStatus auto-refetches every 30 seconds) and on every dashboard render.
+Since the SDK persists sessions to `~/.claude/projects/<encoded-cwd>/` as JSONL files by default, every new conversation creates a new file. The app's retention job (croner, daily at 3 AM) deletes old `chat_conversations` rows from SQLite, but the corresponding SDK session files on disk are never cleaned up. Over months, hundreds of JSONL files accumulate. Each file contains the full conversation transcript including tool call inputs/outputs -- potentially several MB per conversation if the agent ran many queries.
 
 **Why it happens:**
-The natural instinct is to INSERT a new warning row on every sync, building a history. But unlike sync_log (which has one row per sync), sync_warnings would have N rows per sync (one per affected account), and the "current warnings" query must filter to the latest sync.
+The design document's retention job only knows about the SQLite database. It calls `purgeOldConversations(db, 90)` which deletes from `chat_conversations` (CASCADE to `chat_messages`). Nobody told it about the SDK's file-based sessions.
 
 **Consequences:**
-Without a retention policy or "latest only" design, the query to get current warnings becomes increasingly expensive, or you end up writing complex "get the most recent warning per account" queries with window functions.
+Disk usage grows without bound. The `~/.claude/projects/` directory fills with orphaned session files. If the server has limited disk space, this eventually causes problems. The SDK's `listSessions()` returns an ever-growing list.
 
-**Prevention:**
-Use an UPSERT pattern: `INSERT INTO sync_warnings (account_id, ...) ON CONFLICT(account_id) DO UPDATE SET ...`. The table has one row per account (not per sync). The row represents the *current* state. Add a `resolved_at` column that gets set when an account syncs successfully. This means the table stays bounded at the number of accounts (~5-10 rows), current-state queries are trivial (`WHERE resolved_at IS NULL`), and the sync_log table retains the historical record.
+**How to avoid:**
+When the retention job deletes old conversations, it must also delete the corresponding SDK session files. Before deleting conversations, query the `sdk_session_id` values being purged. After deleting from SQLite, delete the JSONL files at `~/.claude/projects/<encoded-cwd>/<sdk_session_id>.jsonl`. Use `fs.unlink()` with error swallowing (the file may already be gone). The encoded cwd replaces every non-alphanumeric character with `-`.
 
-**Detection:**
-- sync_warnings table has hundreds of rows
-- Current-warnings query uses `GROUP BY` or `ROW_NUMBER()` instead of a simple `WHERE`
+**Warning signs:**
+- Growing disk usage in `~/.claude/projects/` directory
+- `listSessions()` returning conversations that were deleted from the app
 
 **Phase to address:**
-First phase — schema migration. Get the table design right before building anything on top of it.
+Retention/cleanup phase. The purge function must handle both SQLite rows and SDK session files.
 
 ---
 
-### Pitfall 3: Status State Machine With No Transition Rules
+### Pitfall 3: Race Condition -- Streaming Response vs. Message Persistence
 
 **What goes wrong:**
-Adding `'partial'` to the status field creates a 4-state machine: `running -> success | partial | error`. Without explicit transition rules, edge cases create impossible states:
-- A sync starts (`running`), the API returns accounts with some errors, but then the server crashes before the UPDATE. The row stays `running` forever.
-- A subsequent sync starts while a previous one is still `running` (croner overlap or manual + scheduled collision). Two sync_log rows are `running` simultaneously.
-- The SyncStatus component checks `status.lastSync.status === 'running'` to show "Syncing..." — if a stale `running` row exists from a crash, the UI permanently shows "Syncing..." even though nothing is running.
+The current `chatStream()` generator yields SSE events in real-time as the SDK produces them. The design adds message persistence: after the stream completes, `addMessage()` is called twice (user message, then assistant response). But the SSE `done` event is emitted BEFORE the database writes happen (because the generator yields `done` first, then the caller persists). If the client receives `done`, immediately navigates to a different conversation, and the sidebar refetches the conversation list, the new conversation's messages may not be persisted yet -- the conversation shows up in the sidebar with 0 messages or stale data.
 
 **Why it happens:**
-The current code has no recovery for stale `running` entries. This isn't a problem today because: (1) syncs complete quickly, (2) crashes are rare, (3) the user can just trigger another sync. But once you surface sync status prominently (navbar indicator, dashboard badge), a stale `running` state becomes a visible bug.
+The `chatStream()` generator in agent-service.ts yields events as they arrive from the SDK (line 147-211). The persistence layer wraps the generator. If persistence happens after the generator completes (in the `finally` block or after the for-await loop), there's a window between the client seeing `done` and the database being updated.
 
 **Consequences:**
-Navbar shows a permanent "syncing" spinner. Dashboard status card is stuck on "Syncing...". User clicks "Sync Now" repeatedly, creating more stale rows.
+- Sidebar shows the new conversation but clicking it shows no messages
+- Message count in sidebar is wrong for a brief window
+- If the client also stores the `conversationId` and immediately sends another message, the previous response may not be persisted yet, causing message ordering issues
 
-**Prevention:**
-Before inserting a new sync_log row, mark any existing `running` rows as `error` with a message like "Interrupted — previous sync did not complete." Add this as the first statement in `runSync()`. This is a one-line fix but must be done in the same phase that makes the status more visible.
+**How to avoid:**
+Persist the user message BEFORE starting the stream (it's available at request time). Persist the assistant message BEFORE emitting the `done` event. This means the persistence must happen inside the stream handler, not after it. Specifically in `chat-stream-handler.ts`, the flow should be:
 
-**Detection:**
-- Multiple `running` rows in sync_log
-- SyncStatus component stuck on "Syncing..." when no sync is active
+1. Receive request with `message` and `conversationId`
+2. Create/get conversation, persist user message -> SQLite
+3. Start `chatStream()`, accumulate `fullText` and tool calls from events
+4. On `result` success from SDK: persist assistant message -> SQLite
+5. THEN yield `{type: 'done', text: fullText}` to the client
+
+This requires the stream handler to intercept the `done` event rather than pass it through directly.
+
+**Warning signs:**
+- Sidebar showing 0 messages for a conversation that was just active
+- TanStack Query refetch returning stale message counts
+- Messages appearing out of order in conversation view
 
 **Phase to address:**
-First phase — sync service changes. Clean up stale `running` entries before they become user-visible problems.
+SSE endpoint modification phase. The persistence-before-done ordering must be designed into the stream handler from the start.
 
 ---
 
-### Pitfall 4: SimpleFIN Error Codes Are Not Stable — Don't Parse Them
+### Pitfall 4: Conversation Switch During Active Stream Corrupts State
 
 **What goes wrong:**
-The SimpleFIN `errors` array contains objects with `code` and `msg` fields (simplefin-types.ts line 6-10). It's tempting to parse the `code` field to determine error severity, map to specific UI messages, or auto-link to SimpleFIN reconnect. But SimpleFIN's error codes are not documented as a stable API — they come from upstream MX aggregator error codes which change without notice.
+User is in conversation A, sends a message, streaming begins. While streaming is in progress, user clicks conversation B in the sidebar. The client must: (a) abort the active stream for conversation A, (b) clear streaming state, (c) load conversation B's messages. If this isn't handled atomically, several things can break:
+
+- The `onComplete` callback fires for conversation A's stream AFTER the client has switched to conversation B, appending conversation A's response to conversation B's message list
+- The `conversationId` state was updated to B, but the in-flight stream's `done` event still references A -- the server persists the message under A, but the client tries to display it under B
+- The abort causes the `processStream` catch handler (useStreamingChat.ts line 189-204) to fire the tRPC fallback, which sends the SAME message again (this time to conversation B's context)
 
 **Why it happens:**
-Developer sees error codes like `"FI_NOT_AVAILABLE"` or `"AUTH_REQUIRED"` and builds switch statements against them. These work for a while, then break when MX changes their error taxonomy.
+The current `useStreamingChat` hook was designed for a single-conversation model. It has one set of state (`streamingText`, `activeTool`, `isStreaming`) that's implicitly tied to "the current conversation." Adding multi-conversation support means this state must be scoped per conversation, or switching must be guarded.
 
 **Consequences:**
-The UI shows "Unknown error" for new error codes, or worse, categorizes a serious auth failure as a minor temporary issue.
+Messages appear in the wrong conversation. Duplicate messages from the tRPC fallback. Assistant response from conversation A rendered in conversation B's UI. Worst case: the wrong assistant response gets persisted to the wrong conversation in the database.
 
-**Prevention:**
-Store the raw `code` and `msg` verbatim. Display the `msg` to the user (it's human-readable). Use the presence of an error (not its code) to set the `'partial'` status. The only safe classification is: "has error" vs. "no error" — not "what kind of error." If you want to show a "Reconnect" link, show it for ALL per-account errors, not just specific codes. The SimpleFIN reconnect URL is `https://bridge.simplefin.org/reconnect` — always valid regardless of error type.
+**How to avoid:**
+Three defenses:
 
-**Detection:**
-- Switch statement or if-chain on SimpleFIN error codes in the codebase
-- Different UI treatments for different error codes
+1. **Disable sidebar clicks during active stream.** Simplest approach. The sidebar items are disabled (grayed out, no click handler) while `isStreaming` is true. The user must wait for the response to finish (or a future stop button) before switching. This is the recommended approach for v2.9.
+
+2. **Guard the onComplete callback.** If sidebar switching during streams is allowed, the `onComplete` callback must check that the `conversationId` at completion time matches the `conversationId` at send time. If they differ, discard the result silently.
+
+3. **Abort suppresses tRPC fallback.** The current code (useStreamingChat.ts line 192) already checks `controller.signal.aborted` before falling back. But this check must also cover the case where abort was triggered by a conversation switch, not just by component unmount.
+
+**Warning signs:**
+- Messages from one conversation appearing in another
+- Duplicate messages after switching conversations
+- `onComplete` firing with a stale `conversationId` closure
 
 **Phase to address:**
-First phase — sync service and warning persistence. Store raw, don't interpret.
+Client UI phase (sidebar + ChatPage integration). The conversation switching behavior must be defined before building the sidebar.
 
 ---
 
-### Pitfall 5: Dashboard and Navbar Showing Stale Warning State After Successful Sync
+### Pitfall 5: SQLite JSON Column -- tool_calls TEXT With No Validation Causes Silent Corruption
 
 **What goes wrong:**
-The SyncStatus component auto-refetches every 30 seconds (SyncStatus.tsx line 24). The SyncButton invalidates the sync.status query on success (SyncButton.tsx lines 11-15). But if warnings are served from a separate endpoint or table, the SyncButton's invalidation list must also include the new warnings query key. If it doesn't, the sequence is: user clicks Sync Now -> sync succeeds (all accounts OK) -> sync.status shows "Success" -> but the navbar warning indicator still shows the old warnings from the previous sync until the next 30-second refetch.
+The `chat_messages.tool_calls` column is `TEXT` storing JSON. better-sqlite3 does not validate JSON on write -- it stores whatever string you give it. If a tool call's `output` field contains a string that wasn't properly serialized (e.g., raw object passed to `JSON.stringify` that contains circular references, or a BigInt value), the write succeeds but `JSON.parse()` on read throws, making the entire message unrecoverable. More subtly, if tool outputs contain very large result sets (e.g., `get_transactions` returning hundreds of transactions), the JSON blob can be several MB per message row.
 
 **Why it happens:**
-The SyncButton.tsx `onSuccess` handler explicitly lists which queries to invalidate (lines 11-15). Adding a new data source (sync warnings) without updating every invalidation site creates a stale-data window.
+The tool call data comes from the SDK's stream events, which contain the tool input and output as-is from the MCP tool handlers. The existing tools (query-tools.ts, action-tools.ts) return `{content: [{type: 'text', text: JSON.stringify(...)}]}`, so the output is already a JSON string. But the input comes from the SDK's content block, which may contain types that don't serialize cleanly.
 
 **Consequences:**
-User sees contradictory states: "Last synced: just now, Success" in the dashboard alongside an amber warning indicator in the navbar. The 30-second refetch eventually fixes it, but the brief inconsistency erodes trust.
+- `JSON.parse(row.tool_calls)` throws on read, making the message display fail
+- Large tool outputs bloat the database (a conversation with 10 tool calls returning account data could be 1-2 MB per message)
+- On conversation load, parsing several large JSON blobs for all messages in a conversation adds latency
 
-**Prevention:**
-Return warnings as part of the existing `sync.status` query response rather than a separate endpoint. This way, any component that already invalidates `sync.status` automatically gets fresh warning data. The sync.status query already returns `lastSync` and `accounts` — adding a `warnings` field keeps the invalidation surface unchanged.
+**How to avoid:**
+1. **Validate before write:** Wrap the `JSON.stringify()` in a try-catch. If serialization fails, store `null` for `tool_calls` rather than corrupting the row. Log a warning.
+2. **Truncate tool outputs:** Tool outputs are for context rebuild display, not for SDK injection (per Pitfall 1). Truncate output strings to a reasonable limit (e.g., 2000 chars) before storage. The full data is available in the SDK's session file.
+3. **Validate on read:** When parsing `tool_calls` JSON from the database, wrap `JSON.parse()` in a try-catch and return an empty array on failure rather than crashing the conversation view.
+4. **Consider skipping tool_calls entirely if using SDK resume:** If context rebuild uses `options.resume` with the SDK session ID (per Pitfall 1's recommendation), tool_calls don't need to be stored at all -- they're only needed for UI display of historical tool activity, which could simply show "Used N tools" without the details.
 
-If warnings must be a separate endpoint, add the new query key to ALL invalidation sites: `SyncButton.tsx`, `DashboardPage.tsx` (line 34-37), and any future component that triggers sync.
-
-**Detection:**
-- Amber indicator visible for 0-30 seconds after a successful sync that resolved all warnings
-- `queryClient.invalidateQueries` calls that don't include the warnings query key
+**Warning signs:**
+- `JSON.parse` errors in server logs when loading conversations
+- Message rows with multi-MB `tool_calls` values
+- Conversation load times increasing with conversation length
 
 **Phase to address:**
-tRPC endpoint phase. Design the API response shape to include warnings in the existing sync.status response.
+Service layer phase (addMessage function). Validation and truncation must be in the persistence function.
 
 ---
 
-### Pitfall 6: Agent get_sync_status Tool Returns Wrong Column Names
+### Pitfall 6: CASCADE DELETE Without Foreign Key Enforcement
 
 **What goes wrong:**
-The existing `get_sync_status` agent tool (query-tools.ts line 254-257) queries `sync_log` with column names that don't match the actual schema: it selects `transactions_updated` and `error` — but the schema has `transactions_added` and `error_message`. This is a pre-existing bug (documented in PROJECT.md tech debt). When you add a `'partial'` status and warnings to the sync system, the agent tool will also need updating — and if you copy from the existing (buggy) query, you'll propagate the same column name errors.
+The design uses `ON DELETE CASCADE` on `chat_messages.conversation_id` referencing `chat_conversations.id`. SQLite has foreign keys disabled by default -- they must be enabled per-connection with `PRAGMA foreign_keys = ON`. The existing codebase already enables this (the migrations use foreign keys throughout), but if a new database connection is created without the pragma (e.g., in a test, a backup script, or the retention cron job), CASCADE won't work. Deleting a conversation leaves orphaned messages.
 
 **Why it happens:**
-The agent tool was written independently from the tRPC router and uses a raw SQL query rather than calling the service function. The column names were typed from memory.
+SQLite's foreign key support is opt-in per connection, not per database. Every new `better-sqlite3` connection must explicitly enable it. The existing `db/connection.ts` does this, but any code that creates a separate connection (common in tests) must also do it.
 
 **Consequences:**
-Agent reports NULL for sync errors and transaction counts. Adding warnings data to a query that's already broken means the agent can't tell users about sync problems — defeating part of the purpose of v2.8.
+Orphaned `chat_messages` rows accumulate. The `chat_messages` table grows without bound even as conversations are deleted. Disk usage increases. If a conversation ID is reused (unlikely with UUIDs but possible in tests), orphaned messages from a deleted conversation appear in a new one.
 
-**Prevention:**
-Fix the existing column name bug in the same phase that adds warnings. Consider having the agent tool call the same function that backs the tRPC `sync.status` endpoint, rather than running its own raw SQL. This follows the existing pattern where most agent tools wrap service functions.
+**How to avoid:**
+Verify that `PRAGMA foreign_keys = ON` is set in the database connection setup (`packages/server/src/db/connection.ts`). Write a test that: creates a conversation, adds messages, deletes the conversation, then verifies messages are gone. This catches any future regression where a code path bypasses the connection setup.
 
-**Detection:**
-- Agent responds with "0 transactions added" when the sync log shows non-zero
-- Agent says "no errors" when sync_log.error_message has content
+**Warning signs:**
+- `chat_messages` count growing despite conversation deletion
+- `SELECT COUNT(*) FROM chat_messages WHERE conversation_id NOT IN (SELECT id FROM chat_conversations)` returning non-zero
 
 **Phase to address:**
-Agent tool update phase. Fix the existing bug alongside the new warnings integration.
+Schema migration phase. Include a CASCADE verification test.
 
 ---
 
 ## Moderate Pitfalls
 
-### Pitfall 7: Migration Adding sync_warnings Table While Production Is Running
+### Pitfall 7: Model Change on Existing Conversation Loses Context
 
 **What goes wrong:**
-The app runs in production on the same iMac where development happens. The migration runner executes on server startup. If you add migration 007 with a new `sync_warnings` table and new columns, the next `npm run dev` will apply the migration to the shared production database. If the migration has a bug (wrong column type, missing DEFAULT, bad FOREIGN KEY), the production database is corrupted and the production process (still running the old code) may crash on its next sync.
+The current ChatPage (line 133-138) resets all state when the model changes: `setMessages([])`, `setSessionId(undefined)`. The design says "changing model on an existing conversation starts a new conversation (model is per-conversation)." But if the user changes the model while viewing a historical conversation, the current conversation's messages disappear from the UI (state reset) even though they're persisted in the database. The user sees a blank chat and thinks their messages were deleted.
 
 **Why it happens:**
-Dev and production share the same SQLite database at `~/minerva-money/data/minerva.db`. Migrations are forward-only. There's no down-migration or rollback mechanism.
+The current `handleModelChange` was designed for ephemeral sessions where messages only exist in React state. With persistence, the messages survive in the database, but the state reset makes them invisible.
 
 **Prevention:**
-(1) Back up the database before running dev with a new migration: `cp ~/minerva-money/data/minerva.db ~/minerva-money/data/minerva-pre-007.db`. (2) Test the migration on a copy first. (3) Keep migrations additive — `CREATE TABLE IF NOT EXISTS` and `ALTER TABLE ADD COLUMN` are safe. Never rename or drop columns in a migration. (4) Stop production before starting dev when a migration is pending.
+When changing the model on an existing conversation: (1) start a new conversation (new UUID, new SDK session), (2) navigate to `/chat` (not `/chat/:oldConversationId`), (3) the old conversation remains in the sidebar, accessible and intact. Don't reset `messages` state -- navigate away, which unmounts and remounts with a clean state.
 
-**Detection:**
-- Production process crashes with "no such column" or "no such table" after running dev
-- Migration runner logs an error on startup
+**Warning signs:**
+- User changes model and thinks their conversation was deleted
+- Conversation still in sidebar but UI is blank
 
 **Phase to address:**
-Schema migration phase. Document the backup step in the phase verification.
+Client UI phase -- model change handler must create a new conversation and navigate.
 
 ---
 
-### Pitfall 8: Mapping SimpleFIN Errors to Account IDs When account_id Is Optional
+### Pitfall 8: URL Routing Creates Stale State on Browser Back/Forward
 
 **What goes wrong:**
-The SimpleFIN error object has `account_id` as optional (simplefin-types.ts line 9). Some errors are connection-level (e.g., "bank website down") and have a `conn_id` but no `account_id`. The current code (sync-service.ts lines 38-42) concatenates these into a generic error string. When you try to persist per-account warnings, connection-level errors without `account_id` don't map to any specific account.
+The design adds URL routing: `/chat/:conversationId`. When the user navigates via browser back/forward buttons, React Router updates the URL and the `conversationId` param changes. But the ChatPage component's internal state (`messages`, `sessionId`, `streamingText`) is React state -- it doesn't re-initialize when the URL param changes (the component is already mounted). The user sees conversation A's messages but the URL says conversation B.
 
 **Why it happens:**
-SimpleFIN's error model distinguishes between connection errors (affecting all accounts at an institution) and account-specific errors. The current code doesn't need to distinguish because it dumps everything into `result.errors[]` as strings.
-
-**Consequences:**
-If you only persist warnings with an `account_id`, connection-level errors are silently dropped. If you require `account_id` as NOT NULL in the sync_warnings table, connection-level errors can't be stored.
+React Router doesn't unmount/remount a component when only the params change. The component must detect the param change (via `useEffect` on the param) and reload.
 
 **Prevention:**
-When an error has `conn_id` but no `account_id`, look up all accounts with matching `conn_id` (stored as part of the SimpleFIN account data, available in the response's `accounts` array) and create a warning for each. This maps "Discover is down" to warnings on both the Discover Checking and Discover HELOC accounts. If no matching accounts are found, store the warning with `account_id = NULL` and handle it as a "general sync warning" in the UI.
+Use a `useEffect` that watches `conversationId` from `useParams()`. When it changes: (a) if streaming, abort it, (b) clear local message state, (c) fetch the new conversation's messages via `chat.history.get`. Alternatively, use React Router's `key` prop on the ChatPage route to force a remount: `<Route path="/chat/:conversationId" element={<ChatPage key={conversationId} />} />`.
 
-**Detection:**
-- Bank connection goes down but no warnings appear because the errors have no `account_id`
-- Warnings table has constraint violations when inserting connection-level errors
+**Warning signs:**
+- URL shows one conversation, messages show another
+- Browser back button doesn't visually change the conversation
 
 **Phase to address:**
-First phase — sync service changes. Handle both error shapes when persisting warnings.
+URL routing phase. Must be implemented together with conversation loading.
 
 ---
 
-### Pitfall 9: "Partial" Badge Color Collision With Existing UI Semantics
+### Pitfall 9: Auto-Title Generation Creates Meaningless Titles
 
 **What goes wrong:**
-The design calls for an amber "Partial" badge on the dashboard. The existing DashboardPage uses exactly two status colors: `text-green-600` for success and `text-red-600` for error (line 214-216). The SyncStatus component (navbar) uses `text-blue-300` for running, `text-red-400` for error, and `text-gray-400` for success. Adding amber (yellow/orange) introduces a third semantic color. If the amber shade chosen is too close to the existing yellow used elsewhere (e.g., "Local only" backup warning at line 258-259 uses `text-yellow-600`), the two amber/yellow indicators blur together visually.
+The design says "auto-set from message content (first ~60 chars at word boundary)." Many user messages start with generic phrasing: "Hey, can you...", "I was wondering...", "What's my...". Truncating at 60 chars produces titles like "Hey, can you look at my budget and tell me if" -- not useful for scanning a sidebar.
 
 **Why it happens:**
-No design system or color palette documentation exists — Tailwind classes are applied inline. Each component picks its own colors.
-
-**Consequences:**
-User sees two yellow-ish indicators and conflates "sync partial" with "backup local only." Or worse, the amber badge is too subtle against the white card background and gets missed entirely.
+Simple truncation doesn't understand content. The first 60 characters of a message are often preamble, not the actual question.
 
 **Prevention:**
-Use `text-amber-600` and `bg-amber-50` for sync warnings consistently. Reserve `text-yellow-600` for backup warnings. Document the color semantics in a comment at the top of the SyncStatus component. Use the same amber shades in both the dashboard badge and the navbar indicator for consistency.
+Accept the simple truncation for v2.9 -- it's good enough for MVP. The title is editable via rename, so users can fix bad titles. More sophisticated titling (e.g., using the LLM to generate a summary) adds latency and complexity. If needed later, add a background job that re-titles conversations using a cheap model call after the first exchange completes.
 
-**Detection:**
-- Two different yellow/amber shades on the same dashboard page
-- User reports not noticing the warning indicator
+**Warning signs:**
+- Multiple sidebar entries starting with "Can you..." or "What's my..."
+- User immediately renaming every conversation
 
 **Phase to address:**
-UI phase — dashboard and navbar updates.
+Service layer phase. Implement simple truncation first, document as known limitation.
 
 ---
 
-## Minor Pitfalls
-
-### Pitfall 10: 30-Second Polling Creates Unnecessary Load During Active Use
+### Pitfall 10: Mobile Sidebar Overlay Doesn't Close on Route Change
 
 **What goes wrong:**
-SyncStatus refetches every 30 seconds regardless of whether a sync is in progress. With the addition of warnings (which change only on sync), this polling queries the sync_warnings table 120 times per hour even when no sync has occurred.
+The design calls for a sidebar overlay on mobile (< 768px). User opens sidebar, taps a conversation, sidebar closes, conversation loads -- this works. But if the user taps "New Chat," the sidebar must also close AND navigate to `/chat`. If the sidebar close and the navigation happen in the wrong order, the overlay persists over the new empty chat, or the overlay closing animation fights with the page transition.
+
+**Why it happens:**
+Two state changes (sidebar open/close + URL navigation) need to be coordinated. If they're in separate event handlers or state updates, React may batch them unpredictably, and the visual result depends on render timing.
 
 **Prevention:**
-This is acceptable at the current scale (single user, SQLite on local disk, query is trivial). Don't optimize this unless it causes measurable issues. The alternative (WebSocket push) adds significant complexity for zero user-visible benefit.
+In the sidebar click handler: (1) set `sidebarOpen = false`, (2) call `navigate()`. These happen in the same synchronous handler, so React batches them into one render. Do NOT use `setTimeout` or `requestAnimationFrame` to sequence them -- let React's batching handle it. Test on mobile viewport specifically.
+
+**Warning signs:**
+- Sidebar overlay stays open after selecting a conversation on mobile
+- Flash of sidebar content during page transition
+
+**Phase to address:**
+Mobile sidebar phase. Test overlay close + navigation together.
 
 ---
 
-### Pitfall 11: Navbar Warning Tooltip Overflowing on Mobile
+### Pitfall 11: Retention Job Deletes Conversation Mid-Stream
 
 **What goes wrong:**
-The design calls for a navbar amber warning indicator with a tooltip showing affected account count. The navbar is hidden on mobile (Layout.tsx line 9: `hidden md:block`). If the tooltip is implemented as a CSS hover tooltip, it won't work on mobile at all. The BottomTabBar component handles mobile navigation separately and has no sync status display.
+The retention job runs daily at 3 AM. If a conversation's `updated_at` is exactly at the threshold boundary and the user happens to be chatting at 3 AM (updating the conversation), there's a race: the job reads `updated_at < threshold`, then the user sends a message (updating `updated_at`), then the job deletes the conversation. The user's active conversation vanishes.
+
+**Why it happens:**
+The purge query and the message insertion are not in the same transaction. The purge uses `WHERE updated_at < datetime('now', '-90 days')` which is evaluated at query time, but the user's update happens between the WHERE evaluation and the DELETE execution.
 
 **Prevention:**
-Don't add a warning indicator to the BottomTabBar. The dashboard sync status card is already visible on mobile. The navbar indicator is desktop-only, matching the existing pattern where SyncStatus and SyncButton are navbar children.
+This is extremely unlikely in a single-user system with a 90-day retention window. A conversation at the exact 90-day boundary at 3 AM is an edge case of an edge case. However, for safety: (1) the purge should only delete conversations where `updated_at < datetime('now', '-90 days')` AND the conversation has no messages in the last 24 hours. (2) Alternatively, simply accept the risk -- the 90-day window is generous enough that active conversations are never near the threshold.
+
+**Warning signs:**
+- Active conversation disappears from sidebar
+- 404 when loading a conversation that was just active
+
+**Phase to address:**
+Retention phase. Low priority -- document as known theoretical risk.
 
 ---
 
-## Phase-Specific Warnings
+## Technical Debt Patterns
 
-| Phase Topic | Likely Pitfall | Mitigation |
-|-------------|---------------|------------|
-| Schema migration (sync_warnings table) | Unbounded table growth; missing cleanup of stale running rows; migration applied to production DB | UPSERT pattern (one row per account); clean stale running rows in runSync(); backup DB before migration |
-| Sync service changes (partial status, warning persistence) | Conflating rate-limit skips with real errors; losing connection-level errors without account_id; not fixing stale running entries | Separate error sources; map conn_id errors to accounts; mark stale running rows as error |
-| tRPC endpoint (sync.status response shape) | Warnings on separate endpoint causing stale-state window; breaking existing SyncStatus contract | Return warnings inside existing sync.status response; maintain backward-compatible response shape |
-| Dashboard UI (amber badge, error list) | Color collision with backup status yellow; badge invisible on white background | Use amber-600/amber-50 consistently; test visual distinction from yellow-600 |
-| Navbar UI (warning indicator) | Tooltip not working on mobile; stale indicator after successful sync | Desktop-only indicator; rely on sync.status invalidation for freshness |
-| Agent tool update | Propagating existing column name bugs; raw SQL diverging from tRPC endpoint | Fix column names; consider wrapping the same service function used by tRPC |
+| Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
+|----------|-------------------|----------------|-----------------|
+| Store tool_calls JSON in TEXT column without schema validation | Simple, no extra columns or tables | Silent corruption if tool output format changes; parse errors on read | Acceptable for v2.9 with try-catch on read |
+| Simple 60-char truncation for titles | Zero latency, no LLM call | Poor titles in sidebar | Acceptable for v2.9 with manual rename as escape hatch |
+| Disable sidebar during active stream | Prevents race conditions | User can't browse history while waiting for response | Acceptable for v2.9; add stop button in future milestone |
+| No pagination on conversation list | Simple query, simple UI | If user has 500+ conversations, sidebar load is slow | Acceptable for 90-day retention; ~180 conversations max at twice-daily use |
+| SDK session files not cleaned up | Simpler retention job | Disk usage grows with orphaned JSONL files | Never -- must clean up from the start |
 
----
+## Integration Gotchas
+
+| Integration | Common Mistake | Correct Approach |
+|-------------|----------------|------------------|
+| Claude Agent SDK `resume` | Assuming `resume` works by passing message history | `resume` reads from disk-persisted JSONL session files. Store the SDK session ID and pass it to `options.resume` |
+| Claude Agent SDK `resume` cross-directory | Calling `resume` with a session ID from a different `cwd` | Sessions are stored under `~/.claude/projects/<encoded-cwd>/`. The server's `cwd` must be consistent across restarts |
+| SDK `persistSession` default | Assuming sessions are ephemeral | Default is `true` -- sessions persist to disk. This is actually what we want for resume |
+| better-sqlite3 + JSON | Storing JSON without validating, trusting it round-trips | Always wrap `JSON.parse` on read in try-catch; validate before `JSON.stringify` on write |
+| TanStack Query invalidation | Only invalidating `chat.history.list` after message persistence | Must also invalidate `chat.history.get` for the active conversation to show the new message |
+| SSE `done` event timing | Emitting `done` before database persistence completes | Persist the assistant message, THEN emit `done` to the client |
+
+## Performance Traps
+
+| Trap | Symptoms | Prevention | When It Breaks |
+|------|----------|------------|----------------|
+| Loading all messages for a conversation on sidebar click | Slow conversation switch for long conversations | Already bounded by context window (~20 turns injected). For UI, load all but render only visible (virtual scroll if needed) | At ~100+ messages per conversation |
+| JSON parsing tool_calls on every message render | Jank when scrolling through tool-heavy conversations | Parse once on load, store parsed result in React state | At ~50+ tool calls per conversation |
+| sidebar refetch on every message send | Flicker in sidebar after every exchange | Only invalidate `chat.history.list` when conversation metadata changes (new conversation created, title updated), not on every message | At ~20+ conversations with frequent messaging |
+| SDK session JSONL files growing without bound | Disk full errors, slow `listSessions()` | Clean up session files alongside SQLite retention | At ~500+ conversations over months |
+
+## UX Pitfalls
+
+| Pitfall | User Impact | Better Approach |
+|---------|-------------|-----------------|
+| No loading state when switching conversations | User clicks conversation, nothing happens for 500ms, then messages appear | Show a skeleton/spinner in the message area immediately on conversation switch |
+| Sidebar doesn't indicate which conversation is streaming | User switches away and forgets a response is in progress | Keep the streaming conversation highlighted (pulsing dot or spinner) in the sidebar |
+| "New Chat" doesn't scroll to top of sidebar | New conversation added to top of list, but sidebar is scrolled to the bottom | Scroll sidebar to top when creating a new conversation |
+| Deleting the active conversation leaves blank screen | User deletes the conversation they're currently viewing | After delete, navigate to `/chat` (new conversation) or the next conversation in the list |
+| Confirmation buttons from previous conversation visible | User resumes conversation, old confirmation prompt is still showing Confirm/Cancel | On conversation load, mark all confirmations as responded (stale) |
 
 ## "Looks Done But Isn't" Checklist
 
-- [ ] **Partial status set correctly:** Verify that `status = 'partial'` is written to sync_log when some accounts succeed and others have errors — not just when the SimpleFIN errors array is non-empty (rate-limit skips should not trigger partial)
-- [ ] **Stale running cleanup:** Verify that starting a new sync marks any existing `running` rows as `error`
-- [ ] **Connection-level errors mapped:** Verify that a SimpleFIN error with `conn_id` but no `account_id` produces warnings for all accounts belonging to that connection
-- [ ] **Warning resolved on success:** Verify that a successful sync for an account clears (resolves) its existing warning — not just inserts a new "success" row
-- [ ] **All invalidation sites updated:** Verify that SyncButton.tsx, DashboardPage.tsx sync mutation, and any other `onSuccess` handlers invalidate the query key that serves warnings
-- [ ] **Agent tool column names fixed:** Verify that the `get_sync_status` tool uses `transactions_added` and `error_message` (not `transactions_updated` and `error`)
-- [ ] **Agent tool returns warnings:** Verify that the `get_sync_status` tool includes current warnings in its response
-- [ ] **SimpleFIN reconnect link correct:** Verify the reconnect URL is valid and opens the SimpleFIN bridge reconnect flow
-- [ ] **Manual accounts excluded from warnings:** Verify that `source = 'manual'` accounts never appear in sync warnings (they don't sync via SimpleFIN)
-- [ ] **Amber color distinct from yellow:** Verify visually that the "Partial" badge is distinguishable from the "Local only" backup indicator on the same dashboard page
-
----
+- [ ] **SDK session ID stored:** Verify that `chat_conversations` has an `sdk_session_id` column and it's populated from the SDK's `system` init message
+- [ ] **Resume uses SDK session:** Verify that resuming a conversation passes the stored `sdk_session_id` to `options.resume`, not a reconstructed message array
+- [ ] **User message persisted before stream:** Verify that the user's message is written to `chat_messages` BEFORE the SSE stream begins
+- [ ] **Assistant message persisted before done event:** Verify that the assistant's response is written to `chat_messages` BEFORE the `done` SSE event is sent to the client
+- [ ] **tool_calls JSON validated on write:** Verify that `JSON.stringify` is wrapped in try-catch in `addMessage()`
+- [ ] **tool_calls JSON validated on read:** Verify that `JSON.parse` is wrapped in try-catch in `getConversation()`
+- [ ] **CASCADE delete works:** Verify with a test: insert conversation + messages, delete conversation, assert messages are gone
+- [ ] **SDK session files cleaned up:** Verify that the retention job deletes JSONL files from `~/.claude/projects/` for purged conversations
+- [ ] **Conversation switch during stream is safe:** Verify that clicking a sidebar item during active stream either (a) is disabled or (b) aborts cleanly without cross-conversation contamination
+- [ ] **Browser back/forward reloads conversation:** Verify that changing `conversationId` URL param triggers a data refetch, not just a URL update
+- [ ] **Mobile sidebar closes on selection:** Verify on a mobile viewport that tapping a conversation closes the overlay AND loads the conversation
+- [ ] **Stale confirmations handled:** Verify that loading a historical conversation doesn't show actionable Confirm/Cancel buttons from old tool confirmations
+- [ ] **Migration number correct:** Verify migration is `009_chat_history.sql` (not `008` as design doc says -- `008_account_relink.sql` already exists)
 
 ## Recovery Strategies
 
 | Pitfall | Recovery Cost | Recovery Steps |
 |---------|---------------|----------------|
-| sync_log stuck on 'running' forever | LOW | One-line SQL: `UPDATE sync_log SET status = 'error', completed_at = datetime('now'), error_message = 'Interrupted' WHERE status = 'running'` |
-| sync_warnings table has thousands of rows | LOW | Truncate table, switch to UPSERT pattern, re-sync to populate current state |
-| Agent tool returning NULLs due to wrong column names | LOW | Fix the SQL query column names; no data loss |
-| Migration applied to production with bug | MEDIUM | Restore from iCloud backup (snapshots every 6 hours); fix migration; re-apply |
-| Amber badge not visible to user | LOW | Change Tailwind color classes; no data changes needed |
-| Stale warnings shown after successful sync | LOW | Add missing query invalidation to onSuccess handler; redeploy |
+| Messages not persisted (race condition) | LOW | Messages are also in SDK session JSONL files. Rebuild from `getSessionMessages()` if needed |
+| SDK session file missing (deleted or corrupted) | MEDIUM | Conversation display works from SQLite. Resume creates a fresh SDK session -- user loses prior context but can continue |
+| tool_calls JSON corrupted | LOW | Set `tool_calls = NULL` on affected rows. Tool activity won't display for those messages but conversation is otherwise intact |
+| Orphaned SDK session files | LOW | Script to list SDK sessions via `listSessions()`, compare with `chat_conversations.sdk_session_id`, delete unmatched files |
+| Wrong conversation receives a message | HIGH | Must manually move the message row to the correct `conversation_id`. Prevention is far cheaper than recovery |
+| CASCADE not working (orphaned messages) | LOW | `DELETE FROM chat_messages WHERE conversation_id NOT IN (SELECT id FROM chat_conversations)` |
 
----
+## Pitfall-to-Phase Mapping
+
+| Pitfall | Prevention Phase | Verification |
+|---------|------------------|--------------|
+| SDK messages parameter doesn't exist (Pitfall 1) | Schema design | `sdk_session_id` column exists in `chat_conversations`; resume code uses `options.resume` |
+| SDK session files unbounded (Pitfall 2) | Retention/cleanup | After purge, verify JSONL files are deleted for purged conversations |
+| Stream vs. persistence race (Pitfall 3) | SSE endpoint modification | User message exists in DB before first SSE event; assistant message exists before `done` event |
+| Conversation switch during stream (Pitfall 4) | Client UI (sidebar) | Sidebar items disabled during stream OR abort + guard in onComplete callback |
+| JSON column corruption (Pitfall 5) | Service layer | try-catch on both write (addMessage) and read (getConversation) for tool_calls |
+| CASCADE without FK enforcement (Pitfall 6) | Schema migration | Test: delete conversation, assert messages gone |
+| Model change loses context (Pitfall 7) | Client UI | Model change navigates to `/chat`, old conversation intact in sidebar |
+| URL routing stale state (Pitfall 8) | URL routing | Browser back/forward triggers conversation reload via useEffect or key prop |
+| Meaningless auto-titles (Pitfall 9) | Service layer | Accept for MVP; document manual rename as escape hatch |
+| Mobile overlay close timing (Pitfall 10) | Mobile sidebar | Test: tap conversation on mobile, overlay closes AND conversation loads |
+| Retention deletes active conversation (Pitfall 11) | Retention | Accepted risk at 90-day window; documented as theoretical edge case |
+| Migration number conflict | Schema migration | File is `009_chat_history.sql`, not `008` |
 
 ## Sources
 
-- Direct codebase analysis: `packages/server/src/sync/sync-service.ts` — runSync() status logic (lines 62-66 success, 76-83 error), error collection (lines 38-49), per-account processing (lines 44-61)
-- Direct codebase analysis: `packages/server/src/sync/simplefin-types.ts` — SimpleFINError shape (lines 6-10), optional account_id and conn_id fields
-- Direct codebase analysis: `packages/server/src/sync/trpc-router.ts` — sync.status query (lines 80-119), sync.trigger rate-limit check (lines 62-74)
-- Direct codebase analysis: `packages/client/src/components/SyncStatus.tsx` — 30-second polling (line 24), status rendering logic (lines 28-49)
-- Direct codebase analysis: `packages/client/src/components/SyncButton.tsx` — query invalidation on sync success (lines 11-15)
-- Direct codebase analysis: `packages/client/src/pages/DashboardPage.tsx` — sync status card color scheme (lines 214-216), backup yellow indicator (line 258-259), sync mutation invalidation (lines 33-37)
-- Direct codebase analysis: `packages/client/src/components/Layout.tsx` — navbar hidden on mobile (line 9), SyncStatus and SyncButton placement (lines 98-99)
-- Direct codebase analysis: `packages/server/src/agent/tools/query-tools.ts` — get_sync_status wrong column names (line 257)
-- Direct codebase analysis: `packages/server/migrations/001-initial-schema.sql` — sync_log schema (lines 97-105), no sync_warnings table
-- Direct codebase analysis: `packages/server/src/sync/fixtures/simplefin-response.json` — fixture has empty errlist, three connections with conn_id values
-- Project context: `.planning/PROJECT.md` — tech debt noting agent column name mismatches (line 112), v2.8 target features (lines 67-76)
+- [Claude Agent SDK Sessions documentation](https://platform.claude.com/docs/en/agent-sdk/sessions) -- Sessions persist as JSONL files on disk; `resume` requires session ID and matching `cwd`; no `messages` parameter on `query()`
+- [Claude Agent SDK TypeScript Reference](https://platform.claude.com/docs/en/agent-sdk/typescript) -- Full `Options` type reference confirming no `messages` field; `persistSession` defaults to `true`
+- [Claude Agent SDK TypeScript V2 Preview](https://platform.claude.com/docs/en/agent-sdk/typescript-v2-preview) -- V2 `createSession()`/`resumeSession()` pattern; still requires session ID for resume
+- Direct codebase analysis: `packages/server/src/agent/agent-service.ts` -- `chatStream()` generator yields events in real-time (lines 94-234); `resume` used at line 37/118; `persistSession` not set (defaults to true)
+- Direct codebase analysis: `packages/server/src/agent/chat-stream-handler.ts` -- Express handler streams events directly from generator (lines 49-53); no persistence layer between generator and response
+- Direct codebase analysis: `packages/client/src/hooks/useStreamingChat.ts` -- Single-conversation state model (lines 151-215); abort-then-fallback pattern (lines 189-204); `onComplete` closure captures stale state
+- Direct codebase analysis: `packages/client/src/pages/ChatPage.tsx` -- Model change resets all state (lines 133-138); `sessionId` in React state (line 54); single-conversation assumption throughout
+- Direct codebase analysis: `packages/shared/src/sse-events.ts` -- SSE event protocol with 6 event types; no `conversation` event type yet
+- Direct codebase analysis: `packages/server/migrations/` -- Latest migration is `008_account_relink.sql`, so next must be `009`
 
 ---
-*Pitfalls research for: Sync error visibility — per-account warnings, partial sync status, dashboard/navbar indicators (v2.8)*
-*Researched: 2026-03-26*
+*Pitfalls research for: Chat history persistence -- SDK context rebuild, message storage, conversation browsing/resume (v2.9)*
+*Researched: 2026-03-28*
