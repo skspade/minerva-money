@@ -183,7 +183,10 @@ Full details: [milestones/v2.8-ROADMAP.md](milestones/v2.8-ROADMAP.md)
   2. Sending a message with an existing conversationId appends to that conversation and resumes the SDK session via the stored sdk_session_id
   3. Both user and assistant messages (with tool_calls) are persisted after each exchange -- verifiable by calling chat.history.get
   4. When the SDK session JSONL file is missing on disk, the conversation gracefully falls back to a new session without returning an error to the user
-**Plans**: TBD
+**Plans**: 3 plans
+  - [ ] 54-01-PLAN.md — SSE conversation event type + updateSdkSessionId service function (TDD)
+  - [ ] 54-02-PLAN.md — Agent service StreamState, resume fallback, and context injection (TDD)
+  - [ ] 54-03-PLAN.md — Chat stream handler conversation lifecycle + tRPC mutation update (TDD)
 
 ### Phase 55: Client Conversation Lifecycle
 **Goal**: Users can navigate between conversations via URL and the chat UI loads the correct conversation state
