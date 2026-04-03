@@ -12,6 +12,11 @@ export interface SpendingOverTime {
   total: number;
 }
 
+export interface DailySpending {
+  date: string;   // "YYYY-MM-DD"
+  total: number;  // positive cents
+}
+
 export interface NetWorthPoint {
   date: string;
   total: number;
@@ -135,6 +140,57 @@ export function getSpendingOverTime(
   return Array.from(merged.entries())
     .map(([period, total]) => ({ period, total }))
     .sort((a, b) => a.period.localeCompare(b.period));
+}
+
+export function getDailySpending(
+  db: Database.Database,
+  startDate: string,
+  endDate: string,
+): DailySpending[] {
+  // Unsplit transactions
+  const unsplit = db.prepare(`
+    SELECT strftime('%Y-%m-%d', t.date) AS date, COALESCE(SUM(ABS(t.amount)), 0) AS total
+    FROM transactions t
+    WHERE t.date >= ? AND t.date <= ?
+      AND t.amount < 0
+      AND NOT EXISTS (SELECT 1 FROM transaction_splits ts WHERE ts.transaction_id = t.id)
+      AND NOT EXISTS (
+        SELECT 1 FROM transfer_links tl
+        WHERE (tl.transaction_a_id = t.id OR tl.transaction_b_id = t.id) AND tl.confirmed = 1
+      )
+    GROUP BY strftime('%Y-%m-%d', t.date)
+    ORDER BY date ASC
+  `).all(startDate, endDate) as { date: string; total: number }[];
+
+  // Split transactions
+  const splits = db.prepare(`
+    SELECT strftime('%Y-%m-%d', t.date) AS date, COALESCE(SUM(ABS(ts.amount)), 0) AS total
+    FROM transaction_splits ts
+    JOIN transactions t ON ts.transaction_id = t.id
+    WHERE t.date >= ? AND t.date <= ?
+      AND ts.amount < 0
+      AND NOT EXISTS (
+        SELECT 1 FROM transfer_links tl
+        WHERE (tl.transaction_a_id = t.id OR tl.transaction_b_id = t.id) AND tl.confirmed = 1
+      )
+    GROUP BY strftime('%Y-%m-%d', t.date)
+    ORDER BY date ASC
+  `).all(startDate, endDate) as { date: string; total: number }[];
+
+  // Merge by date
+  const merged = new Map<string, number>();
+
+  for (const row of unsplit) {
+    merged.set(row.date, (merged.get(row.date) ?? 0) + row.total);
+  }
+
+  for (const row of splits) {
+    merged.set(row.date, (merged.get(row.date) ?? 0) + row.total);
+  }
+
+  return Array.from(merged.entries())
+    .map(([date, total]) => ({ date, total }))
+    .sort((a, b) => a.date.localeCompare(b.date));
 }
 
 export function getNetWorth(

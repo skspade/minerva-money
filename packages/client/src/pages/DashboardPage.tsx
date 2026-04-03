@@ -2,6 +2,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTRPC } from '../trpc';
 import { formatCurrency } from '../lib/format';
 import { Link } from 'react-router';
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+} from 'recharts';
 
 function getCurrentPeriod(): string {
   const now = new Date();
@@ -17,9 +20,27 @@ function getToday(): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 }
 
+function getLastMonthStart(): string {
+  const now = new Date();
+  const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  return `${lastMonth.getFullYear()}-${String(lastMonth.getMonth() + 1).padStart(2, '0')}-01`;
+}
+
+function getLastMonthEnd(): string {
+  const now = new Date();
+  const lastDay = new Date(now.getFullYear(), now.getMonth(), 0);
+  return `${lastDay.getFullYear()}-${String(lastDay.getMonth() + 1).padStart(2, '0')}-${String(lastDay.getDate()).padStart(2, '0')}`;
+}
+
 function formatMonth(): string {
   const now = new Date();
   return now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+}
+
+function formatLastMonth(): string {
+  const now = new Date();
+  const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  return lastMonth.toLocaleDateString('en-US', { month: 'long' });
 }
 
 export default function DashboardPage() {
@@ -57,6 +78,17 @@ export default function DashboardPage() {
     trpc.backup.status.queryOptions(),
   );
 
+  const { data: thisMonthDaily, isLoading: thisMonthLoading } = useQuery(
+    trpc.reports.dailySpending.queryOptions({ startDate, endDate }),
+  );
+
+  const { data: lastMonthDaily, isLoading: lastMonthLoading } = useQuery(
+    trpc.reports.dailySpending.queryOptions({
+      startDate: getLastMonthStart(),
+      endDate: getLastMonthEnd(),
+    }),
+  );
+
   // Group accounts by type
   const accountsByType = new Map<string, typeof accounts>();
   if (accounts) {
@@ -74,11 +106,132 @@ export default function DashboardPage() {
 
   const top5 = topSpending?.slice(0, 5) ?? [];
 
+  // Build cumulative spending comparison data
+  const cumulativeData = (() => {
+    if (!thisMonthDaily && !lastMonthDaily) return [];
+
+    const thisMonthMap = new Map<number, number>();
+    for (const d of thisMonthDaily ?? []) {
+      const day = parseInt(d.date.split('-')[2], 10);
+      thisMonthMap.set(day, (thisMonthMap.get(day) ?? 0) + d.total);
+    }
+
+    const lastMonthMap = new Map<number, number>();
+    for (const d of lastMonthDaily ?? []) {
+      const day = parseInt(d.date.split('-')[2], 10);
+      lastMonthMap.set(day, (lastMonthMap.get(day) ?? 0) + d.total);
+    }
+
+    const today = new Date();
+    const todayDay = today.getDate();
+    const lastMonthLastDay = new Date(today.getFullYear(), today.getMonth(), 0).getDate();
+    const maxDay = Math.max(todayDay, lastMonthLastDay);
+
+    const result: { day: number; thisMonth?: number; lastMonth?: number }[] = [];
+    let cumThis = 0;
+    let cumLast = 0;
+
+    for (let day = 1; day <= maxDay; day++) {
+      const entry: { day: number; thisMonth?: number; lastMonth?: number } = { day };
+
+      if (day <= todayDay) {
+        cumThis += thisMonthMap.get(day) ?? 0;
+        entry.thisMonth = cumThis;
+      }
+
+      if (day <= lastMonthLastDay) {
+        cumLast += lastMonthMap.get(day) ?? 0;
+        entry.lastMonth = cumLast;
+      }
+
+      result.push(entry);
+    }
+
+    return result;
+  })();
+
+  const comparisonStat = (() => {
+    if (cumulativeData.length === 0) return null;
+    const todayDay = new Date().getDate();
+    const todayEntry = cumulativeData.find(d => d.day === todayDay);
+    if (!todayEntry || todayEntry.thisMonth == null || todayEntry.lastMonth == null) return null;
+    return todayEntry.lastMonth - todayEntry.thisMonth; // positive = spending less this month
+  })();
+
   return (
     <div>
       <h2 className="text-2xl font-bold mb-6">Dashboard</h2>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Cumulative Spending Comparison */}
+        <div className="bg-white rounded-lg border border-gray-200 p-4 md:col-span-2">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm text-gray-500 uppercase tracking-wide font-medium">Spending Pace</h3>
+            <Link to="/reports" className="text-sm text-blue-600 hover:text-blue-800">View reports</Link>
+          </div>
+
+          {thisMonthLoading || lastMonthLoading ? (
+            <p className="text-gray-500 text-sm">Loading...</p>
+          ) : cumulativeData.length === 0 ? (
+            <p className="text-gray-500 text-sm">No spending data</p>
+          ) : (
+            <>
+              {comparisonStat != null && (
+                <p className="text-sm mb-3">
+                  {comparisonStat > 0 ? (
+                    <span className="text-green-600 font-medium">
+                      {formatCurrency(comparisonStat)} less than this point in {formatLastMonth()}
+                    </span>
+                  ) : comparisonStat < 0 ? (
+                    <span className="text-red-600 font-medium">
+                      {formatCurrency(Math.abs(comparisonStat))} more than this point in {formatLastMonth()}
+                    </span>
+                  ) : (
+                    <span className="text-gray-500 font-medium">
+                      Same as this point in {formatLastMonth()}
+                    </span>
+                  )}
+                </p>
+              )}
+              <div style={{ height: 300 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={cumulativeData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="day" />
+                    <YAxis tickFormatter={(value: number) => formatCurrency(value)} width={80} />
+                    <Tooltip
+                      formatter={(value: number, name: string) => [
+                        formatCurrency(value),
+                        name === 'thisMonth' ? 'This Month' : 'Last Month',
+                      ]}
+                      labelFormatter={(day: number) => `Day ${day}`}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="thisMonth"
+                      stroke="#3b82f6"
+                      strokeWidth={2}
+                      dot={false}
+                      name="thisMonth"
+                      connectNulls={false}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="lastMonth"
+                      stroke="#9ca3af"
+                      strokeWidth={2}
+                      strokeDasharray="5 5"
+                      dot={false}
+                      name="lastMonth"
+                      connectNulls={false}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </>
+          )}
+        </div>
+
         {/* Account Balances */}
         <div className="bg-white rounded-lg border border-gray-200 p-4">
           <div className="flex items-center justify-between mb-3">

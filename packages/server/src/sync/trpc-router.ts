@@ -51,13 +51,15 @@ import {
 import {
   getSpendingByCategory,
   getSpendingOverTime,
+  getDailySpending,
   getNetWorth,
   type SpendingByCategory,
   type SpendingOverTime,
+  type DailySpending,
   type NetWorthPoint,
 } from '../reports/reports-service.js';
 
-export type { SpendingByCategory, SpendingOverTime, NetWorthPoint };
+export type { SpendingByCategory, SpendingOverTime, DailySpending, NetWorthPoint };
 
 const syncRouter = router({
   trigger: publicProcedure.mutation(async ({ ctx }) => {
@@ -522,6 +524,12 @@ const reportsRouter = router({
     .input(z.object({ startDate: z.string().optional(), endDate: z.string().optional() }))
     .query(({ ctx, input }) => {
       return getNetWorth(ctx.db, input.startDate, input.endDate);
+    }),
+
+  dailySpending: publicProcedure
+    .input(z.object({ startDate: z.string(), endDate: z.string() }))
+    .query(({ ctx, input }) => {
+      return getDailySpending(ctx.db, input.startDate, input.endDate);
     }),
 });
 

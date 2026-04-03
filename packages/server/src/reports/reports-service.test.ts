@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createDatabase } from '../db/connection.js';
-import { getSpendingByCategory, getSpendingOverTime, getNetWorth } from './reports-service.js';
+import { getSpendingByCategory, getSpendingOverTime, getDailySpending, getNetWorth } from './reports-service.js';
 import type Database from 'better-sqlite3';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -167,6 +167,62 @@ describe('reports-service', () => {
 
       const result = getSpendingOverTime(db, '2026-01-01', '2026-02-01');
       expect(result[0].total).toBe(5000); // Positive, not -5000
+    });
+  });
+
+  describe('getDailySpending', () => {
+    it('returns daily totals grouped by date, sorted ascending', () => {
+      db.prepare('INSERT INTO transactions (id, account_id, date, amount, category_id) VALUES (?, ?, ?, ?, ?)').run('t1', 'acct-1', '2026-03-05', -5000, catGroceries);
+      db.prepare('INSERT INTO transactions (id, account_id, date, amount, category_id) VALUES (?, ?, ?, ?, ?)').run('t2', 'acct-1', '2026-03-10', -3000, catGroceries);
+      db.prepare('INSERT INTO transactions (id, account_id, date, amount, category_id) VALUES (?, ?, ?, ?, ?)').run('t3', 'acct-1', '2026-03-03', -10000, catRent);
+
+      const result = getDailySpending(db, '2026-03-01', '2026-03-31');
+      expect(result).toHaveLength(3);
+      expect(result[0]).toEqual({ date: '2026-03-03', total: 10000 });
+      expect(result[1]).toEqual({ date: '2026-03-05', total: 5000 });
+      expect(result[2]).toEqual({ date: '2026-03-10', total: 3000 });
+    });
+
+    it('sums multiple transactions on the same day', () => {
+      db.prepare('INSERT INTO transactions (id, account_id, date, amount, category_id) VALUES (?, ?, ?, ?, ?)').run('t1', 'acct-1', '2026-03-05', -5000, catGroceries);
+      db.prepare('INSERT INTO transactions (id, account_id, date, amount, category_id) VALUES (?, ?, ?, ?, ?)').run('t2', 'acct-1', '2026-03-05', -3000, catDining);
+
+      const result = getDailySpending(db, '2026-03-01', '2026-03-31');
+      expect(result).toHaveLength(1);
+      expect(result[0]).toEqual({ date: '2026-03-05', total: 8000 });
+    });
+
+    it('excludes confirmed transfers', () => {
+      db.prepare('INSERT INTO transactions (id, account_id, date, amount, category_id) VALUES (?, ?, ?, ?, ?)').run('t1', 'acct-1', '2026-03-05', -5000, catGroceries);
+      db.prepare('INSERT INTO transactions (id, account_id, date, amount, category_id) VALUES (?, ?, ?, ?, ?)').run('t2', 'acct-1', '2026-03-06', -50000, null);
+      db.prepare('INSERT INTO transactions (id, account_id, date, amount, category_id) VALUES (?, ?, ?, ?, ?)').run('t3', 'acct-2', '2026-03-06', 50000, null);
+      db.prepare('INSERT INTO transfer_links (transaction_a_id, transaction_b_id, confirmed) VALUES (?, ?, ?)').run('t2', 't3', 1);
+
+      const result = getDailySpending(db, '2026-03-01', '2026-03-31');
+      expect(result).toHaveLength(1);
+      expect(result[0]).toEqual({ date: '2026-03-05', total: 5000 });
+    });
+
+    it('includes split transaction amounts', () => {
+      db.prepare('INSERT INTO transactions (id, account_id, date, amount, category_id) VALUES (?, ?, ?, ?, ?)').run('t1', 'acct-1', '2026-03-05', -10000, null);
+      db.prepare('INSERT INTO transaction_splits (transaction_id, category_id, amount) VALUES (?, ?, ?)').run('t1', catGroceries, -6000);
+      db.prepare('INSERT INTO transaction_splits (transaction_id, category_id, amount) VALUES (?, ?, ?)').run('t1', catDining, -4000);
+
+      const result = getDailySpending(db, '2026-03-01', '2026-03-31');
+      expect(result).toHaveLength(1);
+      expect(result[0]).toEqual({ date: '2026-03-05', total: 10000 });
+    });
+
+    it('returns positive absolute values', () => {
+      db.prepare('INSERT INTO transactions (id, account_id, date, amount, category_id) VALUES (?, ?, ?, ?, ?)').run('t1', 'acct-1', '2026-03-05', -5000, catGroceries);
+
+      const result = getDailySpending(db, '2026-03-01', '2026-03-31');
+      expect(result[0].total).toBe(5000);
+    });
+
+    it('returns empty array when no transactions in range', () => {
+      const result = getDailySpending(db, '2026-03-01', '2026-03-31');
+      expect(result).toEqual([]);
     });
   });
 
