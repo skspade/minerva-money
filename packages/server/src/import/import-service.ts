@@ -115,9 +115,18 @@ export function parseDate(dateStr: string): string | null {
   return null;
 }
 
+// --- CSV Format Detection ---
+
+export type CsvFormat = 'monarch' | 'bank-statement';
+
+export interface ParsedCsv {
+  rows: RawCsvRow[];
+  format: CsvFormat;
+}
+
 // --- CSV Parsing ---
 
-export function parseCsv(csvText: string): RawCsvRow[] {
+export function parseCsv(csvText: string): ParsedCsv {
   // Strip UTF-8 BOM
   let text = csvText.replace(/^\uFEFF/, '');
 
@@ -141,7 +150,7 @@ export function parseCsv(csvText: string): RawCsvRow[] {
       bom: true,
       delimiter,
     }) as BankStatementRow[];
-    return normalizeBankStatementRows(bankRows);
+    return { rows: normalizeBankStatementRows(bankRows), format: 'bank-statement' };
   }
 
   const rows = parse(text, {
@@ -189,7 +198,7 @@ export function parseCsv(csvText: string): RawCsvRow[] {
     }
   }
 
-  return rows;
+  return { rows, format: 'monarch' };
 }
 
 // --- Row Validation ---
@@ -293,7 +302,7 @@ export interface ExecuteResult {
 // --- Preview ---
 
 export function previewImport(db: Database.Database, csvText: string): PreviewResult {
-  const rawRows = parseCsv(csvText);
+  const { rows: rawRows, format } = parseCsv(csvText);
   const allErrors: string[] = [];
   const validTransformed: TransformedRow[] = [];
 
@@ -345,50 +354,68 @@ export function previewImport(db: Database.Database, csvText: string): PreviewRe
     };
   });
 
-  // Dedup stats: compute hashes for rows with matched accounts
+  // Dedup stats: strategy depends on format
   const accountIdMap = new Map(accountMatches.filter(a => a.suggestedId).map(a => [a.csvName, a.suggestedId!]));
   let duplicateCount = 0;
   let newCount = 0;
 
-  // Collect hashes for rows with matched accounts
-  const hashesToCheck: string[] = [];
-  const rowsWithHashes: { hash: string; hasMappedAccount: boolean }[] = [];
-
-  for (const row of validTransformed) {
-    const accountId = accountIdMap.get(row.accountName);
-    if (accountId) {
-      const hash = generateDedupHash(accountId, row.date, row.amount, row.payee);
-      hashesToCheck.push(hash);
-      rowsWithHashes.push({ hash, hasMappedAccount: true });
-    } else {
-      rowsWithHashes.push({ hash: '', hasMappedAccount: false });
-    }
-  }
-
-  // Batch-check existing hashes
-  const existingHashes = new Set<string>();
-  if (hashesToCheck.length > 0) {
-    // Process in chunks to avoid SQLite parameter limit
-    const CHUNK_SIZE = 500;
-    for (let i = 0; i < hashesToCheck.length; i += CHUNK_SIZE) {
-      const chunk = hashesToCheck.slice(i, i + CHUNK_SIZE);
-      const placeholders = chunk.map(() => '?').join(', ');
-      const rows = db.prepare(
-        `SELECT dedup_hash FROM transactions WHERE dedup_hash IN (${placeholders})`
-      ).all(...chunk) as { dedup_hash: string }[];
-      for (const r of rows) {
-        existingHashes.add(r.dedup_hash);
+  if (format === 'bank-statement') {
+    // Bank statements: dedup by account + date + amount (payee differs between sources)
+    const existingTxnStmt = db.prepare(
+      `SELECT COUNT(*) as count FROM transactions WHERE account_id = ? AND date = ? AND amount = ?`
+    );
+    for (const row of validTransformed) {
+      const accountId = accountIdMap.get(row.accountName);
+      if (!accountId) {
+        newCount++;
+      } else {
+        const result = existingTxnStmt.get(accountId, row.date, row.amount) as { count: number };
+        if (result.count > 0) {
+          duplicateCount++;
+        } else {
+          newCount++;
+        }
       }
     }
-  }
+  } else {
+    // Monarch: dedup by hash (account + date + amount + payee)
+    const hashesToCheck: string[] = [];
+    const rowsWithHashes: { hash: string; hasMappedAccount: boolean }[] = [];
 
-  for (const entry of rowsWithHashes) {
-    if (!entry.hasMappedAccount) {
-      newCount++; // Conservative: unmapped accounts counted as new
-    } else if (existingHashes.has(entry.hash)) {
-      duplicateCount++;
-    } else {
-      newCount++;
+    for (const row of validTransformed) {
+      const accountId = accountIdMap.get(row.accountName);
+      if (accountId) {
+        const hash = generateDedupHash(accountId, row.date, row.amount, row.payee);
+        hashesToCheck.push(hash);
+        rowsWithHashes.push({ hash, hasMappedAccount: true });
+      } else {
+        rowsWithHashes.push({ hash: '', hasMappedAccount: false });
+      }
+    }
+
+    const existingHashes = new Set<string>();
+    if (hashesToCheck.length > 0) {
+      const CHUNK_SIZE = 500;
+      for (let i = 0; i < hashesToCheck.length; i += CHUNK_SIZE) {
+        const chunk = hashesToCheck.slice(i, i + CHUNK_SIZE);
+        const placeholders = chunk.map(() => '?').join(', ');
+        const rows = db.prepare(
+          `SELECT dedup_hash FROM transactions WHERE dedup_hash IN (${placeholders})`
+        ).all(...chunk) as { dedup_hash: string }[];
+        for (const r of rows) {
+          existingHashes.add(r.dedup_hash);
+        }
+      }
+    }
+
+    for (const entry of rowsWithHashes) {
+      if (!entry.hasMappedAccount) {
+        newCount++;
+      } else if (existingHashes.has(entry.hash)) {
+        duplicateCount++;
+      } else {
+        newCount++;
+      }
     }
   }
 
@@ -413,7 +440,7 @@ export function executeImport(
   categoryMappings: Record<string, number>,
 ): ExecuteResult {
   // Parse and validate
-  const rawRows = parseCsv(csvText);
+  const { rows: rawRows, format } = parseCsv(csvText);
   const validTransformed: TransformedRow[] = [];
 
   for (let i = 0; i < rawRows.length; i++) {
@@ -431,6 +458,11 @@ export function executeImport(
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
+    // Bank statement dedup: check by account + date + amount (payee differs between sources)
+    const bankDedupStmt = format === 'bank-statement'
+      ? db.prepare(`SELECT COUNT(*) as count FROM transactions WHERE account_id = ? AND date = ? AND amount = ?`)
+      : null;
+
     let importedCount = 0;
     let skippedCount = 0;
     let skippedByAccountFilter = 0;
@@ -443,6 +475,16 @@ export function executeImport(
         skippedByAccountFilter++;
         continue;
       }
+
+      // Bank statement: check for existing transaction by account + date + amount
+      if (bankDedupStmt) {
+        const existing = bankDedupStmt.get(accountId, row.date, row.amount) as { count: number };
+        if (existing.count > 0) {
+          skippedCount++;
+          continue;
+        }
+      }
+
       const dedupHash = generateDedupHash(accountId, row.date, row.amount, row.payee);
       const txnId = randomUUID();
 

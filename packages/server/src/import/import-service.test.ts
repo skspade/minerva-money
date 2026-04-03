@@ -42,7 +42,8 @@ describe('parseCsv', () => {
 
   it('parses comma-delimited CSV with Monarch columns', () => {
     const csv = `${MONARCH_HEADER}\n2024-01-15,Coffee Shop,Food & Drink,Checking,COFFEE SHOP 123,morning coffee,-4.50,`;
-    const rows = parseCsv(csv);
+    const { rows, format } = parseCsv(csv);
+    expect(format).toBe('monarch');
     expect(rows).toHaveLength(1);
     expect(rows[0].Date).toBe('2024-01-15');
     expect(rows[0].Merchant).toBe('Coffee Shop');
@@ -55,33 +56,33 @@ describe('parseCsv', () => {
 
   it('parses tab-delimited CSV', () => {
     const csv = `Date\tMerchant\tCategory\tAccount\tOriginal Statement\tNotes\tAmount\tTags\n2024-01-15\tCoffee Shop\tFood & Drink\tChecking\tCOFFEE SHOP 123\t\t-4.50\t`;
-    const rows = parseCsv(csv);
+    const { rows } = parseCsv(csv);
     expect(rows).toHaveLength(1);
     expect(rows[0].Merchant).toBe('Coffee Shop');
   });
 
   it('strips UTF-8 BOM', () => {
     const csv = `\uFEFF${MONARCH_HEADER}\n2024-01-15,Coffee Shop,Food & Drink,Checking,COFFEE SHOP 123,,-4.50,`;
-    const rows = parseCsv(csv);
+    const { rows } = parseCsv(csv);
     expect(rows).toHaveLength(1);
     expect(rows[0].Date).toBe('2024-01-15');
   });
 
   it('handles CRLF line endings', () => {
     const csv = `${MONARCH_HEADER}\r\n2024-01-15,Coffee Shop,Food & Drink,Checking,COFFEE SHOP 123,,-4.50,\r\n`;
-    const rows = parseCsv(csv);
+    const { rows } = parseCsv(csv);
     expect(rows).toHaveLength(1);
   });
 
   it('skips empty lines', () => {
     const csv = `${MONARCH_HEADER}\n\n2024-01-15,Coffee Shop,Food & Drink,Checking,COFFEE SHOP 123,,-4.50,\n\n`;
-    const rows = parseCsv(csv);
+    const { rows } = parseCsv(csv);
     expect(rows).toHaveLength(1);
   });
 
   it('trims field values', () => {
     const csv = `${MONARCH_HEADER}\n 2024-01-15 , Coffee Shop , Food & Drink , Checking , COFFEE SHOP 123 , , -4.50 ,`;
-    const rows = parseCsv(csv);
+    const { rows } = parseCsv(csv);
     expect(rows[0].Date).toBe('2024-01-15');
     expect(rows[0].Merchant).toBe('Coffee Shop');
   });
@@ -93,7 +94,7 @@ describe('parseCsv', () => {
 
   it('parses multiple rows', () => {
     const csv = `${MONARCH_HEADER}\n2024-01-15,Coffee Shop,Food & Drink,Checking,COFFEE SHOP 123,,-4.50,\n2024-01-16,Gas Station,Auto,Checking,GAS STATION 456,,-35.00,`;
-    const rows = parseCsv(csv);
+    const { rows } = parseCsv(csv);
     expect(rows).toHaveLength(2);
   });
 });
@@ -251,7 +252,8 @@ describe('parseCsv — bank statement format', () => {
 
   it('parses tab-delimited bank statement with Debit/Credit columns', () => {
     const csv = `${BANK_HEADER}\n04/03/2026\tACH Withdrawal CITI AUTOPAY PAYMENT\tDebit\t$115.02\t0\t$928.47`;
-    const rows = parseCsv(csv);
+    const { rows, format } = parseCsv(csv);
+    expect(format).toBe('bank-statement');
     expect(rows).toHaveLength(1);
     expect(rows[0].Date).toBe('04/03/2026');
     expect(rows[0].Merchant).toBe('ACH Withdrawal CITI AUTOPAY PAYMENT');
@@ -263,13 +265,13 @@ describe('parseCsv — bank statement format', () => {
 
   it('converts credit amounts to positive', () => {
     const csv = `${BANK_HEADER}\n04/03/2026\tDIRECT DEPOSIT\tCredit\t0\t$1500.00\t$2428.47`;
-    const rows = parseCsv(csv);
+    const { rows } = parseCsv(csv);
     expect(rows[0].Amount).toBe('1500');
   });
 
   it('handles $ and comma in amounts', () => {
     const csv = `${BANK_HEADER}\n04/03/2026\tBIG PURCHASE\tDebit\t$1,234.56\t0\t$100.00`;
-    const rows = parseCsv(csv);
+    const { rows } = parseCsv(csv);
     expect(rows[0].Amount).toBe('-1234.56');
   });
 
@@ -280,7 +282,7 @@ describe('parseCsv — bank statement format', () => {
       '04/01/2026\tACH Withdrawal GCWW/EZ-PAY UTILITIES\tDebit\t$76.95\t0\t$1043.49',
       '03/31/2026\tACH Withdrawal SST 833-977-0334 Loan Pmt\tDebit\t$80.74\t0\t$1120.44',
     ].join('\n');
-    const rows = parseCsv(csv);
+    const { rows } = parseCsv(csv);
     expect(rows).toHaveLength(3);
     expect(rows[0].Amount).toBe('-115.02');
     expect(rows[1].Amount).toBe('-76.95');
@@ -289,7 +291,7 @@ describe('parseCsv — bank statement format', () => {
 
   it('handles comma-delimited bank statement', () => {
     const csv = 'Transaction Date,Transaction Description,Transaction Type,Debit,Credit,Balance\n04/03/2026,PAYMENT,$115.02,0,$928.47';
-    const rows = parseCsv(csv);
+    const { rows } = parseCsv(csv);
     expect(rows).toHaveLength(1);
   });
 
@@ -299,7 +301,7 @@ describe('parseCsv — bank statement format', () => {
       '04/03/2026\tPAYMENT ONE\tDebit\t$10.00\t0\t$90.00',
       '04/02/2026\tPAYMENT TWO\tDebit\t$20.00\t0\t$80.00',
     ].join('\n');
-    const rows = parseCsv(csv);
+    const { rows } = parseCsv(csv);
     expect(rows.every(r => r.Account === 'Bank Statement')).toBe(true);
   });
 });
@@ -672,6 +674,28 @@ describe('executeImport', () => {
 
     const txns = db.prepare('SELECT * FROM transactions WHERE account_id = ?').all('acct-discover');
     expect(txns).toHaveLength(3);
+  });
+
+  it('bank statement dedup detects Monarch-imported transactions with different payee', () => {
+    // Simulate: Monarch CSV already imported a transaction with a different payee name
+    const monarchHash = generateDedupHash('acct-checking', '2024-01-15', -7695, 'GCWW Utilities Payment');
+    db.prepare(`INSERT INTO transactions (id, account_id, date, amount, pending, payee, memo, dedup_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(
+      'monarch-txn', 'acct-checking', '2024-01-15', -7695, 0, 'GCWW Utilities Payment', null, monarchHash,
+    );
+
+    // Now import bank statement with same date+amount but different payee
+    const bankHeader = 'Transaction Date\tTransaction Description\tTransaction Type\tDebit\tCredit\tBalance';
+    const csv = [
+      bankHeader,
+      '01/15/2024\tACH Withdrawal GCWW/EZ-PAY UTILITIES\tDebit\t$76.95\t0\t$1043.49',
+    ].join('\n');
+
+    const result = executeImport(db, csv, { 'Bank Statement': 'acct-checking' }, {});
+    expect(result.skippedCount).toBe(1);  // Detected as duplicate despite different payee
+    expect(result.importedCount).toBe(0);
+
+    const txns = db.prepare('SELECT * FROM transactions WHERE account_id = ?').all('acct-checking');
+    expect(txns).toHaveLength(1); // Still just the original
   });
 
   it('does not recalculate balance for SimpleFIN accounts', () => {
