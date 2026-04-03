@@ -246,6 +246,64 @@ describe('transformRow', () => {
   });
 });
 
+describe('parseCsv — bank statement format', () => {
+  const BANK_HEADER = 'Transaction Date\tTransaction Description\tTransaction Type\tDebit\tCredit\tBalance';
+
+  it('parses tab-delimited bank statement with Debit/Credit columns', () => {
+    const csv = `${BANK_HEADER}\n04/03/2026\tACH Withdrawal CITI AUTOPAY PAYMENT\tDebit\t$115.02\t0\t$928.47`;
+    const rows = parseCsv(csv);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].Date).toBe('04/03/2026');
+    expect(rows[0].Merchant).toBe('ACH Withdrawal CITI AUTOPAY PAYMENT');
+    expect(rows[0]['Original Statement']).toBe('ACH Withdrawal CITI AUTOPAY PAYMENT');
+    expect(rows[0].Amount).toBe('-115.02');
+    expect(rows[0].Account).toBe('Bank Statement');
+    expect(rows[0].Category).toBe('');
+  });
+
+  it('converts credit amounts to positive', () => {
+    const csv = `${BANK_HEADER}\n04/03/2026\tDIRECT DEPOSIT\tCredit\t0\t$1500.00\t$2428.47`;
+    const rows = parseCsv(csv);
+    expect(rows[0].Amount).toBe('1500');
+  });
+
+  it('handles $ and comma in amounts', () => {
+    const csv = `${BANK_HEADER}\n04/03/2026\tBIG PURCHASE\tDebit\t$1,234.56\t0\t$100.00`;
+    const rows = parseCsv(csv);
+    expect(rows[0].Amount).toBe('-1234.56');
+  });
+
+  it('parses multiple bank statement rows', () => {
+    const csv = [
+      BANK_HEADER,
+      '04/03/2026\tACH Withdrawal CITI AUTOPAY PAYMENT\tDebit\t$115.02\t0\t$928.47',
+      '04/01/2026\tACH Withdrawal GCWW/EZ-PAY UTILITIES\tDebit\t$76.95\t0\t$1043.49',
+      '03/31/2026\tACH Withdrawal SST 833-977-0334 Loan Pmt\tDebit\t$80.74\t0\t$1120.44',
+    ].join('\n');
+    const rows = parseCsv(csv);
+    expect(rows).toHaveLength(3);
+    expect(rows[0].Amount).toBe('-115.02');
+    expect(rows[1].Amount).toBe('-76.95');
+    expect(rows[2].Amount).toBe('-80.74');
+  });
+
+  it('handles comma-delimited bank statement', () => {
+    const csv = 'Transaction Date,Transaction Description,Transaction Type,Debit,Credit,Balance\n04/03/2026,PAYMENT,$115.02,0,$928.47';
+    const rows = parseCsv(csv);
+    expect(rows).toHaveLength(1);
+  });
+
+  it('sets all rows to Account "Bank Statement"', () => {
+    const csv = [
+      BANK_HEADER,
+      '04/03/2026\tPAYMENT ONE\tDebit\t$10.00\t0\t$90.00',
+      '04/02/2026\tPAYMENT TWO\tDebit\t$20.00\t0\t$80.00',
+    ].join('\n');
+    const rows = parseCsv(csv);
+    expect(rows.every(r => r.Account === 'Bank Statement')).toBe(true);
+  });
+});
+
 // --- Integration tests requiring database ---
 
 const MONARCH_HEADER = 'Date,Merchant,Category,Account,Original Statement,Notes,Amount,Tags';
@@ -582,6 +640,38 @@ describe('executeImport', () => {
 
     expect(snapshot).toBeDefined();
     expect(snapshot!.balance).toBe(-1000);
+  });
+
+  it('imports bank statement CSV with dedup on overlapping 30-day exports', () => {
+    // Create a manual account for the bank statement
+    db.prepare(`INSERT INTO accounts (id, name, institution, type, balance, currency, source) VALUES (?, ?, ?, ?, ?, ?, ?)`).run('acct-discover', 'Discover Checking', 'Discover', 'banking', 0, 'USD', 'manual');
+
+    const bankHeader = 'Transaction Date\tTransaction Description\tTransaction Type\tDebit\tCredit\tBalance';
+
+    // First export: 2 transactions
+    const csv1 = [
+      bankHeader,
+      '04/01/2026\tACH Withdrawal UTILITIES\tDebit\t$76.95\t0\t$1043.49',
+      '03/31/2026\tACH Withdrawal LOAN PMT\tDebit\t$80.74\t0\t$1120.44',
+    ].join('\n');
+
+    const result1 = executeImport(db, csv1, { 'Bank Statement': 'acct-discover' }, {});
+    expect(result1.importedCount).toBe(2);
+
+    // Second export: overlapping + 1 new transaction
+    const csv2 = [
+      bankHeader,
+      '04/03/2026\tACH Withdrawal CITI AUTOPAY\tDebit\t$115.02\t0\t$928.47',
+      '04/01/2026\tACH Withdrawal UTILITIES\tDebit\t$76.95\t0\t$1043.49',
+      '03/31/2026\tACH Withdrawal LOAN PMT\tDebit\t$80.74\t0\t$1120.44',
+    ].join('\n');
+
+    const result2 = executeImport(db, csv2, { 'Bank Statement': 'acct-discover' }, {});
+    expect(result2.importedCount).toBe(1);  // Only the new one
+    expect(result2.skippedCount).toBe(2);   // The 2 duplicates
+
+    const txns = db.prepare('SELECT * FROM transactions WHERE account_id = ?').all('acct-discover');
+    expect(txns).toHaveLength(3);
   });
 
   it('does not recalculate balance for SimpleFIN accounts', () => {

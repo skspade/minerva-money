@@ -40,6 +40,45 @@ export interface ValidationResult {
 
 const REQUIRED_COLUMNS = ['Date', 'Merchant', 'Category', 'Account', 'Original Statement', 'Amount'];
 
+// --- Bank statement columns (e.g., Discover) ---
+
+const BANK_STATEMENT_COLUMNS = ['Transaction Date', 'Transaction Description', 'Debit', 'Credit'];
+
+function parseCurrencyAmount(value: string): number {
+  const cleaned = value.replace(/[$,]/g, '').trim();
+  if (!cleaned || cleaned === '0') return 0;
+  return parseFloat(cleaned);
+}
+
+interface BankStatementRow {
+  'Transaction Date': string;
+  'Transaction Description': string;
+  'Transaction Type'?: string;
+  Debit: string;
+  Credit: string;
+  Balance?: string;
+}
+
+function normalizeBankStatementRows(rows: BankStatementRow[]): RawCsvRow[] {
+  return rows.map(row => {
+    const debit = parseCurrencyAmount(row.Debit);
+    const credit = parseCurrencyAmount(row.Credit);
+    // Debits are money out (negative), credits are money in (positive)
+    const amount = credit > 0 ? credit : -debit;
+    const description = (row['Transaction Description'] || '').trim();
+
+    return {
+      Date: (row['Transaction Date'] || '').trim(),
+      Merchant: description,
+      Category: '',
+      Account: 'Bank Statement',
+      'Original Statement': description,
+      Notes: '',
+      Amount: String(amount),
+    };
+  });
+}
+
 // --- Date Parsing ---
 
 const ISO_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
@@ -89,6 +128,22 @@ export function parseCsv(csvText: string): RawCsvRow[] {
   const firstLine = text.split('\n')[0];
   const delimiter = firstLine.includes('\t') ? '\t' : ',';
 
+  // Detect format from header columns
+  const headerCols = firstLine.split(delimiter).map(c => c.trim());
+  const isBankStatement = BANK_STATEMENT_COLUMNS.every(col => headerCols.includes(col));
+
+  if (isBankStatement) {
+    const bankRows = parse(text, {
+      columns: true,
+      skip_empty_lines: true,
+      trim: true,
+      relax_column_count: true,
+      bom: true,
+      delimiter,
+    }) as BankStatementRow[];
+    return normalizeBankStatementRows(bankRows);
+  }
+
   const rows = parse(text, {
     columns: true,
     skip_empty_lines: true,
@@ -125,8 +180,8 @@ export function parseCsv(csvText: string): RawCsvRow[] {
       }) as Record<string, string>[];
       if (headerOnly.length === 0) {
         // Check the header line directly
-        const headerCols = firstLine.split(delimiter).map(c => c.trim());
-        const missingColumns = REQUIRED_COLUMNS.filter(col => !headerCols.includes(col));
+        const headerCols2 = firstLine.split(delimiter).map(c => c.trim());
+        const missingColumns = REQUIRED_COLUMNS.filter(col => !headerCols2.includes(col));
         if (missingColumns.length > 0) {
           throw new Error(`Missing required columns: ${missingColumns.join(', ')}`);
         }
