@@ -37,7 +37,7 @@ export default function TransfersPage() {
   const isLoading = loadingCandidates || loadingConfirmed;
 
   if (isLoading) {
-    return <p className="text-gray-500">Loading transfers...</p>;
+    return <p className="text-text-secondary">Loading transfers...</p>;
   }
 
   return (
@@ -46,7 +46,7 @@ export default function TransfersPage() {
         <h2 className="text-2xl font-bold">Transfers</h2>
         <button
           onClick={() => setShowManualLink(true)}
-          className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+          className="px-3 py-1.5 bg-accent text-text-invert text-sm rounded hover:bg-accent-hover"
         >
           Link Transfers
         </button>
@@ -56,28 +56,28 @@ export default function TransfersPage() {
       <section className="mb-8">
         <h3 className="text-lg font-semibold mb-3">Suggested Transfers</h3>
         {!candidates || candidates.length === 0 ? (
-          <p className="text-gray-500">No suggested transfers.</p>
+          <p className="text-text-secondary">No suggested transfers.</p>
         ) : (
           <div className="space-y-3">
             {candidates.map(pair => (
-              <div key={pair.id} className="bg-white rounded-lg shadow p-4">
+              <div key={pair.id} className="bg-surface rounded-lg shadow p-4">
                 <div className="flex items-center gap-4">
                   <div className="flex-1">
                     <div className="text-sm font-medium">{pair.transactionA.payee}</div>
-                    <div className="text-xs text-gray-500">
+                    <div className="text-xs text-text-secondary">
                       {new Date(pair.transactionA.date + 'T00:00:00').toLocaleDateString()} &middot; {pair.transactionA.accountName}
                     </div>
-                    <div className={`text-sm font-medium ${pair.transactionA.amount < 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                    <div className={`text-sm font-medium ${pair.transactionA.amount < 0 ? 'text-danger' : 'text-text-primary'}`}>
                       {formatCurrency(pair.transactionA.amount)}
                     </div>
                   </div>
-                  <div className="text-gray-400 text-lg">&#8644;</div>
+                  <div className="text-text-tertiary text-lg">&#8644;</div>
                   <div className="flex-1">
                     <div className="text-sm font-medium">{pair.transactionB.payee}</div>
-                    <div className="text-xs text-gray-500">
+                    <div className="text-xs text-text-secondary">
                       {new Date(pair.transactionB.date + 'T00:00:00').toLocaleDateString()} &middot; {pair.transactionB.accountName}
                     </div>
-                    <div className={`text-sm font-medium ${pair.transactionB.amount < 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                    <div className={`text-sm font-medium ${pair.transactionB.amount < 0 ? 'text-danger' : 'text-text-primary'}`}>
                       {formatCurrency(pair.transactionB.amount)}
                     </div>
                   </div>
@@ -85,14 +85,14 @@ export default function TransfersPage() {
                     <button
                       onClick={() => confirmMut.mutate({ id: pair.id })}
                       disabled={confirmMut.isPending}
-                      className="px-3 py-1.5 bg-green-600 text-white text-sm rounded hover:bg-green-700 disabled:opacity-50"
+                      className="px-3 py-1.5 bg-success text-text-invert text-sm rounded hover:bg-success disabled:opacity-50"
                     >
                       Confirm
                     </button>
                     <button
                       onClick={() => dismissMut.mutate({ id: pair.id })}
                       disabled={dismissMut.isPending}
-                      className="px-3 py-1.5 bg-gray-200 text-gray-700 text-sm rounded hover:bg-gray-300 disabled:opacity-50"
+                      className="px-3 py-1.5 bg-surface-tertiary text-text-primary text-sm rounded hover:bg-surface-tertiary disabled:opacity-50"
                     >
                       Dismiss
                     </button>
@@ -108,35 +108,35 @@ export default function TransfersPage() {
       <section>
         <h3 className="text-lg font-semibold mb-3">Confirmed Transfers</h3>
         {!confirmed || confirmed.length === 0 ? (
-          <p className="text-gray-500">No confirmed transfers.</p>
+          <p className="text-text-secondary">No confirmed transfers.</p>
         ) : (
           <div className="space-y-3">
             {confirmed.map(pair => (
-              <div key={pair.id} className="bg-white rounded-lg shadow p-4">
+              <div key={pair.id} className="bg-surface rounded-lg shadow p-4">
                 <div className="flex items-center gap-4">
                   <div className="flex-1">
                     <div className="text-sm font-medium">{pair.transactionA.payee}</div>
-                    <div className="text-xs text-gray-500">
+                    <div className="text-xs text-text-secondary">
                       {new Date(pair.transactionA.date + 'T00:00:00').toLocaleDateString()} &middot; {pair.transactionA.accountName}
                     </div>
-                    <div className={`text-sm font-medium ${pair.transactionA.amount < 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                    <div className={`text-sm font-medium ${pair.transactionA.amount < 0 ? 'text-danger' : 'text-text-primary'}`}>
                       {formatCurrency(pair.transactionA.amount)}
                     </div>
                   </div>
-                  <div className="text-gray-400 text-lg">&#8644;</div>
+                  <div className="text-text-tertiary text-lg">&#8644;</div>
                   <div className="flex-1">
                     <div className="text-sm font-medium">{pair.transactionB.payee}</div>
-                    <div className="text-xs text-gray-500">
+                    <div className="text-xs text-text-secondary">
                       {new Date(pair.transactionB.date + 'T00:00:00').toLocaleDateString()} &middot; {pair.transactionB.accountName}
                     </div>
-                    <div className={`text-sm font-medium ${pair.transactionB.amount < 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                    <div className={`text-sm font-medium ${pair.transactionB.amount < 0 ? 'text-danger' : 'text-text-primary'}`}>
                       {formatCurrency(pair.transactionB.amount)}
                     </div>
                   </div>
                   <button
                     onClick={() => unlinkMut.mutate({ id: pair.id })}
                     disabled={unlinkMut.isPending}
-                    className="px-3 py-1.5 border border-red-300 text-red-600 text-sm rounded hover:bg-red-50 disabled:opacity-50"
+                    className="px-3 py-1.5 border border-danger text-danger text-sm rounded hover:bg-danger-light disabled:opacity-50"
                   >
                     Unlink
                   </button>

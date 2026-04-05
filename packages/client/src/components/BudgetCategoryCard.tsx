@@ -21,9 +21,9 @@ function progressColor(available: number, allocated: number): string {
 }
 
 function remainingColor(available: number): string {
-  if (available < 0) return 'text-red-600';
-  if (available > 0) return 'text-green-600';
-  return 'text-gray-500';
+  if (available < 0) return 'text-danger';
+  if (available > 0) return 'text-success';
+  return 'text-text-secondary';
 }
 
 export default function BudgetCategoryCard({
@@ -40,7 +40,7 @@ export default function BudgetCategoryCard({
       : Math.min((cat.spent / cat.allocated) * 100, 100);
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
+    <div className="bg-surface rounded-lg border border-border shadow-sm">
       <button
         onClick={onToggle}
         className="w-full text-left px-3 py-3 min-h-[44px]"
@@ -54,7 +54,7 @@ export default function BudgetCategoryCard({
         </div>
 
         {/* Progress bar */}
-        <div className="mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+        <div className="mt-2 h-1.5 bg-surface-secondary rounded-full overflow-hidden">
           <div
             className={`h-full rounded-full ${progressColor(cat.available, cat.allocated)}`}
             style={{ width: `${progressWidth}%` }}
@@ -62,15 +62,15 @@ export default function BudgetCategoryCard({
         </div>
 
         {/* Row 2: Spent of budgeted */}
-        <div className="mt-1 text-xs text-gray-500">
+        <div className="mt-1 text-xs text-text-secondary">
           {formatCurrency(cat.spent)} of {formatCurrency(cat.allocated)}
         </div>
       </button>
 
       {/* Expanded: allocation editor */}
       {isExpanded && (
-        <div className="border-t border-gray-100 px-3 py-2 flex items-center justify-between">
-          <span className="text-sm text-gray-600">Allocation</span>
+        <div className="border-t border-border-light px-3 py-2 flex items-center justify-between">
+          <span className="text-sm text-text-secondary">Allocation</span>
           <AllocationCell value={cat.allocated} onSave={onSave} />
         </div>
       )}

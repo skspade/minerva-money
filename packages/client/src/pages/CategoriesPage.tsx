@@ -66,7 +66,7 @@ function InlineEdit({ value, onSave, onCancel }: { value: string; onSave: (v: st
       onChange={e => setText(e.target.value)}
       onKeyDown={handleKeyDown}
       onBlur={handleBlur}
-      className="px-2 py-1 border border-blue-400 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+      className="px-2 py-1 border border-accent rounded text-sm focus:outline-none focus:ring-2 focus:ring-accent"
     />
   );
 }
@@ -92,13 +92,13 @@ function SortableCategory({
     <div
       ref={setNodeRef}
       style={style}
-      className="flex items-center justify-between py-2 px-4 border-b border-gray-100 last:border-b-0 bg-white"
+      className="flex items-center justify-between py-2 px-4 border-b border-border-light last:border-b-0 bg-surface"
     >
       <div className="flex items-center gap-2 flex-1">
         <button
           {...attributes}
           {...listeners}
-          className="cursor-grab text-gray-400 hover:text-gray-600 max-md:min-h-[44px] max-md:min-w-[44px] max-md:flex max-md:items-center max-md:justify-center"
+          className="cursor-grab text-text-tertiary hover:text-text-secondary max-md:min-h-[44px] max-md:min-w-[44px] max-md:flex max-md:items-center max-md:justify-center"
           title="Drag to reorder"
         >
           ⠿
@@ -114,7 +114,7 @@ function SortableCategory({
           />
         ) : (
           <span
-            className="text-sm cursor-pointer hover:text-blue-600"
+            className="text-sm cursor-pointer hover:text-accent"
             onClick={() => setEditing(true)}
             title="Click to rename"
           >
@@ -123,7 +123,7 @@ function SortableCategory({
         )}
       </div>
       <InlineConfirm message={`Delete "${category.name}"? Transactions become uncategorized.`} onConfirm={() => onDelete(category.id)}>
-        <button className="text-gray-400 hover:text-red-500 text-sm ml-2" title="Delete category">✕</button>
+        <button className="text-text-tertiary hover:text-danger text-sm ml-2" title="Delete category">✕</button>
       </InlineConfirm>
     </div>
   );
@@ -171,20 +171,20 @@ function SortableGroup({
   };
 
   return (
-    <div ref={setNodeRef} style={style} className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-200">
+    <div ref={setNodeRef} style={style} className="bg-surface rounded-lg border border-border overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-3 bg-surface-alt border-b border-border">
         <div className="flex items-center gap-2 flex-1">
           <button
             {...attributes}
             {...listeners}
-            className="cursor-grab text-gray-400 hover:text-gray-600 max-md:min-h-[44px] max-md:min-w-[44px] max-md:flex max-md:items-center max-md:justify-center"
+            className="cursor-grab text-text-tertiary hover:text-text-secondary max-md:min-h-[44px] max-md:min-w-[44px] max-md:flex max-md:items-center max-md:justify-center"
             title="Drag to reorder group"
           >
             ⠿
           </button>
           <button
             onClick={() => setCollapsed(!collapsed)}
-            className="text-gray-500 text-xs w-4"
+            className="text-text-secondary text-xs w-4"
           >
             {collapsed ? '▸' : '▾'}
           </button>
@@ -199,20 +199,20 @@ function SortableGroup({
             />
           ) : (
             <span
-              className="font-semibold text-sm cursor-pointer hover:text-blue-600"
+              className="font-semibold text-sm cursor-pointer hover:text-accent"
               onClick={() => setEditingName(true)}
               title="Click to rename"
             >
               {group.name}
             </span>
           )}
-          <span className="text-xs text-gray-400">({group.categories.length})</span>
+          <span className="text-xs text-text-tertiary">({group.categories.length})</span>
         </div>
         <InlineConfirm
           message={group.categories.length > 0 ? `Delete "${group.name}" and ${group.categories.length} categories? Transactions become uncategorized.` : `Delete "${group.name}"?`}
           onConfirm={() => onDeleteGroup(group.id)}
         >
-          <button className="text-gray-400 hover:text-red-500 text-sm ml-2" title="Delete group">✕</button>
+          <button className="text-text-tertiary hover:text-danger text-sm ml-2" title="Delete group">✕</button>
         </InlineConfirm>
       </div>
 
@@ -231,7 +231,7 @@ function SortableGroup({
             </SortableContext>
           </DndContext>
 
-          <div className="px-4 py-2 border-t border-gray-100">
+          <div className="px-4 py-2 border-t border-border-light">
             {addingCategory ? (
               <InlineEdit
                 value=""
@@ -244,7 +244,7 @@ function SortableGroup({
             ) : (
               <button
                 onClick={() => setAddingCategory(true)}
-                className="text-sm text-blue-600 hover:text-blue-800"
+                className="text-sm text-accent hover:text-accent-hover"
               >
                 + Add Category
               </button>
@@ -292,11 +292,11 @@ export default function CategoriesPage() {
   };
 
   if (isLoading) {
-    return <p className="text-gray-500">Loading categories...</p>;
+    return <p className="text-text-secondary">Loading categories...</p>;
   }
 
   if (error) {
-    return <p className="text-red-600">Error loading categories: {error.message}</p>;
+    return <p className="text-danger">Error loading categories: {error.message}</p>;
   }
 
   return (
@@ -315,7 +315,7 @@ export default function CategoriesPage() {
         ) : (
           <button
             onClick={() => setAddingGroup(true)}
-            className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+            className="px-3 py-1.5 bg-accent text-text-invert text-sm rounded hover:bg-accent-hover"
           >
             Add Group
           </button>
@@ -323,7 +323,7 @@ export default function CategoriesPage() {
       </div>
 
       {!groups || groups.length === 0 ? (
-        <p className="text-gray-500">No categories yet. Create your first category group to get started.</p>
+        <p className="text-text-secondary">No categories yet. Create your first category group to get started.</p>
       ) : (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleGroupDragEnd}>
           <SortableContext items={groups.map(g => `group-${g.id}`)} strategy={verticalListSortingStrategy}>

@@ -15,7 +15,7 @@ export default function BottomTabBar() {
 
   return (
     <>
-      <nav className="fixed bottom-0 inset-x-0 md:hidden bg-white border-t border-gray-200 pb-safe z-40">
+      <nav className="fixed bottom-0 inset-x-0 md:hidden bg-surface border-t border-border pb-safe z-40">
         <div className="flex">
           {PRIMARY_TABS.map((tab) => (
             <NavLink
@@ -23,7 +23,7 @@ export default function BottomTabBar() {
               to={tab.to}
               end={tab.end}
               className={({ isActive }) =>
-                `flex-1 flex flex-col items-center justify-center min-h-[44px] py-2 text-xs gap-1 ${isActive ? 'text-blue-600' : 'text-gray-500'}`
+                `flex-1 flex flex-col items-center justify-center min-h-[44px] py-2 text-xs gap-1 ${isActive ? 'text-accent' : 'text-text-secondary'}`
               }
             >
               <tab.icon size={20} />
@@ -32,7 +32,7 @@ export default function BottomTabBar() {
           ))}
           <button
             onClick={() => setMoreOpen(true)}
-            className="flex-1 flex flex-col items-center justify-center min-h-[44px] py-2 text-xs gap-1 text-gray-500"
+            className="flex-1 flex flex-col items-center justify-center min-h-[44px] py-2 text-xs gap-1 text-text-secondary"
             aria-label="More navigation options"
           >
             <MoreHorizontal size={20} />

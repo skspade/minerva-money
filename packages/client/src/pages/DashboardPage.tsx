@@ -164,30 +164,30 @@ export default function DashboardPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Cumulative Spending Comparison */}
-        <div className="bg-white rounded-lg border border-gray-200 p-4 md:col-span-2">
+        <div className="bg-surface rounded-lg border border-border p-4 md:col-span-2">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm text-gray-500 uppercase tracking-wide font-medium">Spending Pace</h3>
-            <Link to="/reports" className="text-sm text-blue-600 hover:text-blue-800">View reports</Link>
+            <h3 className="text-sm text-text-secondary uppercase tracking-wide font-medium">Spending Pace</h3>
+            <Link to="/reports" className="text-sm text-accent hover:text-accent-hover">View reports</Link>
           </div>
 
           {thisMonthLoading || lastMonthLoading ? (
-            <p className="text-gray-500 text-sm">Loading...</p>
+            <p className="text-text-secondary text-sm">Loading...</p>
           ) : cumulativeData.length === 0 ? (
-            <p className="text-gray-500 text-sm">No spending data</p>
+            <p className="text-text-secondary text-sm">No spending data</p>
           ) : (
             <>
               {comparisonStat != null && (
                 <p className="text-sm mb-3">
                   {comparisonStat > 0 ? (
-                    <span className="text-green-600 font-medium">
+                    <span className="text-success font-medium">
                       {formatCurrency(comparisonStat)} less than this point in {formatLastMonth()}
                     </span>
                   ) : comparisonStat < 0 ? (
-                    <span className="text-red-600 font-medium">
+                    <span className="text-danger font-medium">
                       {formatCurrency(Math.abs(comparisonStat))} more than this point in {formatLastMonth()}
                     </span>
                   ) : (
-                    <span className="text-gray-500 font-medium">
+                    <span className="text-text-secondary font-medium">
                       Same as this point in {formatLastMonth()}
                     </span>
                   )}
@@ -209,7 +209,7 @@ export default function DashboardPage() {
                     <Line
                       type="monotone"
                       dataKey="thisMonth"
-                      stroke="#3b82f6"
+                      stroke="var(--color-chart-primary)"
                       strokeWidth={2}
                       dot={false}
                       name="thisMonth"
@@ -218,7 +218,7 @@ export default function DashboardPage() {
                     <Line
                       type="monotone"
                       dataKey="lastMonth"
-                      stroke="#9ca3af"
+                      stroke="var(--color-chart-secondary)"
                       strokeWidth={2}
                       strokeDasharray="5 5"
                       dot={false}
@@ -233,27 +233,27 @@ export default function DashboardPage() {
         </div>
 
         {/* Account Balances */}
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
+        <div className="bg-surface rounded-lg border border-border p-4">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm text-gray-500 uppercase tracking-wide font-medium">Accounts</h3>
-            <Link to="/accounts" className="text-sm text-blue-600 hover:text-blue-800">View all</Link>
+            <h3 className="text-sm text-text-secondary uppercase tracking-wide font-medium">Accounts</h3>
+            <Link to="/accounts" className="text-sm text-accent hover:text-accent-hover">View all</Link>
           </div>
 
           {accountsLoading ? (
-            <p className="text-gray-500 text-sm">Loading...</p>
+            <p className="text-text-secondary text-sm">Loading...</p>
           ) : !accounts || accounts.length === 0 ? (
-            <p className="text-gray-500 text-sm">No accounts found</p>
+            <p className="text-text-secondary text-sm">No accounts found</p>
           ) : (
             <>
               {Array.from(accountsByType.entries()).map(([type, accts]) => (
                 <div key={type} className="mb-3">
-                  <div className="text-xs text-gray-400 uppercase mb-1">{type}</div>
+                  <div className="text-xs text-text-tertiary uppercase mb-1">{type}</div>
                   {accts!.map(a => (
                     <div key={a.id} className="flex justify-between py-1">
                       <span className="text-sm">
                         {a.name}
                         {a.source === 'manual' && (
-                          <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">
+                          <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-surface-secondary text-text-secondary">
                             Manual
                           </span>
                         )}
@@ -263,7 +263,7 @@ export default function DashboardPage() {
                   ))}
                 </div>
               ))}
-              <div className="border-t border-gray-200 pt-2 mt-2 flex justify-between">
+              <div className="border-t border-border pt-2 mt-2 flex justify-between">
                 <span className="text-sm font-semibold">Total</span>
                 <span className="text-sm font-bold">{formatCurrency(totalBalance)}</span>
               </div>
@@ -272,32 +272,32 @@ export default function DashboardPage() {
         </div>
 
         {/* Budget Progress */}
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
+        <div className="bg-surface rounded-lg border border-border p-4">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm text-gray-500 uppercase tracking-wide font-medium">Budget - {formatMonth()}</h3>
-            <Link to="/budget" className="text-sm text-blue-600 hover:text-blue-800">View all</Link>
+            <h3 className="text-sm text-text-secondary uppercase tracking-wide font-medium">Budget - {formatMonth()}</h3>
+            <Link to="/budget" className="text-sm text-accent hover:text-accent-hover">View all</Link>
           </div>
 
           {budgetLoading ? (
-            <p className="text-gray-500 text-sm">Loading...</p>
+            <p className="text-text-secondary text-sm">Loading...</p>
           ) : !budgetData ? (
-            <p className="text-gray-500 text-sm">No budget data</p>
+            <p className="text-text-secondary text-sm">No budget data</p>
           ) : (
             <div className="space-y-3">
               <div className="flex justify-between">
-                <span className="text-sm text-gray-600">Allocated</span>
+                <span className="text-sm text-text-secondary">Allocated</span>
                 <span className="text-sm font-medium">{formatCurrency(totalAllocated)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-sm text-gray-600">Spent</span>
+                <span className="text-sm text-text-secondary">Spent</span>
                 <span className="text-sm font-medium">{formatCurrency(totalSpent)}</span>
               </div>
-              <div className="border-t border-gray-200 pt-2 flex justify-between">
+              <div className="border-t border-border pt-2 flex justify-between">
                 <span className="text-sm font-semibold">Available to Budget</span>
                 <span className={`text-sm font-bold ${
-                  budgetData.availableToBudget > 0 ? 'text-green-600' :
-                  budgetData.availableToBudget < 0 ? 'text-red-600' :
-                  'text-gray-500'
+                  budgetData.availableToBudget > 0 ? 'text-success' :
+                  budgetData.availableToBudget < 0 ? 'text-danger' :
+                  'text-text-secondary'
                 }`}>
                   {formatCurrency(budgetData.availableToBudget)}
                 </span>
@@ -307,22 +307,22 @@ export default function DashboardPage() {
         </div>
 
         {/* Top Spending Categories */}
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
+        <div className="bg-surface rounded-lg border border-border p-4">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm text-gray-500 uppercase tracking-wide font-medium">Top Spending - {formatMonth()}</h3>
-            <Link to="/reports" className="text-sm text-blue-600 hover:text-blue-800">View reports</Link>
+            <h3 className="text-sm text-text-secondary uppercase tracking-wide font-medium">Top Spending - {formatMonth()}</h3>
+            <Link to="/reports" className="text-sm text-accent hover:text-accent-hover">View reports</Link>
           </div>
 
           {spendingLoading ? (
-            <p className="text-gray-500 text-sm">Loading...</p>
+            <p className="text-text-secondary text-sm">Loading...</p>
           ) : top5.length === 0 ? (
-            <p className="text-gray-500 text-sm">No spending this month</p>
+            <p className="text-text-secondary text-sm">No spending this month</p>
           ) : (
             <div className="space-y-2">
               {top5.map((cat, i) => (
                 <div key={cat.categoryId} className="flex justify-between py-1">
                   <span className="text-sm">
-                    <span className="text-gray-400 mr-2">{i + 1}.</span>
+                    <span className="text-text-tertiary mr-2">{i + 1}.</span>
                     {cat.categoryName}
                   </span>
                   <span className="text-sm font-medium">{formatCurrency(cat.total)}</span>
@@ -333,25 +333,25 @@ export default function DashboardPage() {
         </div>
 
         {/* Sync Status */}
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
+        <div className="bg-surface rounded-lg border border-border p-4">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm text-gray-500 uppercase tracking-wide font-medium">Sync Status</h3>
+            <h3 className="text-sm text-text-secondary uppercase tracking-wide font-medium">Sync Status</h3>
             <button
               onClick={() => syncMut.mutate()}
               disabled={syncMut.isPending}
-              className="text-sm text-blue-600 hover:text-blue-800 disabled:text-gray-400 disabled:cursor-not-allowed"
+              className="text-sm text-accent hover:text-accent-hover disabled:text-text-tertiary disabled:cursor-not-allowed"
             >
               {syncMut.isPending ? 'Syncing...' : 'Sync Now'}
             </button>
           </div>
 
           {syncLoading ? (
-            <p className="text-gray-500 text-sm">Loading...</p>
+            <p className="text-text-secondary text-sm">Loading...</p>
           ) : !syncStatus?.lastSync ? (
             <div>
-              <p className="text-gray-500 text-sm">No syncs recorded</p>
+              <p className="text-text-secondary text-sm">No syncs recorded</p>
               {syncMut.isError && (
-                <div className="mt-2 p-2 bg-red-50 rounded text-sm text-red-600">
+                <div className="mt-2 p-2 bg-danger-light rounded text-sm text-danger">
                   {syncMut.error.message}
                 </div>
               )}
@@ -359,40 +359,40 @@ export default function DashboardPage() {
           ) : (
             <div className="space-y-2">
               <div className="flex justify-between">
-                <span className="text-sm text-gray-600">Last sync</span>
+                <span className="text-sm text-text-secondary">Last sync</span>
                 <span className="text-sm">{new Date(syncStatus.lastSync.startedAt).toLocaleString()}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-sm text-gray-600">Status</span>
+                <span className="text-sm text-text-secondary">Status</span>
                 <span className="flex items-center gap-1">
                   <span className={`text-sm font-medium ${
-                    syncStatus.lastSync.status === 'success' ? 'text-green-600' :
-                    syncStatus.lastSync.status === 'partial' ? 'text-amber-600' : 'text-red-600'
+                    syncStatus.lastSync.status === 'success' ? 'text-success' :
+                    syncStatus.lastSync.status === 'partial' ? 'text-warning' : 'text-danger'
                   }`}>
                     {syncStatus.lastSync.status.charAt(0).toUpperCase() + syncStatus.lastSync.status.slice(1)}
                   </span>
                   {syncStatus.lastSync.status === 'partial' && (
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-warning-light text-warning">
                       Partial
                     </span>
                   )}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-sm text-gray-600">Accounts synced</span>
+                <span className="text-sm text-text-secondary">Accounts synced</span>
                 <span className="text-sm">{syncStatus.lastSync.accountsSynced}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-sm text-gray-600">Transactions added</span>
+                <span className="text-sm text-text-secondary">Transactions added</span>
                 <span className="text-sm">{syncStatus.lastSync.transactionsAdded}</span>
               </div>
               {syncStatus.warnings && syncStatus.warnings.length > 0 && (
-                <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded">
+                <div className="mt-2 p-2 bg-warning-light border border-warning rounded">
                   <div className="space-y-1">
                     {syncStatus.warnings.map(w => (
                       <div key={w.accountId} className="text-sm flex justify-between gap-2">
-                        <span className="font-medium text-amber-800">{w.accountName}</span>
-                        <span className="text-amber-700 text-right">{w.message}</span>
+                        <span className="font-medium text-warning">{w.accountName}</span>
+                        <span className="text-warning text-right">{w.message}</span>
                       </div>
                     ))}
                   </div>
@@ -401,7 +401,7 @@ export default function DashboardPage() {
                       href="https://bridge.simplefin.org/simplefin/my-connections"
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="mt-2 inline-flex items-center gap-1 text-sm text-amber-700 underline hover:text-amber-900"
+                      className="mt-2 inline-flex items-center gap-1 text-sm text-warning underline hover:text-accent-hover"
                     >
                       Reconnect at SimpleFIN
                       <span aria-hidden="true">&#8599;</span>
@@ -410,12 +410,12 @@ export default function DashboardPage() {
                 </div>
               )}
               {syncStatus.lastSync.errorMessage && (
-                <div className="mt-2 p-2 bg-red-50 rounded text-sm text-red-600">
+                <div className="mt-2 p-2 bg-danger-light rounded text-sm text-danger">
                   {syncStatus.lastSync.errorMessage}
                 </div>
               )}
               {syncMut.isError && (
-                <div className="mt-2 p-2 bg-red-50 rounded text-sm text-red-600">
+                <div className="mt-2 p-2 bg-danger-light rounded text-sm text-danger">
                   {syncMut.error.message}
                 </div>
               )}
@@ -423,29 +423,29 @@ export default function DashboardPage() {
           )}
 
           {/* Backup Status */}
-          <div className="border-t border-gray-200 pt-2 mt-2">
-            <div className="text-xs text-gray-400 uppercase mb-1">Backup</div>
+          <div className="border-t border-border pt-2 mt-2">
+            <div className="text-xs text-text-tertiary uppercase mb-1">Backup</div>
             {backupStatus?.lastBackup ? (
               <div className="space-y-1">
                 <div className="flex justify-between">
-                  <span className="text-sm text-gray-600">Last backup</span>
+                  <span className="text-sm text-text-secondary">Last backup</span>
                   <span className="text-sm">{new Date(backupStatus.lastBackup.timestamp).toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-sm text-gray-600">Size</span>
+                  <span className="text-sm text-text-secondary">Size</span>
                   <span className="text-sm font-medium">{(backupStatus.lastBackup.sizeBytes / 1024 / 1024).toFixed(1)} MB</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-sm text-gray-600">Storage</span>
+                  <span className="text-sm text-text-secondary">Storage</span>
                   {backupStatus.lastBackup.isCloud ? (
-                    <span className="text-sm font-medium text-green-600">iCloud</span>
+                    <span className="text-sm font-medium text-success">iCloud</span>
                   ) : (
-                    <span className="text-sm font-medium text-yellow-600">Local only</span>
+                    <span className="text-sm font-medium text-warning">Local only</span>
                   )}
                 </div>
               </div>
             ) : (
-              <p className="text-gray-500 text-sm">No backups found</p>
+              <p className="text-text-secondary text-sm">No backups found</p>
             )}
           </div>
         </div>

@@ -26,7 +26,7 @@ export default function SyncStatus() {
   if (!status) return null;
 
   if (!status.lastSync) {
-    return <span className="text-sm text-gray-400">Never synced</span>;
+    return <span className="text-sm text-text-tertiary">Never synced</span>;
   }
 
   if (status.lastSync.status === 'running') {
@@ -57,7 +57,7 @@ export default function SyncStatus() {
 
   const syncTime = status.lastSync.completedAt || status.lastSync.startedAt;
   return (
-    <span className="text-sm text-gray-400">
+    <span className="text-sm text-text-tertiary">
       Last synced: {formatRelativeTime(syncTime)}
     </span>
   );

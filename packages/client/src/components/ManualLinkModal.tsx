@@ -73,34 +73,34 @@ export default function ManualLinkModal({ onClose, onLinked }: ManualLinkModalPr
 
   const transactionPanel = (label: string, search: string, onSearch: (v: string) => void, filtered: typeof filteredA, selected: string | null, onSelect: (id: string) => void) => (
     <div>
-      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+      <label className="block text-sm font-medium text-text-primary mb-1">{label}</label>
       <input
         type="text"
         placeholder="Search payee or memo..."
         value={search}
         onChange={e => onSearch(e.target.value)}
-        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm mb-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="w-full px-3 py-2 border border-border-heavy rounded-md text-sm mb-2 focus:outline-none focus:ring-2 focus:ring-accent"
       />
       <div className="border rounded-md max-h-60 overflow-y-auto">
         {filtered.map(txn => (
           <button
             key={txn.id}
             onClick={() => onSelect(txn.id)}
-            className={`w-full text-left px-3 py-2 max-md:py-3 text-sm border-b last:border-b-0 hover:bg-gray-50 ${
-              selected === txn.id ? 'bg-blue-50 border-blue-200' : ''
+            className={`w-full text-left px-3 py-2 max-md:py-3 text-sm border-b last:border-b-0 hover:bg-surface-alt ${
+              selected === txn.id ? 'bg-accent-light border-accent' : ''
             }`}
           >
             <div className="flex justify-between">
               <span className="font-medium">{txn.payee}</span>
-              <span className={txn.amount < 0 ? 'text-red-600' : ''}>{formatCurrency(txn.amount)}</span>
+              <span className={txn.amount < 0 ? 'text-danger' : ''}>{formatCurrency(txn.amount)}</span>
             </div>
-            <div className="text-xs text-gray-500">
+            <div className="text-xs text-text-secondary">
               {new Date(txn.date + 'T00:00:00').toLocaleDateString()} &middot; {txn.accountName}
             </div>
           </button>
         ))}
         {filtered.length === 0 && (
-          <p className="px-3 py-2 text-sm text-gray-500">No transactions found.</p>
+          <p className="px-3 py-2 text-sm text-text-secondary">No transactions found.</p>
         )}
       </div>
     </div>
@@ -109,7 +109,7 @@ export default function ManualLinkModal({ onClose, onLinked }: ManualLinkModalPr
   const header = (
     <div className="flex items-center justify-between p-4 border-b">
       <h3 className="text-lg font-semibold">Link Transactions as Transfer</h3>
-      <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl max-md:hidden">&times;</button>
+      <button onClick={onClose} className="text-text-tertiary hover:text-text-secondary text-xl max-md:hidden">&times;</button>
     </div>
   );
 
@@ -122,7 +122,7 @@ export default function ManualLinkModal({ onClose, onLinked }: ManualLinkModalPr
 
   const errorDisplay = errorMsg ? (
     <div className="px-4 pb-2">
-      <p className="text-sm text-red-600">{errorMsg}</p>
+      <p className="text-sm text-danger">{errorMsg}</p>
     </div>
   ) : null;
 
@@ -130,14 +130,14 @@ export default function ManualLinkModal({ onClose, onLinked }: ManualLinkModalPr
     <div className="flex justify-end gap-3 p-4 border-t">
       <button
         onClick={onClose}
-        className="px-4 py-2 text-sm text-gray-700 bg-gray-100 rounded hover:bg-gray-200 min-h-[44px]"
+        className="px-4 py-2 text-sm text-text-primary bg-surface-secondary rounded hover:bg-surface-tertiary min-h-[44px]"
       >
         Cancel
       </button>
       <button
         onClick={handleLink}
         disabled={!selectedA || !selectedB || selectedA === selectedB || linkMut.isPending}
-        className="px-4 py-2 text-sm text-white bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-50 min-h-[44px]"
+        className="px-4 py-2 text-sm text-text-invert bg-accent rounded hover:bg-accent-hover disabled:opacity-50 min-h-[44px]"
       >
         Link as Transfer
       </button>
@@ -148,7 +148,7 @@ export default function ManualLinkModal({ onClose, onLinked }: ManualLinkModalPr
     <>
       {/* Desktop modal */}
       <div className="fixed inset-0 bg-black/50 hidden md:flex items-center justify-center z-50" onClick={onClose}>
-        <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[80vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="bg-surface rounded-lg shadow-xl w-full max-w-4xl max-h-[80vh] overflow-hidden" onClick={e => e.stopPropagation()}>
           {header}
           {panelGrid}
           {errorDisplay}
@@ -160,8 +160,8 @@ export default function ManualLinkModal({ onClose, onLinked }: ManualLinkModalPr
       <Drawer.Root open={true} onOpenChange={(o) => !o && onClose()}>
         <Drawer.Portal>
           <Drawer.Overlay className="fixed inset-0 bg-black/40 z-50 md:hidden" />
-          <Drawer.Content className="fixed bottom-0 inset-x-0 z-50 bg-white rounded-t-2xl max-h-[90svh] flex flex-col pb-safe md:hidden">
-            <div className="mx-auto w-12 h-1.5 bg-gray-300 rounded-full mt-3 mb-2 flex-shrink-0" />
+          <Drawer.Content className="fixed bottom-0 inset-x-0 z-50 bg-surface rounded-t-2xl max-h-[90svh] flex flex-col pb-safe md:hidden">
+            <div className="mx-auto w-12 h-1.5 bg-surface-tertiary rounded-full mt-3 mb-2 flex-shrink-0" />
             <div className="overflow-y-auto flex-1">
               {header}
               {panelGrid}

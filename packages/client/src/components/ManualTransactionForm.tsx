@@ -64,15 +64,15 @@ export default function ManualTransactionForm({ onClose }: ManualTransactionForm
   };
 
   return (
-    <div className="bg-gray-100 border border-gray-200 rounded-lg p-4 mb-4">
-      <h3 className="text-sm font-semibold text-gray-700 mb-3">Add Transaction</h3>
+    <div className="bg-surface-secondary border border-border rounded-lg p-4 mb-4">
+      <h3 className="text-sm font-semibold text-text-primary mb-3">Add Transaction</h3>
       <div className="flex flex-wrap gap-3 items-start max-md:flex-col">
         <div className="flex flex-col">
           <input
             type="date"
             value={date}
             onChange={e => setDate(e.target.value)}
-            className="px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="px-2 py-1.5 border border-border-heavy rounded text-sm focus:outline-none focus:ring-1 focus:ring-accent"
           />
         </div>
 
@@ -82,37 +82,37 @@ export default function ManualTransactionForm({ onClose }: ManualTransactionForm
             value={payee}
             onChange={e => { setPayee(e.target.value); setErrors(prev => ({ ...prev, payee: '' })); }}
             placeholder="Payee name"
-            className={`px-2 py-1.5 border rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 max-md:w-full ${errors.payee ? 'border-red-400' : 'border-gray-300'}`}
+            className={`px-2 py-1.5 border rounded text-sm focus:outline-none focus:ring-1 focus:ring-accent max-md:w-full ${errors.payee ? 'border-danger' : 'border-border-heavy'}`}
           />
-          {errors.payee && <span className="text-xs text-red-600 mt-0.5">{errors.payee}</span>}
+          {errors.payee && <span className="text-xs text-danger mt-0.5">{errors.payee}</span>}
         </div>
 
         <div className="flex flex-col w-28 max-md:w-full">
           <div className="relative">
-            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-sm text-gray-400">$</span>
+            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-sm text-text-tertiary">$</span>
             <input
               type="text"
               value={amountStr}
               onChange={e => { setAmountStr(e.target.value); setErrors(prev => ({ ...prev, amount: '' })); }}
               placeholder="-0.00"
-              className={`w-full pl-5 pr-2 py-1.5 border rounded text-sm text-right focus:outline-none focus:ring-1 focus:ring-blue-500 ${errors.amount ? 'border-red-400' : 'border-gray-300'}`}
+              className={`w-full pl-5 pr-2 py-1.5 border rounded text-sm text-right focus:outline-none focus:ring-1 focus:ring-accent ${errors.amount ? 'border-danger' : 'border-border-heavy'}`}
             />
           </div>
-          {errors.amount && <span className="text-xs text-red-600 mt-0.5">{errors.amount}</span>}
+          {errors.amount && <span className="text-xs text-danger mt-0.5">{errors.amount}</span>}
         </div>
 
         <div className="flex flex-col max-md:w-full">
           <select
             value={accountId}
             onChange={e => { setAccountId(e.target.value); setErrors(prev => ({ ...prev, account: '' })); }}
-            className={`px-2 py-1.5 border rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 ${errors.account ? 'border-red-400' : 'border-gray-300'}`}
+            className={`px-2 py-1.5 border rounded text-sm focus:outline-none focus:ring-1 focus:ring-accent ${errors.account ? 'border-danger' : 'border-border-heavy'}`}
           >
             <option value="">Select account</option>
             {accounts?.map(a => (
               <option key={a.id} value={a.id}>{a.name}</option>
             ))}
           </select>
-          {errors.account && <span className="text-xs text-red-600 mt-0.5">{errors.account}</span>}
+          {errors.account && <span className="text-xs text-danger mt-0.5">{errors.account}</span>}
         </div>
 
         <div className="flex flex-col max-md:w-full">
@@ -125,7 +125,7 @@ export default function ManualTransactionForm({ onClose }: ManualTransactionForm
             value={memo}
             onChange={e => setMemo(e.target.value)}
             placeholder="Memo (optional)"
-            className="px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 max-md:w-full"
+            className="px-2 py-1.5 border border-border-heavy rounded text-sm focus:outline-none focus:ring-1 focus:ring-accent max-md:w-full"
           />
         </div>
 
@@ -133,13 +133,13 @@ export default function ManualTransactionForm({ onClose }: ManualTransactionForm
           <button
             onClick={handleSubmit}
             disabled={createMut.isPending}
-            className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50"
+            className="px-3 py-1.5 bg-accent text-text-invert text-sm rounded hover:bg-accent-hover disabled:opacity-50"
           >
             {createMut.isPending ? 'Saving...' : 'Save'}
           </button>
           <button
             onClick={onClose}
-            className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800"
+            className="px-3 py-1.5 text-sm text-text-secondary hover:text-text-primary"
           >
             Cancel
           </button>

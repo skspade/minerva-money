@@ -80,39 +80,39 @@ export default function RuleForm({ initialRule, onSaved, onCancel }: RuleFormPro
   }
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white border border-gray-200 rounded-lg p-4 mb-4">
+    <form onSubmit={handleSubmit} className="bg-surface border border-border rounded-lg p-4 mb-4">
       <h3 className="text-lg font-semibold mb-3">{isEdit ? 'Edit Rule' : 'Create Rule'}</h3>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="sm:col-span-2">
-          <label className="block text-sm font-medium text-gray-700 mb-1">Rule Name</label>
+          <label className="block text-sm font-medium text-text-primary mb-1">Rule Name</label>
           <input
             type="text"
             value={name}
             onChange={e => setName(e.target.value)}
             required
-            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-border-heavy rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-accent"
             placeholder="e.g., Amazon Groceries"
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Merchant Pattern</label>
+          <label className="block text-sm font-medium text-text-primary mb-1">Merchant Pattern</label>
           <input
             type="text"
             value={merchantPattern}
             onChange={e => setMerchantPattern(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-border-heavy rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-accent"
             placeholder="e.g., Amazon"
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Match Type</label>
+          <label className="block text-sm font-medium text-text-primary mb-1">Match Type</label>
           <select
             value={matchType}
             onChange={e => setMatchType(e.target.value as 'exact' | 'contains')}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-border-heavy rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-accent"
           >
             <option value="contains">Contains</option>
             <option value="exact">Exact Match</option>
@@ -120,44 +120,44 @@ export default function RuleForm({ initialRule, onSaved, onCancel }: RuleFormPro
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Amount Min ($)</label>
+          <label className="block text-sm font-medium text-text-primary mb-1">Amount Min ($)</label>
           <input
             type="number"
             step="0.01"
             min="0"
             value={amountMinDollars}
             onChange={e => setAmountMinDollars(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-border-heavy rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-accent"
             placeholder="e.g., 10.00"
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Amount Max ($)</label>
+          <label className="block text-sm font-medium text-text-primary mb-1">Amount Max ($)</label>
           <input
             type="number"
             step="0.01"
             min="0"
             value={amountMaxDollars}
             onChange={e => setAmountMaxDollars(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-border-heavy rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-accent"
             placeholder="e.g., 100.00"
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Memo Pattern</label>
+          <label className="block text-sm font-medium text-text-primary mb-1">Memo Pattern</label>
           <input
             type="text"
             value={memoPattern}
             onChange={e => setMemoPattern(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-border-heavy rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-accent"
             placeholder="e.g., subscription"
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Target Category</label>
+          <label className="block text-sm font-medium text-text-primary mb-1">Target Category</label>
           <CategoryPicker
             value={categoryId}
             onChange={setCategoryId}
@@ -167,21 +167,21 @@ export default function RuleForm({ initialRule, onSaved, onCancel }: RuleFormPro
       </div>
 
       {validationError && (
-        <p className="text-red-600 text-sm mt-2">{validationError}</p>
+        <p className="text-danger text-sm mt-2">{validationError}</p>
       )}
 
       <div className="flex gap-2 mt-4">
         <button
           type="submit"
           disabled={createMut.isPending || updateMut.isPending}
-          className="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50 min-h-[44px]"
+          className="px-4 py-2 bg-accent text-text-invert text-sm rounded hover:bg-accent-hover disabled:opacity-50 min-h-[44px]"
         >
           {isEdit ? 'Update Rule' : 'Create Rule'}
         </button>
         <button
           type="button"
           onClick={onCancel}
-          className="px-4 py-2 bg-gray-200 text-gray-700 text-sm rounded hover:bg-gray-300 min-h-[44px]"
+          className="px-4 py-2 bg-surface-tertiary text-text-primary text-sm rounded hover:bg-surface-tertiary min-h-[44px]"
         >
           Cancel
         </button>

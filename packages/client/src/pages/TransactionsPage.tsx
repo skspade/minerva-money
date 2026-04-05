@@ -214,11 +214,11 @@ export default function TransactionsPage() {
   const splitTransaction = splitTransactionId ? transactions?.find(t => t.id === splitTransactionId) : null;
 
   if (isLoading) {
-    return <p className="text-gray-500">Loading transactions...</p>;
+    return <p className="text-text-secondary">Loading transactions...</p>;
   }
 
   if (error) {
-    return <p className="text-red-600">Error loading transactions: {error.message}</p>;
+    return <p className="text-danger">Error loading transactions: {error.message}</p>;
   }
 
   const sortIndicator = (column: SortColumn) => {
@@ -233,7 +233,7 @@ export default function TransactionsPage() {
         {!showAddForm && (
           <button
             onClick={() => setShowAddForm(true)}
-            className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+            className="px-3 py-1.5 bg-accent text-text-invert text-sm rounded hover:bg-accent-hover"
           >
             Add Transaction
           </button>
@@ -247,8 +247,8 @@ export default function TransactionsPage() {
       <Drawer.Root open={showAddForm} onOpenChange={(o) => { if (!o) setShowAddForm(false); }}>
         <Drawer.Portal>
           <Drawer.Overlay className="fixed inset-0 bg-black/40 z-50 md:hidden" />
-          <Drawer.Content className="fixed bottom-0 inset-x-0 z-50 bg-white rounded-t-2xl max-h-[90svh] flex flex-col pb-safe md:hidden">
-            <div className="mx-auto w-12 h-1.5 bg-gray-300 rounded-full mt-3 mb-2 flex-shrink-0" />
+          <Drawer.Content className="fixed bottom-0 inset-x-0 z-50 bg-surface rounded-t-2xl max-h-[90svh] flex flex-col pb-safe md:hidden">
+            <div className="mx-auto w-12 h-1.5 bg-surface-tertiary rounded-full mt-3 mb-2 flex-shrink-0" />
             <div className="overflow-y-auto flex-1">
               <ManualTransactionForm onClose={() => setShowAddForm(false)} />
             </div>
@@ -260,12 +260,12 @@ export default function TransactionsPage() {
       <div className="md:hidden flex items-center justify-between mb-4">
         <button
           onClick={() => setFilterPanelOpen(prev => !prev)}
-          className="flex items-center gap-2 px-3 min-h-[44px] text-sm border border-gray-300 rounded-md"
+          className="flex items-center gap-2 px-3 min-h-[44px] text-sm border border-border-heavy rounded-md"
         >
           <Filter size={16} />
           Filters
           {activeFilterCount > 0 && (
-            <span className="bg-blue-600 text-white text-xs rounded-full px-1.5 py-0.5 min-w-[20px] text-center">
+            <span className="bg-accent text-text-invert text-xs rounded-full px-1.5 py-0.5 min-w-[20px] text-center">
               {activeFilterCount}
             </span>
           )}
@@ -280,55 +280,55 @@ export default function TransactionsPage() {
             placeholder="Search payee or memo..."
             value={inputValue}
             onChange={e => handleSearchChange(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-border-heavy rounded-md text-base focus:outline-none focus:ring-2 focus:ring-accent"
           />
         </div>
         <div className="flex items-center gap-2">
-          <label className="text-sm text-gray-600">From</label>
+          <label className="text-sm text-text-secondary">From</label>
           <input
             type="date"
             value={dateFrom}
             onChange={e => setDateFrom(e.target.value)}
-            className="px-2 py-2 border border-gray-300 rounded-md text-base"
+            className="px-2 py-2 border border-border-heavy rounded-md text-base"
           />
         </div>
         <div className="flex items-center gap-2">
-          <label className="text-sm text-gray-600">To</label>
+          <label className="text-sm text-text-secondary">To</label>
           <input
             type="date"
             value={dateTo}
             onChange={e => setDateTo(e.target.value)}
-            className="px-2 py-2 border border-gray-300 rounded-md text-base"
+            className="px-2 py-2 border border-border-heavy rounded-md text-base"
           />
         </div>
         <div className="flex items-center gap-2">
-          <label className="text-sm text-gray-600">Min $</label>
+          <label className="text-sm text-text-secondary">Min $</label>
           <input
             type="number"
             step="0.01"
             placeholder="0.00"
             value={amountMin}
             onChange={e => setAmountMin(e.target.value)}
-            className="w-24 px-2 py-2 border border-gray-300 rounded-md text-base"
+            className="w-24 px-2 py-2 border border-border-heavy rounded-md text-base"
           />
         </div>
         <div className="flex items-center gap-2">
-          <label className="text-sm text-gray-600">Max $</label>
+          <label className="text-sm text-text-secondary">Max $</label>
           <input
             type="number"
             step="0.01"
             placeholder="0.00"
             value={amountMax}
             onChange={e => setAmountMax(e.target.value)}
-            className="w-24 px-2 py-2 border border-gray-300 rounded-md text-base"
+            className="w-24 px-2 py-2 border border-border-heavy rounded-md text-base"
           />
         </div>
         <div className="flex items-center gap-2">
-          <label className="text-sm text-gray-600">Category</label>
+          <label className="text-sm text-text-secondary">Category</label>
           <select
             value={categoryFilter}
             onChange={e => setCategoryFilter(e.target.value)}
-            className="px-2 py-2 border border-gray-300 rounded-md text-base"
+            className="px-2 py-2 border border-border-heavy rounded-md text-base"
           >
             <option value="">All Categories</option>
             <option value="uncategorized">Uncategorized</option>
@@ -344,7 +344,7 @@ export default function TransactionsPage() {
       </div>
 
       {filtered.length === 0 ? (
-        <p className="text-gray-500">
+        <p className="text-text-secondary">
           {transactions && transactions.length > 0
             ? 'No transactions match your filters.'
             : 'No transactions found.'}
@@ -354,27 +354,27 @@ export default function TransactionsPage() {
         <div className="hidden md:block overflow-x-auto">
           <table className="w-full border-collapse">
             <thead>
-              <tr className="bg-gray-100 text-left text-sm font-semibold text-gray-700">
+              <tr className="bg-surface-secondary text-left text-sm font-semibold text-text-primary">
                 <th
-                  className="px-4 py-2 cursor-pointer hover:bg-gray-200"
+                  className="px-4 py-2 cursor-pointer hover:bg-surface-tertiary"
                   onClick={() => handleSort('date')}
                 >
                   Date{sortIndicator('date')}
                 </th>
                 <th
-                  className="px-4 py-2 cursor-pointer hover:bg-gray-200"
+                  className="px-4 py-2 cursor-pointer hover:bg-surface-tertiary"
                   onClick={() => handleSort('payee')}
                 >
                   Payee{sortIndicator('payee')}
                 </th>
                 <th
-                  className="px-4 py-2 cursor-pointer hover:bg-gray-200 text-right"
+                  className="px-4 py-2 cursor-pointer hover:bg-surface-tertiary text-right"
                   onClick={() => handleSort('amount')}
                 >
                   Amount{sortIndicator('amount')}
                 </th>
                 <th
-                  className="px-4 py-2 cursor-pointer hover:bg-gray-200"
+                  className="px-4 py-2 cursor-pointer hover:bg-surface-tertiary"
                   onClick={() => handleSort('account')}
                 >
                   Account{sortIndicator('account')}
@@ -384,19 +384,19 @@ export default function TransactionsPage() {
             </thead>
             <tbody>
               {paginatedRows.map(txn => (
-                <tr key={txn.id} className="border-b border-gray-200 even:bg-gray-50 hover:bg-gray-100">
+                <tr key={txn.id} className="border-b border-border even:bg-surface-alt hover:bg-surface-secondary">
                   <td className="px-4 py-2 text-sm">
                     {new Date(txn.date + 'T00:00:00').toLocaleDateString()}
                   </td>
                   <td className="px-4 py-2 text-sm">
                     {txn.payee}
                     {txn.isTransfer && (
-                      <span className="ml-2 inline-block px-1.5 py-0.5 text-xs font-medium bg-purple-100 text-purple-700 rounded">
+                      <span className="ml-2 inline-block px-1.5 py-0.5 text-xs font-medium bg-highlight text-highlight-text rounded">
                         Transfer
                       </span>
                     )}
                   </td>
-                  <td className={`px-4 py-2 text-sm text-right ${txn.amount < 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                  <td className={`px-4 py-2 text-sm text-right ${txn.amount < 0 ? 'text-danger' : 'text-text-primary'}`}>
                     {formatCurrency(txn.amount)}
                   </td>
                   <td className="px-4 py-2 text-sm">{txn.accountName}</td>
@@ -405,7 +405,7 @@ export default function TransactionsPage() {
                       {txn.splitCount > 0 ? (
                         <button
                           onClick={() => setSplitTransactionId(txn.id)}
-                          className="text-blue-600 hover:text-blue-800 text-sm"
+                          className="text-accent hover:text-accent-hover text-sm"
                         >
                           Split ({txn.splitCount})
                         </button>
@@ -416,7 +416,7 @@ export default function TransactionsPage() {
                             onChange={categoryId => updateCategoryMut.mutate({ transactionId: txn.id, categoryId })}
                           />
                           {txn.ruleName && (
-                            <div className="text-xs text-gray-400 mt-0.5" title={`Categorized by rule: ${txn.ruleName}`}>
+                            <div className="text-xs text-text-tertiary mt-0.5" title={`Categorized by rule: ${txn.ruleName}`}>
                               Rule: {txn.ruleName}
                             </div>
                           )}
@@ -425,7 +425,7 @@ export default function TransactionsPage() {
                       {txn.splitCount === 0 && (
                         <button
                           onClick={() => setSplitTransactionId(txn.id)}
-                          className="text-xs text-gray-400 hover:text-blue-600"
+                          className="text-xs text-text-tertiary hover:text-accent"
                           title="Split transaction"
                         >
                           Split
@@ -455,7 +455,7 @@ export default function TransactionsPage() {
 
         {/* Pagination controls */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between mt-4 pb-20 md:pb-0 text-sm text-gray-600">
+          <div className="flex items-center justify-between mt-4 pb-20 md:pb-0 text-sm text-text-secondary">
             <span>
               Showing {safePage * PAGE_SIZE + 1}--{Math.min((safePage + 1) * PAGE_SIZE, filtered.length)} of {filtered.length}
             </span>
@@ -463,14 +463,14 @@ export default function TransactionsPage() {
               <button
                 onClick={() => setPage(0)}
                 disabled={safePage === 0}
-                className="px-2 py-1 rounded hover:bg-gray-100 disabled:opacity-30 disabled:cursor-default"
+                className="px-2 py-1 rounded hover:bg-surface-secondary disabled:opacity-30 disabled:cursor-default"
               >
                 First
               </button>
               <button
                 onClick={() => setPage(p => Math.max(0, p - 1))}
                 disabled={safePage === 0}
-                className="p-1 rounded hover:bg-gray-100 disabled:opacity-30 disabled:cursor-default"
+                className="p-1 rounded hover:bg-surface-secondary disabled:opacity-30 disabled:cursor-default"
               >
                 <ChevronLeft size={18} />
               </button>
@@ -480,14 +480,14 @@ export default function TransactionsPage() {
               <button
                 onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
                 disabled={safePage >= totalPages - 1}
-                className="p-1 rounded hover:bg-gray-100 disabled:opacity-30 disabled:cursor-default"
+                className="p-1 rounded hover:bg-surface-secondary disabled:opacity-30 disabled:cursor-default"
               >
                 <ChevronRight size={18} />
               </button>
               <button
                 onClick={() => setPage(totalPages - 1)}
                 disabled={safePage >= totalPages - 1}
-                className="px-2 py-1 rounded hover:bg-gray-100 disabled:opacity-30 disabled:cursor-default"
+                className="px-2 py-1 rounded hover:bg-surface-secondary disabled:opacity-30 disabled:cursor-default"
               >
                 Last
               </button>

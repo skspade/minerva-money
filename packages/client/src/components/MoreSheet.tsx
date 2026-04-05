@@ -29,14 +29,14 @@ export default function MoreSheet({ open, onClose }: MoreSheetProps) {
     <Drawer.Root open={open} onOpenChange={(o) => !o && onClose()}>
       <Drawer.Portal>
         <Drawer.Overlay className="fixed inset-0 bg-black/40 z-50" />
-        <Drawer.Content className="fixed bottom-0 inset-x-0 z-50 bg-white rounded-t-2xl pb-safe">
-          <div className="mx-auto w-12 h-1.5 bg-gray-300 rounded-full mt-3 mb-4" />
+        <Drawer.Content className="fixed bottom-0 inset-x-0 z-50 bg-surface rounded-t-2xl pb-safe">
+          <div className="mx-auto w-12 h-1.5 bg-surface-tertiary rounded-full mt-3 mb-4" />
           <nav className="px-4 pb-6 space-y-1">
             {MORE_LINKS.map((link) => (
               <NavLink
                 key={link.to}
                 to={link.to}
-                className="flex items-center gap-3 px-3 min-h-[44px] rounded-lg text-gray-700 hover:bg-gray-100"
+                className="flex items-center gap-3 px-3 min-h-[44px] rounded-lg text-text-primary hover:bg-surface-secondary"
               >
                 <link.icon size={20} />
                 <span className="text-base font-medium">{link.label}</span>

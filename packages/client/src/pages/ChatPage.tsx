@@ -214,9 +214,9 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="fixed inset-0 top-0 md:top-[56px] bottom-[calc(env(safe-area-inset-bottom)+60px)] md:bottom-0 flex bg-gray-50 z-10">
+    <div className="fixed inset-0 top-0 md:top-[56px] bottom-[calc(env(safe-area-inset-bottom)+60px)] md:bottom-0 flex bg-surface-alt z-10">
       {/* Desktop sidebar - always visible on md+ */}
-      <div className="hidden md:flex md:flex-col md:min-w-[280px] md:max-w-[280px] border-r border-gray-200 bg-white overflow-y-auto">
+      <div className="hidden md:flex md:flex-col md:min-w-[280px] md:max-w-[280px] border-r border-border bg-surface overflow-y-auto">
         <ConversationSidebar
           conversationId={conversationId}
           isStreaming={isStreaming}
@@ -232,7 +232,7 @@ export default function ChatPage() {
             onClick={() => setSidebarOpen(false)}
           />
           {/* Sidebar panel */}
-          <div className="absolute inset-y-0 left-0 w-[280px] bg-white shadow-xl overflow-y-auto">
+          <div className="absolute inset-y-0 left-0 w-[280px] bg-surface shadow-xl overflow-y-auto">
             <ConversationSidebar
               conversationId={conversationId}
               isStreaming={isStreaming}
@@ -245,15 +245,15 @@ export default function ChatPage() {
       {/* Chat area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Mobile header with history toggle */}
-        <div className="flex items-center px-3 py-2 border-b border-gray-200 bg-white md:hidden">
+        <div className="flex items-center px-3 py-2 border-b border-border bg-surface md:hidden">
           <button
             onClick={() => setSidebarOpen(true)}
-            className="p-2 -ml-1 rounded-lg hover:bg-gray-100 text-gray-600"
+            className="p-2 -ml-1 rounded-lg hover:bg-surface-secondary text-text-secondary"
             aria-label="Open conversation history"
           >
             <History size={20} />
           </button>
-          <span className="ml-2 text-sm font-medium text-gray-700 truncate">
+          <span className="ml-2 text-sm font-medium text-text-primary truncate">
             {conversationId ? 'Chat' : 'New Chat'}
           </span>
         </div>
@@ -263,17 +263,17 @@ export default function ChatPage() {
         {convLoading && urlConversationId ? (
           <div className="flex items-center justify-center h-full">
             <div className="flex items-center gap-1">
-              <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:0ms]" />
-              <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:150ms]" />
-              <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:300ms]" />
+              <span className="w-2 h-2 bg-text-tertiary rounded-full animate-bounce [animation-delay:0ms]" />
+              <span className="w-2 h-2 bg-text-tertiary rounded-full animate-bounce [animation-delay:150ms]" />
+              <span className="w-2 h-2 bg-text-tertiary rounded-full animate-bounce [animation-delay:300ms]" />
             </div>
           </div>
         ) : messages.length === 0 && !isStreaming ? (
           <div className="flex flex-col items-center justify-center h-full text-center">
-            <h2 className="text-2xl font-semibold text-gray-800 mb-2">
+            <h2 className="text-2xl font-semibold text-text-primary mb-2">
               Ask Minerva anything about your finances
             </h2>
-            <p className="text-gray-500 mb-6">
+            <p className="text-text-secondary mb-6">
               Get instant answers about balances, spending, budgets, and more.
             </p>
             <div className="flex flex-wrap gap-2 justify-center max-w-lg">
@@ -282,7 +282,7 @@ export default function ChatPage() {
                   key={q}
                   onClick={() => handleSend(q)}
                   disabled={isStreaming}
-                  className="px-4 py-2 text-sm rounded-full border border-gray-300 text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-2 text-sm rounded-full border border-border-heavy text-text-primary hover:bg-surface-secondary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {q}
                 </button>
@@ -297,32 +297,32 @@ export default function ChatPage() {
                 className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 {msg.role === 'user' && (
-                  <div className="ml-auto bg-blue-600 text-white rounded-2xl rounded-br-sm px-4 py-2 max-w-[80%]">
+                  <div className="ml-auto bg-accent text-text-invert rounded-2xl rounded-br-sm px-4 py-2 max-w-[80%]">
                     {msg.content}
                   </div>
                 )}
                 {msg.role === 'assistant' && (
-                  <div className="bg-white border border-gray-200 rounded-2xl rounded-bl-sm px-4 py-2 max-w-[80%]">
+                  <div className="bg-surface border border-border rounded-2xl rounded-bl-sm px-4 py-2 max-w-[80%]">
                     <div className="prose prose-sm max-w-none">
                       <Markdown remarkPlugins={[remarkGfm]}>{msg.content}</Markdown>
                     </div>
                     {msg.confirmation && !respondedConfirmations.has(i) && (
-                      <div className="flex gap-2 mt-3 pt-3 border-t border-gray-200 items-center">
+                      <div className="flex gap-2 mt-3 pt-3 border-t border-border items-center">
                         <button
                           onClick={() => handleConfirm(i)}
                           disabled={isStreaming}
-                          className="px-4 py-1.5 text-sm rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="px-4 py-1.5 text-sm rounded-lg bg-success text-text-invert hover:bg-success disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           Confirm
                         </button>
                         <button
                           onClick={() => handleCancel(i)}
                           disabled={isStreaming}
-                          className="px-4 py-1.5 text-sm rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="px-4 py-1.5 text-sm rounded-lg bg-surface-tertiary text-text-primary hover:bg-surface-tertiary disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           Cancel
                         </button>
-                        <span className="text-sm text-gray-500">
+                        <span className="text-sm text-text-secondary">
                           {msg.confirmation.description}
                         </span>
                       </div>
@@ -330,7 +330,7 @@ export default function ChatPage() {
                   </div>
                 )}
                 {msg.role === 'error' && (
-                  <div className="bg-red-50 border border-red-300 text-red-800 rounded-2xl rounded-bl-sm px-4 py-2 max-w-[80%]">
+                  <div className="bg-danger-light border border-danger text-danger rounded-2xl rounded-bl-sm px-4 py-2 max-w-[80%]">
                     <span className="font-medium">Error: </span>
                     {msg.content}
                   </div>
@@ -340,13 +340,13 @@ export default function ChatPage() {
             {/* Live streaming bubble */}
             {isStreaming && streamingText && (
               <div className="flex justify-start">
-                <div className="bg-white border border-gray-200 rounded-2xl rounded-bl-sm px-4 py-2 max-w-[80%]">
+                <div className="bg-surface border border-border rounded-2xl rounded-bl-sm px-4 py-2 max-w-[80%]">
                   <div className="prose prose-sm max-w-none">
                     <Markdown remarkPlugins={[remarkGfm]}>{streamingText}</Markdown>
                   </div>
                   {activeTool && (
-                    <div className="mt-2 flex items-center gap-2 text-sm text-gray-400 italic">
-                      <span className="inline-block w-1.5 h-1.5 bg-gray-400 rounded-full animate-pulse" />
+                    <div className="mt-2 flex items-center gap-2 text-sm text-text-tertiary italic">
+                      <span className="inline-block w-1.5 h-1.5 bg-text-tertiary rounded-full animate-pulse" />
                       {getToolLabel(activeTool)}
                     </div>
                   )}
@@ -356,8 +356,8 @@ export default function ChatPage() {
             {/* Tool activity indicator before first text token */}
             {isStreaming && !streamingText && activeTool && (
               <div className="flex justify-start">
-                <div className="flex items-center gap-2 px-4 py-3 text-sm text-gray-400 italic">
-                  <span className="inline-block w-1.5 h-1.5 bg-gray-400 rounded-full animate-pulse" />
+                <div className="flex items-center gap-2 px-4 py-3 text-sm text-text-tertiary italic">
+                  <span className="inline-block w-1.5 h-1.5 bg-text-tertiary rounded-full animate-pulse" />
                   {getToolLabel(activeTool)}
                 </div>
               </div>
@@ -366,9 +366,9 @@ export default function ChatPage() {
             {isStreaming && !streamingText && !activeTool && (
               <div className="flex justify-start">
                 <div className="flex items-center gap-1 px-4 py-3">
-                  <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:0ms]" />
-                  <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:150ms]" />
-                  <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:300ms]" />
+                  <span className="w-2 h-2 bg-text-tertiary rounded-full animate-bounce [animation-delay:0ms]" />
+                  <span className="w-2 h-2 bg-text-tertiary rounded-full animate-bounce [animation-delay:150ms]" />
+                  <span className="w-2 h-2 bg-text-tertiary rounded-full animate-bounce [animation-delay:300ms]" />
                 </div>
               </div>
             )}
@@ -378,7 +378,7 @@ export default function ChatPage() {
       </div>
 
       {/* Input bar */}
-      <div className="border-t border-gray-200 bg-white px-4 pt-3 pb-3">
+      <div className="border-t border-border bg-surface px-4 pt-3 pb-3">
         <div className="mx-auto max-w-3xl space-y-2">
           {/* Model selector row */}
           <div className="flex items-center gap-3">
@@ -386,13 +386,13 @@ export default function ChatPage() {
               value={selectedModel}
               onChange={handleModelChange}
               disabled={isStreaming}
-              className="rounded-lg border border-gray-300 text-base md:text-sm px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+              className="rounded-lg border border-border-heavy text-base md:text-sm px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {(models ?? []).map((m) => (
                 <option key={m.id} value={m.id}>{m.label}</option>
               ))}
             </select>
-            <span className="text-xs text-gray-500">
+            <span className="text-xs text-text-secondary">
               {models?.find((m) => m.id === selectedModel)?.description ?? ''}
             </span>
           </div>
@@ -405,12 +405,12 @@ export default function ChatPage() {
               placeholder="Ask about your finances..."
               rows={1}
               disabled={isStreaming}
-              className="flex-1 resize-none rounded-lg border border-gray-300 px-4 py-2 text-base md:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 resize-none rounded-lg border border-border-heavy px-4 py-2 text-base md:text-sm focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
             />
             <button
               onClick={() => handleSend()}
               disabled={isStreaming || !input.trim()}
-              className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-4 py-2 rounded-lg bg-accent text-text-invert text-sm font-medium hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Send
             </button>

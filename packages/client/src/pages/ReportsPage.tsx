@@ -54,39 +54,39 @@ export default function ReportsPage() {
       <div className="flex items-center justify-between mb-6 max-md:flex-col max-md:items-start max-md:gap-3">
         <h2 className="text-2xl font-bold">Reports</h2>
         <div className="flex items-center gap-3 max-md:flex-wrap max-md:w-full">
-          <label className="text-sm text-gray-500">From</label>
+          <label className="text-sm text-text-secondary">From</label>
           <input
             type="date"
             value={startDate}
             onChange={e => setStartDate(e.target.value)}
-            className="px-3 py-1.5 border border-gray-300 rounded text-base max-md:flex-1"
+            className="px-3 py-1.5 border border-border-heavy rounded text-base max-md:flex-1"
           />
-          <label className="text-sm text-gray-500">To</label>
+          <label className="text-sm text-text-secondary">To</label>
           <input
             type="date"
             value={endDate}
             onChange={e => setEndDate(e.target.value)}
-            className="px-3 py-1.5 border border-gray-300 rounded text-base max-md:flex-1"
+            className="px-3 py-1.5 border border-border-heavy rounded text-base max-md:flex-1"
           />
         </div>
       </div>
 
       {/* Spending by Category */}
-      <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
+      <div className="bg-surface rounded-lg border border-border p-4 mb-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold">Spending by Category</h3>
           <button
             onClick={() => setChartType(chartType === 'pie' ? 'bar' : 'pie')}
-            className="text-sm text-blue-600 hover:text-blue-800"
+            className="text-sm text-accent hover:text-accent-hover"
           >
             Show as {chartType === 'pie' ? 'Bar' : 'Pie'}
           </button>
         </div>
 
         {categoryLoading ? (
-          <p className="text-gray-500">Loading...</p>
+          <p className="text-text-secondary">Loading...</p>
         ) : !categoryData || categoryData.length === 0 ? (
-          <p className="text-gray-500">No spending data for this period</p>
+          <p className="text-text-secondary">No spending data for this period</p>
         ) : chartType === 'pie' ? (
           <div style={{ height: 350 }}>
             <ResponsiveContainer width="100%" height="100%">
@@ -128,13 +128,13 @@ export default function ReportsPage() {
       </div>
 
       {/* Spending Over Time */}
-      <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
+      <div className="bg-surface rounded-lg border border-border p-4 mb-6">
         <h3 className="text-lg font-semibold mb-4">Spending Over Time</h3>
 
         {timeLoading ? (
-          <p className="text-gray-500">Loading...</p>
+          <p className="text-text-secondary">Loading...</p>
         ) : !timeData || timeData.length === 0 ? (
-          <p className="text-gray-500">No spending data for this period</p>
+          <p className="text-text-secondary">No spending data for this period</p>
         ) : (
           <div style={{ height: 300 }}>
             <ResponsiveContainer width="100%" height="100%">
@@ -154,13 +154,13 @@ export default function ReportsPage() {
       </div>
 
       {/* Net Worth Trend */}
-      <div className="bg-white rounded-lg border border-gray-200 p-4">
+      <div className="bg-surface rounded-lg border border-border p-4">
         <h3 className="text-lg font-semibold mb-4">Net Worth Trend</h3>
 
         {netWorthLoading ? (
-          <p className="text-gray-500">Loading...</p>
+          <p className="text-text-secondary">Loading...</p>
         ) : !netWorthData || netWorthData.length === 0 ? (
-          <p className="text-gray-500">No balance snapshot data available</p>
+          <p className="text-text-secondary">No balance snapshot data available</p>
         ) : (
           <div style={{ height: 300 }}>
             <ResponsiveContainer width="100%" height="100%">
