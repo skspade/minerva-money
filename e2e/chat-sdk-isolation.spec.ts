@@ -3,26 +3,18 @@ import { query, createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk'
 import { z } from 'zod';
 
 /**
- * Narrow isolation test for the chat bug.
+ * Regression test: verifies the Claude Agent SDK's query() completes
+ * successfully when settingSources is set to [] (isolation mode).
  *
- * Hypothesis: the Claude Agent SDK's `query()` spawns a `claude` CLI
- * subprocess which, by default, inherits the host user's global
- * ~/.claude settings — including MCP servers like "claude.ai Linear",
- * "claude.ai Gmail", and "claude.ai Google Calendar". When those
- * inherited MCP connections fail (as they do on the prod iMac), a
- * control-plane race causes the SDK's handleControlRequest to throw
- * `ProcessTransport is not ready for writing` as an unhandled rejection,
- * killing the parent Node process.
+ * Background: without settingSources: [], the SDK spawns a `claude` CLI
+ * subprocess that inherits the host user's ~/.claude settings, including
+ * MCP servers (Linear, Gmail, Calendar). On the prod iMac, those
+ * inherited MCP connections fail and cause unhandled rejections that
+ * crash the server.
  *
- * Minerva's `agent-service.ts` does NOT set `settingSources` on the SDK
- * options, so it falls into this trap. Setting `settingSources: []`
- * should isolate the spawned CLI from user config and prevent the crash.
- *
- * This test bypasses the Express server and the browser entirely: it
- * calls `query()` directly, mirroring the exact options passed in
- * `createMcpServer()` + the options block in `agent-service.ts:chatStream()`,
- * plus the `settingSources: []` fix. If it completes with a `result`
- * message (no crash), the fix is confirmed.
+ * This test calls query() directly (no Express, no browser) with the
+ * same isolation options used in agent-service.ts to confirm the fix
+ * prevents the crash.
  */
 test.describe('Claude Agent SDK isolation', () => {
   test('query() completes when settingSources is []', async () => {

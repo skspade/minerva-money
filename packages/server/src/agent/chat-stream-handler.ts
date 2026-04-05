@@ -102,6 +102,7 @@ export function createChatStreamHandler(db: Database.Database, ctx: Context): Re
       const stream = chatStream(db, ctx, message, abortController.signal, state, model as ModelId | undefined);
 
       for await (const event of stream) {
+        if (res.destroyed) break;
         if (event.type === 'done') {
           // Persist assistant message BEFORE emitting done
           try {
@@ -132,11 +133,14 @@ export function createChatStreamHandler(db: Database.Database, ctx: Context): Re
         res.write(`data: ${JSON.stringify(event)}\n\n`);
       }
     } catch (error) {
-      // Defense-in-depth: chatStream should never throw, but handle it safely
       const errMsg = error instanceof Error ? error.message : 'Unknown error';
-      res.write(`data: ${JSON.stringify({ type: 'error', message: errMsg })}\n\n`);
+      if (!res.destroyed) {
+        res.write(`data: ${JSON.stringify({ type: 'error', message: errMsg })}\n\n`);
+      }
     }
 
-    res.end();
+    if (!res.destroyed) {
+      res.end();
+    }
   };
 }

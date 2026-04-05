@@ -48,10 +48,10 @@ export async function chat(
     // Isolate the spawned `claude` CLI subprocess from the operator's
     // ~/.claude config. By default the CLI inherits user-level MCP servers
     // (Linear, Gmail, Calendar, etc.), which is undesirable for a headless
-    // production service — those are user-specific and their connection
-    // attempts just slow down startup. `strictMcpConfig` is the switch that
-    // actually takes effect; `settingSources: []` on its own emits
-    // `--setting-sources ""` which the CLI ignores.
+    // production service. `settingSources: []` prevents loading any
+    // filesystem settings (user/project/local), and `strictMcpConfig`
+    // additionally restricts MCP servers to only those in our explicit
+    // mcpServers config.
     settingSources: [],
     strictMcpConfig: true,
   };
@@ -163,7 +163,7 @@ export async function* chatStream(
     permissionMode: 'bypassPermissions' as const,
     allowDangerouslySkipPermissions: true,
     includePartialMessages: true,
-    // See note in chat() above — isolate from operator's ~/.claude config.
+    // Isolate from operator's ~/.claude config — prevent inherited MCP servers.
     settingSources: [],
     strictMcpConfig: true,
   };
@@ -186,8 +186,8 @@ export async function* chatStream(
           if (conv?.messages?.length) {
             fallbackMessage = buildFallbackPrompt(conv.messages, message);
           }
-        } catch {
-          // Silently continue without context if DB lookup fails
+        } catch (err) {
+          console.warn('Failed to load conversation context for fallback prompt:', err);
         }
       }
 
@@ -205,16 +205,24 @@ export async function* chatStream(
   const timeoutMs = TIMEOUT_MS[model];
   let idleTimer: ReturnType<typeof setTimeout> | null = null;
 
+  let streamClosed = false;
+  const closeStream = () => {
+    if (!streamClosed) {
+      streamClosed = true;
+      queryStream.close();
+    }
+  };
+
   const resetIdleTimer = () => {
     if (idleTimer) clearTimeout(idleTimer);
     idleTimer = setTimeout(() => {
       idleTimedOut = true;
-      queryStream.close();
+      closeStream();
     }, timeoutMs);
   };
 
   // Set up abort handler
-  const onAbort = () => queryStream.close();
+  const onAbort = () => closeStream();
   signal.addEventListener('abort', onAbort);
 
   try {

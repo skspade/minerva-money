@@ -1,15 +1,14 @@
 import { test, expect } from '@playwright/test';
 
 /**
- * Reproduction test for the broken chat on the production server.
+ * Regression test for the chat streaming endpoint via the browser UI.
  *
  * Runs against an already-running prod server at http://localhost:3001
  * (see playwright.prod.config.ts). Does NOT mock any network traffic —
- * the whole point is to observe how /api/chat/stream and the tRPC
- * fallback actually behave in production.
+ * the whole point is to verify /api/chat/stream and the React client
+ * work end-to-end in production.
  *
- * Run with:
- *   npm run test:chat:prod
+ * Run with: npm run test:chat:prod
  */
 test.describe('Chat (prod repro)', () => {
   test('sending a message produces an assistant response', async ({ page }) => {

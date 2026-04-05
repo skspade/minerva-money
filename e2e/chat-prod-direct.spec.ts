@@ -1,19 +1,12 @@
 import { test, expect } from '@playwright/test';
 
 /**
- * Direct SSE test — bypasses the browser entirely.
+ * Regression test: POST directly to /api/chat/stream (bypassing the
+ * browser) and verify the full SSE event sequence completes with a
+ * `done` event. Runs against an already-running server at
+ * http://localhost:3001.
  *
- * Posts directly to /api/chat/stream from Node using fetch, reads the
- * raw SSE body with a ReadableStreamDefaultReader, and logs every event
- * with elapsed-ms timestamps. This removes the React / useStreamingChat
- * layer from the equation.
- *
- * Interpretation:
- * - If this test passes with a `done` event → bug is client-side.
- * - If only `conversation` / `session` appear → Claude SDK call never
- *   produces output (and the server's 30s idle timeout should fire an
- *   `error` event — if it doesn't, that's an extra bug).
- * - If the request itself errors → server-side pre-SDK code is broken.
+ * Run with: npm run test:chat:prod
  */
 test.describe('Chat (prod direct SSE)', () => {
   test('POST /api/chat/stream emits a done event within timeout', async () => {
