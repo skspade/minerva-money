@@ -52,14 +52,14 @@ export function AllocationCell({
         onChange={e => setText(e.target.value)}
         onKeyDown={handleKeyDown}
         onBlur={save}
-        className="w-24 px-2 py-1 border border-blue-400 rounded text-base text-right focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="w-24 px-2 py-1 border border-accent rounded text-base text-right bg-surface text-text-primary focus:outline-none focus:ring-2 focus:ring-accent"
       />
     );
   }
 
   return (
     <span
-      className="cursor-pointer hover:text-blue-600 hover:underline"
+      className="cursor-pointer hover:text-accent hover:underline"
       onClick={startEditing}
       title="Click to edit allocation"
     >

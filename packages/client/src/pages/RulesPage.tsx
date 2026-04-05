@@ -41,11 +41,11 @@ export default function RulesPage() {
   }));
 
   if (isLoading) {
-    return <p className="text-gray-500">Loading rules...</p>;
+    return <p className="text-text-secondary">Loading rules...</p>;
   }
 
   if (error) {
-    return <p className="text-red-600">Error loading rules: {error.message}</p>;
+    return <p className="text-danger">Error loading rules: {error.message}</p>;
   }
 
   return (
@@ -55,7 +55,7 @@ export default function RulesPage() {
         {!showForm && !editingRule && (
           <button
             onClick={() => setShowForm(true)}
-            className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 max-md:min-h-[44px]"
+            className="px-3 py-1.5 bg-accent text-text-invert text-sm rounded hover:bg-accent-hover max-md:min-h-[44px]"
           >
             Create Rule
           </button>
@@ -85,8 +85,8 @@ export default function RulesPage() {
       <Drawer.Root open={showForm || !!editingRule} onOpenChange={(o) => { if (!o) { setShowForm(false); setEditingRule(null); } }}>
         <Drawer.Portal>
           <Drawer.Overlay className="fixed inset-0 bg-black/40 z-50 md:hidden" />
-          <Drawer.Content className="fixed bottom-0 inset-x-0 z-50 bg-white rounded-t-2xl max-h-[90svh] flex flex-col pb-safe md:hidden">
-            <div className="mx-auto w-12 h-1.5 bg-gray-300 rounded-full mt-3 mb-2 flex-shrink-0" />
+          <Drawer.Content className="fixed bottom-0 inset-x-0 z-50 bg-surface rounded-t-2xl max-h-[90svh] flex flex-col pb-safe md:hidden">
+            <div className="mx-auto w-12 h-1.5 bg-surface-tertiary rounded-full mt-3 mb-2 flex-shrink-0" />
             <div className="overflow-y-auto flex-1">
               <RuleForm
                 initialRule={editingRule ?? undefined}
@@ -116,13 +116,13 @@ export default function RulesPage() {
       )}
 
       {!rules || rules.length === 0 ? (
-        <p className="text-gray-500">No rules created yet. Create your first rule to auto-categorize transactions.</p>
+        <p className="text-text-secondary">No rules created yet. Create your first rule to auto-categorize transactions.</p>
       ) : (
         <>
         <div className="overflow-x-auto max-md:hidden">
           <table className="w-full border-collapse">
             <thead>
-              <tr className="bg-gray-100 text-left text-sm font-semibold text-gray-700">
+              <tr className="bg-surface-secondary text-left text-sm font-semibold text-text-primary">
                 <th className="px-4 py-2">Name</th>
                 <th className="px-4 py-2">Conditions</th>
                 <th className="px-4 py-2">Category</th>
@@ -132,21 +132,21 @@ export default function RulesPage() {
             </thead>
             <tbody>
               {rules.map(rule => (
-                <tr key={rule.id} className="border-b border-gray-200 even:bg-gray-50 hover:bg-gray-100">
+                <tr key={rule.id} className="border-b border-border even:bg-surface-alt hover:bg-surface-secondary">
                   <td className="px-4 py-2 text-sm font-medium">{rule.name}</td>
-                  <td className="px-4 py-2 text-sm text-gray-600">{formatConditions(rule)}</td>
+                  <td className="px-4 py-2 text-sm text-text-secondary">{formatConditions(rule)}</td>
                   <td className="px-4 py-2 text-sm">{rule.categoryName}</td>
                   <td className="px-4 py-2 text-sm text-center">{rule.specificityScore}</td>
                   <td className="px-4 py-2 text-sm">
                     <div className="flex gap-2">
                       <button
                         onClick={() => setEditingRule(rule)}
-                        className="text-blue-600 hover:text-blue-800"
+                        className="text-accent hover:text-accent-hover"
                       >
                         Edit
                       </button>
                       <InlineConfirm message={`Delete rule "${rule.name}"?`} onConfirm={() => deleteMut.mutate({ id: rule.id })}>
-                        <button className="text-red-600 hover:text-red-800">Delete</button>
+                        <button className="text-danger hover:text-danger">Delete</button>
                       </InlineConfirm>
                     </div>
                   </td>
@@ -159,24 +159,24 @@ export default function RulesPage() {
         {/* Mobile card list */}
         <div className="md:hidden space-y-3">
           {rules.map(rule => (
-            <div key={rule.id} className="bg-white rounded-lg border border-gray-200 p-4">
+            <div key={rule.id} className="bg-surface rounded-lg border border-border p-4">
               <div className="flex items-start justify-between mb-1">
                 <span className="font-medium text-sm">{rule.name}</span>
-                <span className="text-xs bg-gray-100 text-gray-600 rounded px-2 py-0.5 ml-2 flex-shrink-0">
+                <span className="text-xs bg-surface-secondary text-text-secondary rounded px-2 py-0.5 ml-2 flex-shrink-0">
                   Score: {rule.specificityScore}
                 </span>
               </div>
-              <p className="text-xs text-gray-600 mb-1">{formatConditions(rule)}</p>
-              <p className="text-xs text-gray-400 mb-3">{'\u2192'} {rule.categoryName}</p>
-              <div className="flex gap-3 border-t border-gray-100 pt-2">
+              <p className="text-xs text-text-secondary mb-1">{formatConditions(rule)}</p>
+              <p className="text-xs text-text-tertiary mb-3">{'\u2192'} {rule.categoryName}</p>
+              <div className="flex gap-3 border-t border-border-light pt-2">
                 <button
                   onClick={() => setEditingRule(rule)}
-                  className="text-blue-600 text-sm min-h-[44px] px-2"
+                  className="text-accent text-sm min-h-[44px] px-2"
                 >
                   Edit
                 </button>
                 <InlineConfirm message={`Delete rule "${rule.name}"?`} onConfirm={() => deleteMut.mutate({ id: rule.id })}>
-                  <button className="text-red-600 text-sm min-h-[44px] px-2">Delete</button>
+                  <button className="text-danger text-sm min-h-[44px] px-2">Delete</button>
                 </InlineConfirm>
               </div>
             </div>

@@ -5,8 +5,8 @@ import BottomTabBar from './BottomTabBar';
 
 export default function Layout() {
   return (
-    <div className="min-h-dvh bg-gray-50 overflow-x-hidden">
-      <nav className="hidden md:block bg-gray-900 text-white">
+    <div className="min-h-dvh bg-surface-alt overflow-x-hidden">
+      <nav className="hidden md:block bg-nav-bg text-text-invert">
         <div className="mx-auto max-w-6xl flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-8">
             <h1 className="text-lg font-bold">Minerva Money</h1>
@@ -15,7 +15,7 @@ export default function Layout() {
                 to="/"
                 end
                 className={({ isActive }) =>
-                  `px-3 py-1 rounded ${isActive ? 'bg-gray-700' : 'hover:bg-gray-800'}`
+                  `px-3 py-1 rounded ${isActive ? 'bg-nav-active' : 'hover:bg-nav-hover'}`
                 }
               >
                 Dashboard
@@ -23,7 +23,7 @@ export default function Layout() {
               <NavLink
                 to="/accounts"
                 className={({ isActive }) =>
-                  `px-3 py-1 rounded ${isActive ? 'bg-gray-700' : 'hover:bg-gray-800'}`
+                  `px-3 py-1 rounded ${isActive ? 'bg-nav-active' : 'hover:bg-nav-hover'}`
                 }
               >
                 Accounts
@@ -31,7 +31,7 @@ export default function Layout() {
               <NavLink
                 to="/transactions"
                 className={({ isActive }) =>
-                  `px-3 py-1 rounded ${isActive ? 'bg-gray-700' : 'hover:bg-gray-800'}`
+                  `px-3 py-1 rounded ${isActive ? 'bg-nav-active' : 'hover:bg-nav-hover'}`
                 }
               >
                 Transactions
@@ -39,7 +39,7 @@ export default function Layout() {
               <NavLink
                 to="/categories"
                 className={({ isActive }) =>
-                  `px-3 py-1 rounded ${isActive ? 'bg-gray-700' : 'hover:bg-gray-800'}`
+                  `px-3 py-1 rounded ${isActive ? 'bg-nav-active' : 'hover:bg-nav-hover'}`
                 }
               >
                 Categories
@@ -47,7 +47,7 @@ export default function Layout() {
               <NavLink
                 to="/rules"
                 className={({ isActive }) =>
-                  `px-3 py-1 rounded ${isActive ? 'bg-gray-700' : 'hover:bg-gray-800'}`
+                  `px-3 py-1 rounded ${isActive ? 'bg-nav-active' : 'hover:bg-nav-hover'}`
                 }
               >
                 Rules
@@ -55,7 +55,7 @@ export default function Layout() {
               <NavLink
                 to="/transfers"
                 className={({ isActive }) =>
-                  `px-3 py-1 rounded ${isActive ? 'bg-gray-700' : 'hover:bg-gray-800'}`
+                  `px-3 py-1 rounded ${isActive ? 'bg-nav-active' : 'hover:bg-nav-hover'}`
                 }
               >
                 Transfers
@@ -63,7 +63,7 @@ export default function Layout() {
               <NavLink
                 to="/budget"
                 className={({ isActive }) =>
-                  `px-3 py-1 rounded ${isActive ? 'bg-gray-700' : 'hover:bg-gray-800'}`
+                  `px-3 py-1 rounded ${isActive ? 'bg-nav-active' : 'hover:bg-nav-hover'}`
                 }
               >
                 Budget
@@ -71,7 +71,7 @@ export default function Layout() {
               <NavLink
                 to="/reports"
                 className={({ isActive }) =>
-                  `px-3 py-1 rounded ${isActive ? 'bg-gray-700' : 'hover:bg-gray-800'}`
+                  `px-3 py-1 rounded ${isActive ? 'bg-nav-active' : 'hover:bg-nav-hover'}`
                 }
               >
                 Reports
@@ -79,7 +79,7 @@ export default function Layout() {
               <NavLink
                 to="/chat"
                 className={({ isActive }) =>
-                  `px-3 py-1 rounded ${isActive ? 'bg-gray-700' : 'hover:bg-gray-800'}`
+                  `px-3 py-1 rounded ${isActive ? 'bg-nav-active' : 'hover:bg-nav-hover'}`
                 }
               >
                 Chat
@@ -87,7 +87,7 @@ export default function Layout() {
               <NavLink
                 to="/import"
                 className={({ isActive }) =>
-                  `px-3 py-1 rounded ${isActive ? 'bg-gray-700' : 'hover:bg-gray-800'}`
+                  `px-3 py-1 rounded ${isActive ? 'bg-nav-active' : 'hover:bg-nav-hover'}`
                 }
               >
                 Import

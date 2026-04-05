@@ -180,8 +180,8 @@ export default function ImportPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold text-gray-900">Import Transactions</h2>
-        <p className="text-sm text-gray-500 mt-1">{stepLabel}</p>
+        <h2 className="text-2xl font-bold text-text-primary">Import Transactions</h2>
+        <p className="text-sm text-text-secondary mt-1">{stepLabel}</p>
       </div>
 
       {step === 'upload' && (
@@ -332,9 +332,9 @@ function UploadStep({
 }: UploadStepProps) {
   if (previewMutation.isPending) {
     return (
-      <div className="bg-white rounded-lg shadow p-6 md:p-8 flex flex-col items-center justify-center min-h-[200px]">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-3" />
-        <p className="text-gray-500">Parsing file...</p>
+      <div className="bg-surface rounded-lg shadow p-6 md:p-8 flex flex-col items-center justify-center min-h-[200px]">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent mb-3" />
+        <p className="text-text-secondary">Parsing file...</p>
       </div>
     );
   }
@@ -345,19 +345,19 @@ function UploadStep({
         onDrop={onDrop}
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}
-        className={`bg-white rounded-lg shadow p-6 md:p-8 flex flex-col items-center justify-center min-h-[200px] border-2 border-dashed transition-colors cursor-pointer ${
-          dragActive ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
+        className={`bg-surface rounded-lg shadow p-6 md:p-8 flex flex-col items-center justify-center min-h-[200px] border-2 border-dashed transition-colors cursor-pointer ${
+          dragActive ? 'border-accent bg-accent-light' : 'border-border-heavy'
         }`}
         onClick={() => fileInputRef.current?.click()}
       >
-        <Upload size={40} className="text-gray-400 mb-3" />
-        <p className="text-gray-700 font-medium mb-1">
+        <Upload size={40} className="text-text-tertiary mb-3" />
+        <p className="text-text-primary font-medium mb-1">
           Drag and drop your CSV file here
         </p>
-        <p className="text-gray-500 text-sm mb-3">or</p>
+        <p className="text-text-secondary text-sm mb-3">or</p>
         <button
           type="button"
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          className="px-4 py-2 bg-accent text-text-invert rounded-lg hover:bg-accent-hover transition-colors"
           onClick={(e) => {
             e.stopPropagation();
             fileInputRef.current?.click();
@@ -365,7 +365,7 @@ function UploadStep({
         >
           Browse files
         </button>
-        <p className="text-gray-400 text-xs mt-3">Supports .csv, .tsv, and .txt files</p>
+        <p className="text-text-tertiary text-xs mt-3">Supports .csv, .tsv, and .txt files</p>
         <input
           ref={fileInputRef}
           type="file"
@@ -376,10 +376,10 @@ function UploadStep({
       </div>
 
       {fileError && (
-        <p className="text-red-600">{fileError}</p>
+        <p className="text-danger">{fileError}</p>
       )}
       {previewMutation.isError && (
-        <p className="text-red-600">
+        <p className="text-danger">
           Error parsing file: {previewMutation.error?.message ?? 'Unknown error'}
         </p>
       )}
@@ -438,34 +438,34 @@ function PreviewStep({
     <div className="space-y-6">
       {/* Summary banner */}
       {hasSkippedAccounts && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
+        <div className="bg-warning-light border border-warning rounded-lg p-3 text-sm text-warning">
           Importing from {mappedAccountCount} of {previewResult.accounts.length} accounts ({skippedAccountCount} skipped)
         </div>
       )}
 
       {/* Summary stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white rounded-lg shadow p-4 text-center">
-          <p className="text-2xl font-bold text-gray-900">{hasSkippedAccounts ? filteredTotalRows : previewResult.totalRows}</p>
-          <p className="text-sm text-gray-500">Total rows</p>
+        <div className="bg-surface rounded-lg shadow p-4 text-center">
+          <p className="text-2xl font-bold text-text-primary">{hasSkippedAccounts ? filteredTotalRows : previewResult.totalRows}</p>
+          <p className="text-sm text-text-secondary">Total rows</p>
         </div>
-        <div className="bg-white rounded-lg shadow p-4 text-center">
-          <p className="text-2xl font-bold text-green-600">{hasSkippedAccounts ? filteredValidRows : previewResult.validRows}</p>
-          <p className="text-sm text-gray-500">Valid rows</p>
+        <div className="bg-surface rounded-lg shadow p-4 text-center">
+          <p className="text-2xl font-bold text-success">{hasSkippedAccounts ? filteredValidRows : previewResult.validRows}</p>
+          <p className="text-sm text-text-secondary">Valid rows</p>
         </div>
-        <div className="bg-white rounded-lg shadow p-4 text-center">
-          <p className="text-2xl font-bold text-red-600">{previewResult.errors.length}</p>
-          <p className="text-sm text-gray-500">Errors</p>
+        <div className="bg-surface rounded-lg shadow p-4 text-center">
+          <p className="text-2xl font-bold text-danger">{previewResult.errors.length}</p>
+          <p className="text-sm text-text-secondary">Errors</p>
         </div>
       </div>
 
       {/* Sample rows */}
-      <div className="bg-white rounded-lg shadow p-4 md:p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-3">Sample Rows (first 10)</h3>
+      <div className="bg-surface rounded-lg shadow p-4 md:p-6">
+        <h3 className="text-lg font-semibold text-text-primary mb-3">Sample Rows (first 10)</h3>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b text-left text-gray-500">
+              <tr className="border-b text-left text-text-secondary">
                 <th className="pb-2 pr-4">Date</th>
                 <th className="pb-2 pr-4">Merchant</th>
                 <th className="pb-2 pr-4">Account</th>
@@ -487,20 +487,20 @@ function PreviewStep({
           </table>
         </div>
         {hasSkippedAccounts && filteredSampleRows.length < previewResult.sampleRows.length && (
-          <p className="text-xs text-gray-500 mt-2">
+          <p className="text-xs text-text-secondary mt-2">
             Showing {filteredSampleRows.length} of {previewResult.sampleRows.length} sample rows ({previewResult.sampleRows.length - filteredSampleRows.length} excluded from skipped accounts)
           </p>
         )}
       </div>
 
       {/* Dedup stats */}
-      <div className="bg-white rounded-lg shadow p-4 md:p-6">
-        <p className="text-sm text-gray-700">
-          <span className="font-semibold text-green-600">{previewResult.dedupStats.newCount}</span> new transactions to import,{' '}
-          <span className="font-semibold text-gray-500">{previewResult.dedupStats.duplicateCount}</span> duplicates to skip
+      <div className="bg-surface rounded-lg shadow p-4 md:p-6">
+        <p className="text-sm text-text-primary">
+          <span className="font-semibold text-success">{previewResult.dedupStats.newCount}</span> new transactions to import,{' '}
+          <span className="font-semibold text-text-secondary">{previewResult.dedupStats.duplicateCount}</span> duplicates to skip
         </p>
         {hasSkippedAccounts && (
-          <p className="text-xs text-gray-500 mt-1">
+          <p className="text-xs text-text-secondary mt-1">
             Excludes {skippedRowCount} rows from {skippedAccountCount} skipped account{skippedAccountCount !== 1 ? 's' : ''}
           </p>
         )}
@@ -508,11 +508,11 @@ function PreviewStep({
 
       {/* Parse errors */}
       {previewResult.errors.length > 0 && (
-        <details className="bg-white rounded-lg shadow p-4 md:p-6">
-          <summary className="text-sm font-medium text-red-600 cursor-pointer">
+        <details className="bg-surface rounded-lg shadow p-4 md:p-6">
+          <summary className="text-sm font-medium text-danger cursor-pointer">
             {previewResult.errors.length} parse error{previewResult.errors.length !== 1 ? 's' : ''}
           </summary>
-          <ul className="mt-2 space-y-1 text-sm text-red-600">
+          <ul className="mt-2 space-y-1 text-sm text-danger">
             {previewResult.errors.map((err, i) => (
               <li key={i}>{err}</li>
             ))}
@@ -521,14 +521,14 @@ function PreviewStep({
       )}
 
       {/* Account mappings */}
-      <div className="bg-white rounded-lg shadow p-4 md:p-6">
+      <div className="bg-surface rounded-lg shadow p-4 md:p-6">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-lg font-semibold text-gray-900">Map Accounts</h3>
+          <h3 className="text-lg font-semibold text-text-primary">Map Accounts</h3>
           {previewResult.accounts.some(a => !accountMappings[a.csvName] || accountMappings[a.csvName] === '') && (
             <button
               type="button"
               onClick={onSkipAllUnmatched}
-              className="text-sm text-amber-600 hover:text-amber-700 transition-colors"
+              className="text-sm text-warning hover:text-warning transition-colors"
             >
               Skip All Unmatched
             </button>
@@ -538,13 +538,13 @@ function PreviewStep({
           {previewResult.accounts.map((acct) => (
             <div key={acct.csvName} className={`space-y-1 ${
               accountMappings[acct.csvName] === SKIP_SENTINEL
-                ? 'opacity-60 border-l-4 border-amber-400 pl-3'
+                ? 'opacity-60 border-l-4 border-warning pl-3'
                 : ''
             }`}>
-              <label className="text-sm font-medium text-gray-700">
+              <label className="text-sm font-medium text-text-primary">
                 {acct.csvName}
                 {previewResult.rowCountByAccount[acct.csvName] != null && (
-                  <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                  <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-surface-secondary text-text-secondary">
                     {previewResult.rowCountByAccount[acct.csvName]} {previewResult.rowCountByAccount[acct.csvName] === 1 ? 'row' : 'rows'}
                   </span>
                 )}
@@ -560,10 +560,10 @@ function PreviewStep({
                   }
                 }}
                 className={`w-full rounded-md border px-3 py-2 text-sm ${
-                  !accountMappings[acct.csvName] ? 'border-red-300' :
-                  accountMappings[acct.csvName] === SKIP_SENTINEL ? 'border-amber-300' :
-                  accountMappings[acct.csvName] === CREATE_NEW_SENTINEL ? 'border-blue-300' :
-                  'border-gray-300'
+                  !accountMappings[acct.csvName] ? 'border-danger' :
+                  accountMappings[acct.csvName] === SKIP_SENTINEL ? 'border-warning' :
+                  accountMappings[acct.csvName] === CREATE_NEW_SENTINEL ? 'border-accent' :
+                  'border-border-heavy'
                 }`}
               >
                 <option value="" disabled>Select account...</option>
@@ -574,7 +574,7 @@ function PreviewStep({
                 ))}
               </select>
               {accountMappings[acct.csvName] === SKIP_SENTINEL && (
-                <p className="text-xs text-amber-600 italic">Skipped — rows from this account will not be imported</p>
+                <p className="text-xs text-warning italic">Skipped — rows from this account will not be imported</p>
               )}
               {creatingAccountFor === acct.csvName && (
                 <InlineAccountForm
@@ -591,16 +591,16 @@ function PreviewStep({
       </div>
 
       {/* Category mappings */}
-      <div className="bg-white rounded-lg shadow p-4 md:p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-3">Map Categories</h3>
+      <div className="bg-surface rounded-lg shadow p-4 md:p-6">
+        <h3 className="text-lg font-semibold text-text-primary mb-3">Map Categories</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {previewResult.categories.map((cat) => (
             <div key={cat.csvName} className="space-y-1">
-              <label className="text-sm font-medium text-gray-700">{cat.csvName}</label>
+              <label className="text-sm font-medium text-text-primary">{cat.csvName}</label>
               <select
                 value={categoryMappings[cat.csvName] ?? 0}
                 onChange={(e) => onCategoryMappingChange(cat.csvName, Number(e.target.value))}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                className="w-full rounded-md border border-border-heavy px-3 py-2 text-sm"
               >
                 <option value={0}>Uncategorized</option>
                 {categoryGroups.map((group) => (
@@ -619,12 +619,12 @@ function PreviewStep({
       {/* Continue button */}
       <div className="flex flex-col md:flex-row md:justify-end gap-3">
         {validationState.message && (
-          <p className="text-sm text-red-600 self-center">{validationState.message}</p>
+          <p className="text-sm text-danger self-center">{validationState.message}</p>
         )}
         <button
           onClick={onContinue}
           disabled={!validationState.canContinue}
-          className="w-full md:w-auto px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="w-full md:w-auto px-6 py-2 bg-accent text-text-invert rounded-lg hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           Continue
         </button>
@@ -655,39 +655,39 @@ function InlineAccountForm({
   const canSubmit = name.trim() !== '' && institution.trim() !== '' && !isPending;
 
   return (
-    <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-2">
-      <p className="text-xs font-medium text-blue-700">New Account</p>
+    <div className="mt-2 p-3 bg-accent-light border border-accent rounded-lg space-y-2">
+      <p className="text-xs font-medium text-accent">New Account</p>
       <input
         type="text"
         value={name}
         onChange={(e) => setName(e.target.value)}
         placeholder="Account name"
-        className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm"
+        className="w-full rounded-md border border-border-heavy px-3 py-1.5 text-sm"
       />
       <input
         type="text"
         value={institution}
         onChange={(e) => setInstitution(e.target.value)}
         placeholder="Institution (required)"
-        className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm"
+        className="w-full rounded-md border border-border-heavy px-3 py-1.5 text-sm"
       />
       <select
         value={type}
         onChange={(e) => setType(e.target.value as 'banking' | 'credit')}
-        className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm"
+        className="w-full rounded-md border border-border-heavy px-3 py-1.5 text-sm"
       >
         <option value="banking">Banking</option>
         <option value="credit">Credit</option>
       </select>
       {error && (
-        <p className="text-xs text-red-600">{error}</p>
+        <p className="text-xs text-danger">{error}</p>
       )}
       <div className="flex gap-2">
         <button
           type="button"
           onClick={() => onSubmit({ name: name.trim(), institution: institution.trim(), type })}
           disabled={!canSubmit}
-          className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="px-3 py-1 text-sm bg-accent text-text-invert rounded hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {isPending ? 'Creating...' : 'Create'}
         </button>
@@ -695,7 +695,7 @@ function InlineAccountForm({
           type="button"
           onClick={onCancel}
           disabled={isPending}
-          className="px-3 py-1 text-sm text-gray-600 hover:text-gray-800 transition-colors"
+          className="px-3 py-1 text-sm text-text-secondary hover:text-text-primary transition-colors"
         >
           Cancel
         </button>
@@ -733,37 +733,37 @@ function ResultsStep({
 
     return (
       <div className="space-y-6">
-        <div className="bg-white rounded-lg shadow p-4 md:p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Import Summary</h3>
+        <div className="bg-surface rounded-lg shadow p-4 md:p-6">
+          <h3 className="text-lg font-semibold text-text-primary mb-4">Import Summary</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="text-center p-3 bg-green-50 rounded-lg">
-              <p className="text-2xl font-bold text-green-600">{previewResult.dedupStats.newCount}</p>
-              <p className="text-sm text-gray-600">New transactions</p>
+            <div className="text-center p-3 bg-success-light rounded-lg">
+              <p className="text-2xl font-bold text-success">{previewResult.dedupStats.newCount}</p>
+              <p className="text-sm text-text-secondary">New transactions</p>
             </div>
-            <div className="text-center p-3 bg-gray-50 rounded-lg">
-              <p className="text-2xl font-bold text-gray-500">{previewResult.dedupStats.duplicateCount}</p>
-              <p className="text-sm text-gray-600">Duplicates to skip</p>
+            <div className="text-center p-3 bg-surface-alt rounded-lg">
+              <p className="text-2xl font-bold text-text-secondary">{previewResult.dedupStats.duplicateCount}</p>
+              <p className="text-sm text-text-secondary">Duplicates to skip</p>
             </div>
-            <div className="text-center p-3 bg-red-50 rounded-lg">
-              <p className="text-2xl font-bold text-red-600">{previewResult.errors.length}</p>
-              <p className="text-sm text-gray-600">Error rows</p>
+            <div className="text-center p-3 bg-danger-light rounded-lg">
+              <p className="text-2xl font-bold text-danger">{previewResult.errors.length}</p>
+              <p className="text-sm text-text-secondary">Error rows</p>
             </div>
             {hasSkippedAccounts && (
-              <div className="text-center p-3 bg-amber-50 rounded-lg">
-                <p className="text-2xl font-bold text-amber-600">{skippedRowCount}</p>
-                <p className="text-sm text-gray-600">Skipped (account filter)</p>
+              <div className="text-center p-3 bg-warning-light rounded-lg">
+                <p className="text-2xl font-bold text-warning">{skippedRowCount}</p>
+                <p className="text-sm text-text-secondary">Skipped (account filter)</p>
               </div>
             )}
           </div>
           {hasSkippedAccounts && (
-            <p className="text-xs text-gray-500 mt-3">
+            <p className="text-xs text-text-secondary mt-3">
               Excludes {skippedRowCount} rows from {skippedAccountCount} skipped account{skippedAccountCount !== 1 ? 's' : ''}
             </p>
           )}
         </div>
 
         {executeMutation.isError && (
-          <p className="text-red-600">
+          <p className="text-danger">
             Import failed: {executeMutation.error?.message ?? 'Unknown error'}
           </p>
         )}
@@ -771,14 +771,14 @@ function ResultsStep({
         <div className="flex flex-col md:flex-row md:justify-between gap-3">
           <button
             onClick={onBack}
-            className="w-full md:w-auto px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+            className="w-full md:w-auto px-6 py-2 border border-border-heavy text-text-primary rounded-lg hover:bg-surface-alt transition-colors"
           >
             Back to Mapping
           </button>
           <button
             onClick={onImport}
             disabled={executeMutation.isPending}
-            className="w-full md:w-auto px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="w-full md:w-auto px-6 py-2 bg-accent text-text-invert rounded-lg hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {executeMutation.isPending ? (
               <span className="flex items-center justify-center gap-2">
@@ -797,29 +797,29 @@ function ResultsStep({
   // After execution — show results
   return (
     <div className="space-y-6">
-      <div className="bg-white rounded-lg shadow p-4 md:p-6">
-        <h3 className="text-lg font-semibold text-green-700 mb-4">Import Complete</h3>
+      <div className="bg-surface rounded-lg shadow p-4 md:p-6">
+        <h3 className="text-lg font-semibold text-success mb-4">Import Complete</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="p-3 bg-green-50 rounded-lg">
-            <p className="text-2xl font-bold text-green-600">{executeResult.importedCount}</p>
-            <p className="text-sm text-gray-600">Transactions imported</p>
+          <div className="p-3 bg-success-light rounded-lg">
+            <p className="text-2xl font-bold text-success">{executeResult.importedCount}</p>
+            <p className="text-sm text-text-secondary">Transactions imported</p>
           </div>
-          <div className="p-3 bg-gray-50 rounded-lg">
-            <p className="text-2xl font-bold text-gray-500">{executeResult.skippedCount}</p>
-            <p className="text-sm text-gray-600">Duplicates skipped</p>
+          <div className="p-3 bg-surface-alt rounded-lg">
+            <p className="text-2xl font-bold text-text-secondary">{executeResult.skippedCount}</p>
+            <p className="text-sm text-text-secondary">Duplicates skipped</p>
           </div>
-          <div className="p-3 bg-blue-50 rounded-lg">
-            <p className="text-2xl font-bold text-blue-600">{executeResult.categorizedByRules}</p>
-            <p className="text-sm text-gray-600">Categorized by rules</p>
+          <div className="p-3 bg-accent-light rounded-lg">
+            <p className="text-2xl font-bold text-accent">{executeResult.categorizedByRules}</p>
+            <p className="text-sm text-text-secondary">Categorized by rules</p>
           </div>
-          <div className="p-3 bg-purple-50 rounded-lg">
-            <p className="text-2xl font-bold text-purple-600">{executeResult.categorizedFromCsv}</p>
-            <p className="text-sm text-gray-600">Categorized from CSV</p>
+          <div className="p-3 bg-highlight rounded-lg">
+            <p className="text-2xl font-bold text-highlight-text">{executeResult.categorizedFromCsv}</p>
+            <p className="text-sm text-text-secondary">Categorized from CSV</p>
           </div>
           {executeResult.skippedByAccountFilter > 0 && (
-            <div className="p-3 bg-amber-50 rounded-lg">
-              <p className="text-2xl font-bold text-amber-600">{executeResult.skippedByAccountFilter}</p>
-              <p className="text-sm text-gray-600">Skipped (account filter)</p>
+            <div className="p-3 bg-warning-light rounded-lg">
+              <p className="text-2xl font-bold text-warning">{executeResult.skippedByAccountFilter}</p>
+              <p className="text-sm text-text-secondary">Skipped (account filter)</p>
             </div>
           )}
         </div>
@@ -828,13 +828,13 @@ function ResultsStep({
       <div className="flex flex-col md:flex-row md:justify-center gap-3">
         <Link
           to="/transactions"
-          className="w-full md:w-auto px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-center"
+          className="w-full md:w-auto px-6 py-2 bg-accent text-text-invert rounded-lg hover:bg-accent-hover transition-colors text-center"
         >
           View Transactions
         </Link>
         <button
           onClick={onReset}
-          className="w-full md:w-auto px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+          className="w-full md:w-auto px-6 py-2 border border-border-heavy text-text-primary rounded-lg hover:bg-surface-alt transition-colors"
         >
           Import Another
         </button>

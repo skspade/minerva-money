@@ -78,9 +78,9 @@ export function groupCategories(
 }
 
 function availableColor(amount: number): string {
-  if (amount < 0) return 'text-red-600 bg-red-50';
-  if (amount > 0) return 'text-green-600';
-  return 'text-gray-500';
+  if (amount < 0) return 'text-danger bg-danger-light';
+  if (amount > 0) return 'text-success';
+  return 'text-text-secondary';
 }
 
 function BudgetGroup({
@@ -101,19 +101,19 @@ function BudgetGroup({
   onSetDefault: (categoryId: number, cents: number) => void;
 }) {
   return (
-    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+    <div className="bg-surface rounded-lg border border-border overflow-hidden">
       <div
-        className="grid grid-cols-5 gap-4 px-4 py-3 bg-gray-50 border-b border-gray-200 cursor-pointer"
+        className="grid grid-cols-5 gap-4 px-4 py-3 bg-surface-alt border-b border-border cursor-pointer"
         onClick={onToggle}
       >
         <div className="flex items-center gap-2">
-          <span className="text-gray-500 text-xs w-4">
+          <span className="text-text-secondary text-xs w-4">
             {collapsed ? '\u25B8' : '\u25BE'}
           </span>
           <span className="font-semibold text-sm">{group.name}</span>
-          <span className="text-xs text-gray-400">({group.categories.length})</span>
+          <span className="text-xs text-text-tertiary">({group.categories.length})</span>
         </div>
-        <div className={`text-right text-sm font-medium ${group.totalDefault === 0 ? 'text-gray-400' : ''}`}>
+        <div className={`text-right text-sm font-medium ${group.totalDefault === 0 ? 'text-text-tertiary' : ''}`}>
           {formatCurrency(group.totalDefault)}
         </div>
         <div className="text-right text-sm font-medium">{formatCurrency(group.totalAllocated)}</div>
@@ -131,10 +131,10 @@ function BudgetGroup({
             return (
               <div
                 key={cat.categoryId}
-                className="grid grid-cols-5 gap-4 px-4 py-2 border-b border-gray-100 last:border-b-0"
+                className="grid grid-cols-5 gap-4 px-4 py-2 border-b border-border-light last:border-b-0"
               >
                 <div className="text-sm pl-6">{cat.categoryName}</div>
-                <div className={`text-right text-sm ${!hasDefault ? 'text-gray-400' : ''}`}>
+                <div className={`text-right text-sm ${!hasDefault ? 'text-text-tertiary' : ''}`}>
                   <AllocationCell
                     value={defaultValue}
                     onSave={cents => onSetDefault(cat.categoryId, cents)}
@@ -241,11 +241,11 @@ export default function BudgetPage() {
   };
 
   if (isLoading) {
-    return <p className="text-gray-500">Loading budget...</p>;
+    return <p className="text-text-secondary">Loading budget...</p>;
   }
 
   if (error) {
-    return <p className="text-red-600">Error loading budget: {error.message}</p>;
+    return <p className="text-danger">Error loading budget: {error.message}</p>;
   }
 
   const groups = data ? groupCategories(data.categories, defaultsMap) : [];
@@ -253,7 +253,7 @@ export default function BudgetPage() {
   return (
     <div>
       {errorMessage && (
-        <div className="mb-4 p-2 text-red-600 bg-red-50 rounded text-sm">
+        <div className="mb-4 p-2 text-danger bg-danger-light rounded text-sm">
           Error saving: {errorMessage}
         </div>
       )}
@@ -264,7 +264,7 @@ export default function BudgetPage() {
         <div className="flex items-center gap-4">
           <button
             onClick={() => setPeriod(getPreviousPeriod(period))}
-            className="px-3 py-1 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded"
+            className="px-3 py-1 text-text-secondary hover:text-text-primary hover:bg-surface-secondary rounded"
           >
             &larr;
           </button>
@@ -273,7 +273,7 @@ export default function BudgetPage() {
           </span>
           <button
             onClick={() => setPeriod(getNextPeriod(period))}
-            className="px-3 py-1 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded"
+            className="px-3 py-1 text-text-secondary hover:text-text-primary hover:bg-surface-secondary rounded"
           >
             &rarr;
           </button>
@@ -286,14 +286,14 @@ export default function BudgetPage() {
         <div className="flex items-center justify-between">
           <button
             onClick={() => setPeriod(getPreviousPeriod(period))}
-            className="min-h-[44px] min-w-[44px] flex items-center justify-center text-gray-600 hover:text-gray-900 rounded"
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center text-text-secondary hover:text-text-primary rounded"
           >
             &larr;
           </button>
           <span className="text-lg font-medium">{formatPeriodDisplay(period)}</span>
           <button
             onClick={() => setPeriod(getNextPeriod(period))}
-            className="min-h-[44px] min-w-[44px] flex items-center justify-center text-gray-600 hover:text-gray-900 rounded"
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center text-text-secondary hover:text-text-primary rounded"
           >
             &rarr;
           </button>
@@ -301,14 +301,14 @@ export default function BudgetPage() {
       </div>
 
       {data && (
-        <div className="mb-6 p-4 bg-white rounded-lg border border-gray-200">
-          <div className="text-sm text-gray-500 uppercase tracking-wide font-medium mb-1">
+        <div className="mb-6 p-4 bg-surface rounded-lg border border-border">
+          <div className="text-sm text-text-secondary uppercase tracking-wide font-medium mb-1">
             Available to Budget
           </div>
           <div className={`text-3xl font-bold ${
-            data.availableToBudget > 0 ? 'text-green-600' :
-            data.availableToBudget < 0 ? 'text-red-600' :
-            'text-gray-500'
+            data.availableToBudget > 0 ? 'text-success' :
+            data.availableToBudget < 0 ? 'text-danger' :
+            'text-text-secondary'
           }`}>
             {formatCurrency(data.availableToBudget)}
           </div>
@@ -317,7 +317,7 @@ export default function BudgetPage() {
 
       {/* Desktop grid — hidden on mobile */}
       <div className="hidden md:block">
-        <div className="grid grid-cols-5 gap-4 px-4 py-2 text-xs text-gray-500 uppercase tracking-wide font-medium">
+        <div className="grid grid-cols-5 gap-4 px-4 py-2 text-xs text-text-secondary uppercase tracking-wide font-medium">
           <div>Category</div>
           <div className="text-right">Default</div>
           <div className="text-right">Allocated</div>
@@ -345,9 +345,9 @@ export default function BudgetPage() {
       <div className="md:hidden space-y-4">
         {groups.map(group => (
           <div key={group.name}>
-            <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide px-1 mb-2">
+            <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wide px-1 mb-2">
               {group.name}
-              <span className="ml-1 text-xs font-normal text-gray-400">({group.categories.length})</span>
+              <span className="ml-1 text-xs font-normal text-text-tertiary">({group.categories.length})</span>
             </h3>
             <div className="space-y-2">
               {group.categories.map(cat => (
@@ -365,7 +365,7 @@ export default function BudgetPage() {
       </div>
 
       {groups.length === 0 && (
-        <p className="text-gray-500 mt-4">No budget categories found. Create categories first.</p>
+        <p className="text-text-secondary mt-4">No budget categories found. Create categories first.</p>
       )}
     </div>
   );

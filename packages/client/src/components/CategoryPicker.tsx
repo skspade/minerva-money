@@ -19,7 +19,7 @@ export default memo(function CategoryPicker({ value, onChange, className }: Cate
         const val = e.target.value;
         onChange(val === '' ? null : parseInt(val, 10));
       }}
-      className={`text-base border border-gray-300 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500 ${className ?? ''}`}
+      className={`text-base border border-border-heavy rounded px-1 py-0.5 bg-surface text-text-primary focus:outline-none focus:ring-1 focus:ring-accent ${className ?? ''}`}
     >
       <option value="">Uncategorized</option>
       {groups?.map(group => (

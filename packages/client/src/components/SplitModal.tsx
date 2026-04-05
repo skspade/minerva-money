@@ -94,9 +94,9 @@ export default function SplitModal({ transaction, hasSplits, onClose }: SplitMod
     <div className="flex justify-between items-start mb-4">
       <div>
         <h3 className="text-lg font-semibold">Split Transaction</h3>
-        <p className="text-sm text-gray-500">{transaction.payee} — {formatCurrency(transaction.amount)}</p>
+        <p className="text-sm text-text-secondary">{transaction.payee} — {formatCurrency(transaction.amount)}</p>
       </div>
-      <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl max-md:hidden">✕</button>
+      <button onClick={onClose} className="text-text-tertiary hover:text-text-secondary text-xl max-md:hidden">✕</button>
     </div>
   );
 
@@ -110,19 +110,19 @@ export default function SplitModal({ transaction, hasSplits, onClose }: SplitMod
             className="flex-1"
           />
           <div className="relative max-md:w-full">
-            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-sm text-gray-400">$</span>
+            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-sm text-text-tertiary">$</span>
             <input
               type="text"
               value={split.amountStr}
               onChange={e => updateSplit(i, { amountStr: e.target.value })}
               placeholder="0.00"
-              className="w-24 max-md:w-full pl-5 pr-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-right"
+              className="w-24 max-md:w-full pl-5 pr-2 py-1 text-sm border border-border-heavy rounded bg-surface text-text-primary focus:outline-none focus:ring-1 focus:ring-accent text-right"
             />
           </div>
           {splits.length > 1 && (
             <button
               onClick={() => removeSplit(i)}
-              className="text-gray-400 hover:text-red-500 text-sm"
+              className="text-text-tertiary hover:text-danger text-sm"
             >
               ✕
             </button>
@@ -135,19 +135,19 @@ export default function SplitModal({ transaction, hasSplits, onClose }: SplitMod
   const addButton = (
     <button
       onClick={() => setSplits(prev => [...prev, { categoryId: null, amountStr: '' }])}
-      className="text-sm text-blue-600 hover:text-blue-800 mb-4"
+      className="text-sm text-accent hover:text-accent-hover mb-4"
     >
       + Add Split
     </button>
   );
 
   const remainingDisplay = (
-    <div className={`text-sm mb-4 ${remaining === 0 ? 'text-green-600' : 'text-red-600'}`}>
+    <div className={`text-sm mb-4 ${remaining === 0 ? 'text-success' : 'text-danger'}`}>
       Remaining: {formatCurrency(remaining)}
     </div>
   );
 
-  const errorDisplay = error ? <p className="text-sm text-red-600 mb-3">{error}</p> : null;
+  const errorDisplay = error ? <p className="text-sm text-danger mb-3">{error}</p> : null;
 
   const actions = (
     <div className="flex justify-between">
@@ -155,7 +155,7 @@ export default function SplitModal({ transaction, hasSplits, onClose }: SplitMod
         {hasSplits && (
           <button
             onClick={() => deleteSplitsMut.mutate({ transactionId: transaction.id })}
-            className="text-sm text-red-600 hover:text-red-800"
+            className="text-sm text-danger"
           >
             Remove Splits
           </button>
@@ -164,14 +164,14 @@ export default function SplitModal({ transaction, hasSplits, onClose }: SplitMod
       <div className="flex gap-2">
         <button
           onClick={onClose}
-          className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800 min-h-[44px]"
+          className="px-3 py-1.5 text-sm text-text-secondary hover:text-text-primary min-h-[44px]"
         >
           Cancel
         </button>
         <button
           onClick={handleSave}
           disabled={createSplitsMut.isPending}
-          className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 min-h-[44px]"
+          className="px-3 py-1.5 text-sm bg-accent text-text-invert rounded hover:bg-accent-hover disabled:opacity-50 min-h-[44px]"
         >
           {createSplitsMut.isPending ? 'Saving...' : 'Save Splits'}
         </button>
@@ -183,7 +183,7 @@ export default function SplitModal({ transaction, hasSplits, onClose }: SplitMod
     <>
       {/* Desktop modal */}
       <div className="fixed inset-0 bg-black/40 hidden md:flex items-center justify-center z-50">
-        <div className="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4 p-6">
+        <div className="bg-surface rounded-lg shadow-xl w-full max-w-lg mx-4 p-6">
           {header}
           {splitRows}
           {addButton}
@@ -197,8 +197,8 @@ export default function SplitModal({ transaction, hasSplits, onClose }: SplitMod
       <Drawer.Root open={true} onOpenChange={(o) => !o && onClose()}>
         <Drawer.Portal>
           <Drawer.Overlay className="fixed inset-0 bg-black/40 z-50 md:hidden" />
-          <Drawer.Content className="fixed bottom-0 inset-x-0 z-50 bg-white rounded-t-2xl max-h-[90svh] flex flex-col pb-safe md:hidden">
-            <div className="mx-auto w-12 h-1.5 bg-gray-300 rounded-full mt-3 mb-2 flex-shrink-0" />
+          <Drawer.Content className="fixed bottom-0 inset-x-0 z-50 bg-surface rounded-t-2xl max-h-[90svh] flex flex-col pb-safe md:hidden">
+            <div className="mx-auto w-12 h-1.5 bg-surface-tertiary rounded-full mt-3 mb-2 flex-shrink-0" />
             <div className="overflow-y-auto flex-1 px-4 py-4">
               {header}
               {splitRows}

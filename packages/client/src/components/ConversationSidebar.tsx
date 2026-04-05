@@ -92,7 +92,7 @@ export default function ConversationSidebar({
       <div className="p-3 pb-1">
         <button
           onClick={handleNewChat}
-          className="flex items-center gap-2 w-full px-3 py-2.5 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
+          className="flex items-center gap-2 w-full px-3 py-2.5 rounded-lg text-sm font-medium text-text-primary hover:bg-surface-secondary transition-colors"
         >
           <SquarePen size={16} />
           New Chat
@@ -102,14 +102,14 @@ export default function ConversationSidebar({
       {/* Conversation list */}
       <div className="flex-1 overflow-y-auto px-1">
         {groups.length === 0 && (
-          <div className="px-3 py-8 text-center text-sm text-gray-400">
+          <div className="px-3 py-8 text-center text-sm text-text-tertiary">
             No conversations yet
           </div>
         )}
 
         {groups.map((group) => (
           <div key={group.label}>
-            <div className="px-3 pt-4 pb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+            <div className="px-3 pt-4 pb-1 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">
               {group.label}
             </div>
 
@@ -125,8 +125,8 @@ export default function ConversationSidebar({
                   className={`
                     flex items-center gap-2 w-full pr-2 py-2 rounded-r-lg text-left transition-colors group cursor-pointer
                     ${isActive
-                      ? 'bg-blue-50 border-l-2 border-blue-600 pl-[10px]'
-                      : 'pl-3 hover:bg-gray-100 border-l-2 border-transparent'
+                      ? 'bg-accent-light border-l-2 border-accent pl-[10px]'
+                      : 'pl-3 hover:bg-surface-secondary border-l-2 border-transparent'
                     }
                     ${isDisabled ? 'opacity-50 pointer-events-none' : ''}
                   `}
@@ -135,7 +135,7 @@ export default function ConversationSidebar({
                   <div className="flex-1 min-w-0">
                     {editingId === conv.id ? (
                       <input
-                        className="w-full text-sm border border-blue-400 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        className="w-full text-sm border border-accent rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-accent"
                         value={editTitle}
                         onChange={(e) => setEditTitle(e.target.value)}
                         onKeyDown={(e) => {
@@ -148,13 +148,13 @@ export default function ConversationSidebar({
                       />
                     ) : (
                       <div
-                        className="truncate text-sm text-gray-800"
+                        className="truncate text-sm text-text-primary"
                         title={conv.title}
                       >
                         {conv.title}
                       </div>
                     )}
-                    <div className="flex items-center gap-1.5 text-xs text-gray-400 mt-0.5">
+                    <div className="flex items-center gap-1.5 text-xs text-text-tertiary mt-0.5">
                       <span>{formatRelativeTime(conv.updated_at)}</span>
                       <span
                         className={`inline-flex items-center justify-center w-4 h-4 rounded text-[10px] font-bold ${badge.colorClass}`}
@@ -172,14 +172,14 @@ export default function ConversationSidebar({
                   >
                     <button
                       onClick={(e) => startRename(conv.id, conv.title, e)}
-                      className="p-1 rounded hover:bg-gray-200"
+                      className="p-1 rounded hover:bg-surface-tertiary"
                       aria-label="Rename conversation"
                     >
                       <Pencil size={14} />
                     </button>
                     <button
                       onClick={(e) => handleDelete(conv.id, e)}
-                      className="p-1 rounded hover:bg-red-100 text-gray-400 hover:text-red-600"
+                      className="p-1 rounded hover:bg-danger-light text-text-tertiary hover:text-danger"
                       aria-label="Delete conversation"
                     >
                       <Trash2 size={14} />

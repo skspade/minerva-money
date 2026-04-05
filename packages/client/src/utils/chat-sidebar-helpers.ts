@@ -93,8 +93,8 @@ function startOfDayUTC(date: Date): Date {
  * Map a model ID string to a single-letter badge and Tailwind color class.
  */
 export function getModelBadge(model: string): { label: string; colorClass: string } {
-  if (model.includes('haiku')) return { label: 'H', colorClass: 'bg-gray-200 text-gray-600' };
-  if (model.includes('sonnet')) return { label: 'S', colorClass: 'bg-blue-100 text-blue-700' };
-  if (model.includes('opus')) return { label: 'O', colorClass: 'bg-purple-100 text-purple-700' };
-  return { label: '?', colorClass: 'bg-gray-200 text-gray-600' };
+  if (model.includes('haiku')) return { label: 'H', colorClass: 'bg-surface-tertiary text-text-secondary' };
+  if (model.includes('sonnet')) return { label: 'S', colorClass: 'bg-accent-light text-accent' };
+  if (model.includes('opus')) return { label: 'O', colorClass: 'bg-highlight text-highlight-text' };
+  return { label: '?', colorClass: 'bg-surface-tertiary text-text-secondary' };
 }

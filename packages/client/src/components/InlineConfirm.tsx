@@ -23,19 +23,19 @@ export default function InlineConfirm({ message, onConfirm, children }: InlineCo
   if (confirming) {
     return (
       <span className="inline-flex items-center gap-2 text-sm">
-        <span className="text-gray-700">{message}</span>
+        <span className="text-text-primary">{message}</span>
         <button
           onClick={() => {
             onConfirm();
             reset();
           }}
-          className="text-red-600 hover:text-red-800 font-medium"
+          className="text-danger font-medium"
         >
           Delete
         </button>
         <button
           onClick={reset}
-          className="text-gray-500 hover:text-gray-700"
+          className="text-text-secondary hover:text-text-primary"
         >
           Cancel
         </button>

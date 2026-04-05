@@ -21,7 +21,7 @@ export default function SyncButton() {
     <button
       onClick={() => sync.mutate()}
       disabled={sync.isPending}
-      className="px-3 py-1 text-sm rounded bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white"
+      className="px-3 py-1 text-sm rounded bg-accent hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed text-text-invert"
     >
       {sync.isPending ? 'Syncing...' : 'Sync Now'}
     </button>
