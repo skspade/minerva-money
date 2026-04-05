@@ -45,6 +45,15 @@ export async function chat(
     maxTurns: 10,
     permissionMode: 'bypassPermissions' as const,
     allowDangerouslySkipPermissions: true,
+    // Isolate the spawned `claude` CLI subprocess from the operator's
+    // ~/.claude config. By default the CLI inherits user-level MCP servers
+    // (Linear, Gmail, Calendar, etc.), which is undesirable for a headless
+    // production service — those are user-specific and their connection
+    // attempts just slow down startup. `strictMcpConfig` is the switch that
+    // actually takes effect; `settingSources: []` on its own emits
+    // `--setting-sources ""` which the CLI ignores.
+    settingSources: [],
+    strictMcpConfig: true,
   };
 
   if (sessionId) {
@@ -154,10 +163,12 @@ export async function* chatStream(
     permissionMode: 'bypassPermissions' as const,
     allowDangerouslySkipPermissions: true,
     includePartialMessages: true,
+    // See note in chat() above — isolate from operator's ~/.claude config.
+    settingSources: [],
+    strictMcpConfig: true,
   };
 
   let queryStream: AsyncIterable<SDKMessage> & { close(): void };
-  const initialSessionId = state.sessionId;
 
   // Attempt resume if session ID is set; fall back to new session on failure
   if (state.sessionId) {
@@ -223,7 +234,7 @@ export async function* chatStream(
 
       // Stream events (text deltas and tool starts)
       if (msg.type === 'stream_event') {
-        const event = (msg as { event: Record<string, unknown> }).event;
+        const event = (msg as unknown as { event: Record<string, unknown> }).event;
 
         // Text delta
         if (event.type === 'content_block_delta') {

@@ -74,9 +74,21 @@ export function createChatStreamHandler(db: Database.Database, ctx: Context): Re
     // Emit conversation event first
     res.write(`data: ${JSON.stringify({ type: 'conversation', conversationId })}\n\n`);
 
-    // Set up abort handling for client disconnect
+    // Set up abort handling for client disconnect.
+    //
+    // CRITICAL: we listen on `res.on('close')`, NOT `req.on('close')`. In
+    // Node 16+, `req` (IncomingMessage) emits `close` as soon as the request
+    // body has been fully consumed — which for a small POST JSON body
+    // happens ~milliseconds after the handler starts, long before the
+    // client has actually disconnected. Aborting on `req.close` was
+    // causing the SDK's ProcessTransport to shut down mid-request, which
+    // then crashed the server via an unhandled
+    // `ProcessTransport is not ready for writing` rejection inside the
+    // SDK's handleControlRequest. The `res` object, by contrast, only
+    // closes when the underlying response stream is torn down — i.e., a
+    // real client disconnect or our own `res.end()`.
     const abortController = new AbortController();
-    req.on('close', () => abortController.abort());
+    res.on('close', () => abortController.abort());
 
     // Initialize StreamState
     const state: StreamState = {
