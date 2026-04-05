@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import CategoryPicker from './CategoryPicker';
-import { formatCurrency } from '../lib/format';
+import { formatCurrency, formatShortDate, parsePayee } from '../lib/format';
 
 interface TransactionCardProps {
   txn: {
@@ -28,6 +28,8 @@ export default memo(function TransactionCard({
   onCategoryChange,
   onSplitClick,
 }: TransactionCardProps) {
+  const { displayName, prefix } = parsePayee(txn.payee);
+
   return (
     <div className="bg-surface rounded-lg border border-border shadow-sm">
       {/* Tappable card body */}
@@ -35,9 +37,9 @@ export default memo(function TransactionCard({
         onClick={onToggle}
         className="w-full text-left px-3 py-2 min-h-[44px]"
       >
-        {/* Row 1: Payee + Transfer badge + Amount */}
+        {/* Row 1: Merchant name + Transfer badge + Amount */}
         <div className="flex items-center gap-2">
-          <span className="font-semibold truncate flex-1">{txn.payee}</span>
+          <span className="font-semibold truncate flex-1">{displayName}</span>
           {txn.isTransfer && (
             <span className="shrink-0 px-1.5 py-0.5 text-xs font-medium bg-highlight text-highlight-text rounded">
               Transfer
@@ -49,11 +51,12 @@ export default memo(function TransactionCard({
             {formatCurrency(txn.amount)}
           </span>
         </div>
-        {/* Row 2: Date + Account */}
-        <div className="text-sm text-text-secondary mt-0.5">
-          {new Date(txn.date + 'T00:00:00').toLocaleDateString()}
+        {/* Row 2: Prefix + Date + Account */}
+        <div className="text-sm text-text-secondary mt-0.5 truncate">
+          {prefix && <>{prefix} &middot; </>}
+          {formatShortDate(txn.date)}
           {' \u00b7 '}
-          <span className="truncate">{txn.accountName}</span>
+          {txn.accountName}
         </div>
       </button>
 
@@ -78,6 +81,11 @@ export default memo(function TransactionCard({
       {/* Expanded details */}
       {isExpanded && (
         <div className="border-t border-border-light px-3 py-2 text-sm text-text-secondary space-y-1">
+          {prefix && (
+            <div>
+              <span className="font-medium text-text-primary">Full payee:</span> {txn.payee}
+            </div>
+          )}
           {txn.memo && (
             <div>
               <span className="font-medium text-text-primary">Memo:</span> {txn.memo}
