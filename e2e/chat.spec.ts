@@ -61,8 +61,8 @@ function errorStreamBody(message: string, conversationId = 'conv-001'): string {
 
 const MODELS = [
   { id: 'claude-haiku-4-5', label: 'Haiku', description: 'Fast and lightweight.' },
-  { id: 'claude-sonnet-4-5', label: 'Sonnet', description: 'Balanced performance.' },
-  { id: 'claude-opus-4', label: 'Opus', description: 'Most capable.' },
+  { id: 'claude-sonnet-4-6', label: 'Sonnet', description: 'Balanced performance.' },
+  { id: 'claude-opus-4-6', label: 'Opus', description: 'Most capable.' },
 ];
 
 /**
@@ -366,7 +366,7 @@ test.describe('Chat Page', () => {
       await page.goto('/chat');
 
       const select = page.locator('select');
-      await expect(select).toHaveValue('claude-sonnet-4-5');
+      await expect(select).toHaveValue('claude-sonnet-4-6');
     });
 
     test('changing model clears conversation and resets to empty state', async ({ page }) => {
@@ -381,7 +381,7 @@ test.describe('Chat Page', () => {
       await expect(page.getByText('Response text')).toBeVisible();
 
       // Change model
-      await page.locator('select').selectOption('claude-opus-4');
+      await page.locator('select').selectOption('claude-opus-4-6');
 
       // Should be back to empty state
       await expect(page.getByText('Ask Minerva anything about your finances')).toBeVisible();
@@ -575,7 +575,7 @@ test.describe('Chat Page', () => {
                     data: [{
                       id: 'conv-001',
                       title: 'Hello!',
-                      model: 'claude-sonnet-4-5',
+                      model: 'claude-sonnet-4-6',
                       created_at: new Date().toISOString(),
                       updated_at: new Date().toISOString(),
                     }],
@@ -627,7 +627,7 @@ test.describe('Chat Page', () => {
                 data: {
                   id: convId,
                   title: 'Previous Chat',
-                  model: 'claude-sonnet-4-5',
+                  model: 'claude-sonnet-4-6',
                   sdk_session_id: 'sess-prev',
                   created_at: '2026-03-28T10:00:00Z',
                   updated_at: '2026-03-28T10:05:00Z',
@@ -645,7 +645,7 @@ test.describe('Chat Page', () => {
                 data: [{
                   id: convId,
                   title: 'Previous Chat',
-                  model: 'claude-sonnet-4-5',
+                  model: 'claude-sonnet-4-6',
                   created_at: '2026-03-28T10:00:00Z',
                   updated_at: '2026-03-28T10:05:00Z',
                 }],
@@ -752,7 +752,7 @@ test.describe('Chat Page', () => {
 
       expect(capturedPayload).not.toBeNull();
       expect(capturedPayload!.message).toBe('Test message');
-      expect(capturedPayload!.model).toBe('claude-sonnet-4-5');
+      expect(capturedPayload!.model).toBe('claude-sonnet-4-6');
     });
 
     test('sends conversationId on subsequent messages', async ({ page }) => {

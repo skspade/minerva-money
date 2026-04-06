@@ -9,13 +9,13 @@ vi.mock('./agent-service.js', () => ({
 
 // Mock models
 vi.mock('./models.js', () => ({
-  isValidModelId: vi.fn((id: string) => ['claude-haiku-4-5', 'claude-sonnet-4-5', 'claude-opus-4'].includes(id)),
+  isValidModelId: vi.fn((id: string) => ['claude-haiku-4-5', 'claude-sonnet-4-6', 'claude-opus-4-6'].includes(id)),
   MODELS: [
     { id: 'claude-haiku-4-5', label: 'Haiku' },
-    { id: 'claude-sonnet-4-5', label: 'Sonnet' },
-    { id: 'claude-opus-4', label: 'Opus' },
+    { id: 'claude-sonnet-4-6', label: 'Sonnet' },
+    { id: 'claude-opus-4-6', label: 'Opus' },
   ],
-  DEFAULT_MODEL_ID: 'claude-sonnet-4-5',
+  DEFAULT_MODEL_ID: 'claude-sonnet-4-6',
 }));
 
 // Mock chat-history-service
@@ -23,7 +23,7 @@ vi.mock('../chat-history/chat-history-service.js', () => ({
   createConversation: vi.fn(() => ({
     id: 'new-conv-uuid',
     title: 'Test conversation',
-    model: 'claude-sonnet-4-5',
+    model: 'claude-sonnet-4-6',
     created_at: '2026-03-28',
     updated_at: '2026-03-28',
   })),
@@ -32,7 +32,7 @@ vi.mock('../chat-history/chat-history-service.js', () => ({
       return {
         id: 'a1b2c3d4-e5f6-4a7b-8c9d-e0f1a2b3c4d5',
         title: 'Existing conversation',
-        model: 'claude-sonnet-4-5',
+        model: 'claude-sonnet-4-6',
         sdk_session_id: 'sdk-sess-123',
         created_at: '2026-03-28',
         updated_at: '2026-03-28',
@@ -175,7 +175,7 @@ describe('createChatStreamHandler', () => {
       await handler(req as Request, res as unknown as Response, vi.fn());
 
       expect(createConversation).toHaveBeenCalledWith(mockDb, {
-        model: 'claude-sonnet-4-5',
+        model: 'claude-sonnet-4-6',
         firstMessage: 'hello',
       });
     });

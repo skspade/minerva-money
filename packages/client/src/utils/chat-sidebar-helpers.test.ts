@@ -136,19 +136,19 @@ describe('getModelBadge', () => {
   it('returns H badge for haiku models', () => {
     const badge = getModelBadge('claude-haiku-3-20240307');
     expect(badge.label).toBe('H');
-    expect(badge.colorClass).toContain('bg-gray');
+    expect(badge.colorClass).toContain('bg-surface-tertiary');
   });
 
   it('returns S badge for sonnet models', () => {
-    const badge = getModelBadge('claude-sonnet-4-5');
+    const badge = getModelBadge('claude-sonnet-4-6');
     expect(badge.label).toBe('S');
-    expect(badge.colorClass).toContain('bg-blue');
+    expect(badge.colorClass).toContain('bg-accent-light');
   });
 
   it('returns O badge for opus models', () => {
-    const badge = getModelBadge('claude-opus-4');
+    const badge = getModelBadge('claude-opus-4-6');
     expect(badge.label).toBe('O');
-    expect(badge.colorClass).toContain('bg-purple');
+    expect(badge.colorClass).toContain('bg-highlight');
   });
 
   it('handles model strings with varying formats', () => {
@@ -160,7 +160,7 @@ describe('getModelBadge', () => {
   it('returns ? badge for unknown models', () => {
     const badge = getModelBadge('gpt-4o');
     expect(badge.label).toBe('?');
-    expect(badge.colorClass).toContain('bg-gray');
+    expect(badge.colorClass).toContain('bg-surface-tertiary');
   });
 
   it('returns ? badge for empty string', () => {

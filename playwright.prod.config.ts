@@ -11,7 +11,7 @@ import { defineConfig, devices } from '@playwright/test';
  */
 export default defineConfig({
   testDir: './e2e',
-  testMatch: /chat-(prod(-direct)?|sdk-isolation|real-mcp)\.spec\.ts$/,
+  testMatch: /chat-(prod(-\w+)?|sdk-isolation|real-mcp)\.spec\.ts$/,
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: 0,
