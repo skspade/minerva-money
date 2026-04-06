@@ -69,14 +69,14 @@ describe('chat-history-service', () => {
   describe('createConversation', () => {
     it('returns object with UUID id, auto-generated title, model, and timestamps', () => {
       const result = createConversation(db, {
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-5',
         firstMessage: 'What is my net worth?',
       });
       expect(result.id).toMatch(
         /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
       );
       expect(result.title).toBe('What is my net worth?');
-      expect(result.model).toBe('claude-sonnet-4-20250514');
+      expect(result.model).toBe('claude-sonnet-4-5');
       expect(result.created_at).toBeTruthy();
       expect(result.updated_at).toBeTruthy();
     });
@@ -85,7 +85,7 @@ describe('chat-history-service', () => {
       const longMsg =
         'Can you show me a breakdown of all my spending across every category for the last three months?';
       const result = createConversation(db, {
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-5',
         firstMessage: longMsg,
       });
       expect(result.title).toBe(generateTitle(longMsg));
@@ -93,7 +93,7 @@ describe('chat-history-service', () => {
 
     it('conversation is retrievable after creation', () => {
       const result = createConversation(db, {
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-5',
         firstMessage: 'Hello',
       });
       const fetched = getConversation(db, result.id);
@@ -106,7 +106,7 @@ describe('chat-history-service', () => {
   describe('appendMessage', () => {
     it('inserts message with correct role and content', () => {
       const conv = createConversation(db, {
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-5',
         firstMessage: 'Hi',
       });
       appendMessage(db, {
@@ -122,7 +122,7 @@ describe('chat-history-service', () => {
 
     it('updates conversation updated_at timestamp', () => {
       const conv = createConversation(db, {
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-5',
         firstMessage: 'Hi',
       });
       const originalUpdatedAt = conv.updated_at;
@@ -148,7 +148,7 @@ describe('chat-history-service', () => {
 
     it('stores tool_calls as JSON when provided', () => {
       const conv = createConversation(db, {
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-5',
         firstMessage: 'Hi',
       });
       const toolCalls = [{ name: 'get_balance', input: { account: 'checking' } }];
@@ -164,7 +164,7 @@ describe('chat-history-service', () => {
 
     it('stores null tool_calls when not provided', () => {
       const conv = createConversation(db, {
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-5',
         firstMessage: 'Hi',
       });
       appendMessage(db, {
@@ -184,11 +184,11 @@ describe('chat-history-service', () => {
 
     it('returns conversations ordered by updated_at DESC', () => {
       const c1 = createConversation(db, {
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-5',
         firstMessage: 'First',
       });
       const c2 = createConversation(db, {
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-5',
         firstMessage: 'Second',
       });
 
@@ -205,7 +205,7 @@ describe('chat-history-service', () => {
 
     it('includes message_count for each conversation', () => {
       const conv = createConversation(db, {
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-5',
         firstMessage: 'Hi',
       });
       appendMessage(db, { conversationId: conv.id, role: 'user', content: 'Hello' });
@@ -217,11 +217,11 @@ describe('chat-history-service', () => {
 
     it('message_count reflects actual number of messages', () => {
       const c1 = createConversation(db, {
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-5',
         firstMessage: 'First',
       });
       const c2 = createConversation(db, {
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-5',
         firstMessage: 'Second',
       });
       appendMessage(db, { conversationId: c1.id, role: 'user', content: 'A' });
@@ -243,7 +243,7 @@ describe('chat-history-service', () => {
 
     it('returns conversation with all messages ordered by created_at ASC', () => {
       const conv = createConversation(db, {
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-5',
         firstMessage: 'Hi',
       });
       appendMessage(db, { conversationId: conv.id, role: 'user', content: 'First' });
@@ -260,7 +260,7 @@ describe('chat-history-service', () => {
 
     it('parses tool_calls JSON back to object', () => {
       const conv = createConversation(db, {
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-5',
         firstMessage: 'Hi',
       });
       const toolCalls = [{ name: 'list_accounts', input: {} }];
@@ -278,7 +278,7 @@ describe('chat-history-service', () => {
 
     it('returns null tool_calls as null, not string "null"', () => {
       const conv = createConversation(db, {
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-5',
         firstMessage: 'Hi',
       });
       appendMessage(db, { conversationId: conv.id, role: 'user', content: 'Hello' });
@@ -292,7 +292,7 @@ describe('chat-history-service', () => {
   describe('deleteConversation', () => {
     it('returns true when conversation exists and is deleted', () => {
       const conv = createConversation(db, {
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-5',
         firstMessage: 'Hi',
       });
       expect(deleteConversation(db, conv.id)).toBe(true);
@@ -305,7 +305,7 @@ describe('chat-history-service', () => {
 
     it('CASCADE deletes all associated messages', () => {
       const conv = createConversation(db, {
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-5',
         firstMessage: 'Hi',
       });
       appendMessage(db, { conversationId: conv.id, role: 'user', content: 'A' });
@@ -323,7 +323,7 @@ describe('chat-history-service', () => {
   describe('renameConversation', () => {
     it('returns true and updates title when conversation exists', () => {
       const conv = createConversation(db, {
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-5',
         firstMessage: 'Hi',
       });
       expect(renameConversation(db, conv.id, 'New Title')).toBe(true);
@@ -339,7 +339,7 @@ describe('chat-history-service', () => {
   describe('updateSdkSessionId', () => {
     it('updates sdk_session_id on existing conversation and returns true', () => {
       const conv = createConversation(db, {
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-5',
         firstMessage: 'Hello',
       });
       expect(updateSdkSessionId(db, conv.id, 'sdk-session-abc')).toBe(true);
@@ -353,7 +353,7 @@ describe('chat-history-service', () => {
 
     it('overwrites previously set sdk_session_id', () => {
       const conv = createConversation(db, {
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-5',
         firstMessage: 'Hello',
       });
       updateSdkSessionId(db, conv.id, 'first-session');
@@ -372,7 +372,7 @@ describe('chat-history-service', () => {
 
     it('deletes conversations older than retention threshold', () => {
       const conv = createConversation(db, {
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-5',
         firstMessage: 'Old conversation',
       });
       // Backdate the conversation to 100 days ago
@@ -388,7 +388,7 @@ describe('chat-history-service', () => {
     it('returns count of deleted conversations', () => {
       for (let i = 0; i < 3; i++) {
         const conv = createConversation(db, {
-          model: 'claude-sonnet-4-20250514',
+          model: 'claude-sonnet-4-5',
           firstMessage: `Old ${i}`,
         });
         db.prepare(
@@ -400,11 +400,11 @@ describe('chat-history-service', () => {
 
     it('does not delete conversations within retention threshold', () => {
       const recent = createConversation(db, {
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-5',
         firstMessage: 'Recent',
       });
       const old = createConversation(db, {
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-5',
         firstMessage: 'Old',
       });
       db.prepare(
@@ -418,11 +418,11 @@ describe('chat-history-service', () => {
 
     it('returns session IDs of purged conversations that have sdk_session_id set', () => {
       const conv1 = createConversation(db, {
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-5',
         firstMessage: 'Old 1',
       });
       const conv2 = createConversation(db, {
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-5',
         firstMessage: 'Old 2',
       });
       updateSdkSessionId(db, conv1.id, 'session-aaa');
@@ -441,7 +441,7 @@ describe('chat-history-service', () => {
 
     it('filters out conversations without sdk_session_id from sessionIds', () => {
       const conv = createConversation(db, {
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-5',
         firstMessage: 'Old without session',
       });
       // Do NOT set sdk_session_id — it remains null

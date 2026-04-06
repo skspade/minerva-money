@@ -24,19 +24,19 @@ describe('models', () => {
 
   it('MODEL_IDS contains exactly the 3 model ID strings', () => {
     expect(MODEL_IDS).toHaveLength(3);
-    expect(MODEL_IDS).toContain('claude-haiku-3-5-20241022');
-    expect(MODEL_IDS).toContain('claude-sonnet-4-20250514');
-    expect(MODEL_IDS).toContain('claude-opus-4-20250514');
+    expect(MODEL_IDS).toContain('claude-haiku-4-5');
+    expect(MODEL_IDS).toContain('claude-sonnet-4-5');
+    expect(MODEL_IDS).toContain('claude-opus-4');
   });
 
   it('DEFAULT_MODEL_ID equals the Sonnet model ID', () => {
-    expect(DEFAULT_MODEL_ID).toBe('claude-sonnet-4-20250514');
+    expect(DEFAULT_MODEL_ID).toBe('claude-sonnet-4-5');
   });
 
   it('TIMEOUT_MS maps Haiku to 15000, Sonnet to 30000, Opus to 60000', () => {
-    expect(TIMEOUT_MS['claude-haiku-3-5-20241022']).toBe(15_000);
-    expect(TIMEOUT_MS['claude-sonnet-4-20250514']).toBe(30_000);
-    expect(TIMEOUT_MS['claude-opus-4-20250514']).toBe(60_000);
+    expect(TIMEOUT_MS['claude-haiku-4-5']).toBe(15_000);
+    expect(TIMEOUT_MS['claude-sonnet-4-5']).toBe(30_000);
+    expect(TIMEOUT_MS['claude-opus-4']).toBe(60_000);
   });
 
   it('TIMEOUT_MS has an entry for every model in MODELS', () => {
@@ -55,9 +55,9 @@ describe('models', () => {
 
   describe('isValidModelId', () => {
     it('returns true for valid model IDs', () => {
-      expect(isValidModelId('claude-haiku-3-5-20241022')).toBe(true);
-      expect(isValidModelId('claude-sonnet-4-20250514')).toBe(true);
-      expect(isValidModelId('claude-opus-4-20250514')).toBe(true);
+      expect(isValidModelId('claude-haiku-4-5')).toBe(true);
+      expect(isValidModelId('claude-sonnet-4-5')).toBe(true);
+      expect(isValidModelId('claude-opus-4')).toBe(true);
     });
 
     it('returns false for invalid model IDs', () => {

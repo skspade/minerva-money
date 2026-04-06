@@ -61,7 +61,7 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [conversationId, setConversationId] = useState<string | undefined>(urlConversationId);
   const [respondedConfirmations, setRespondedConfirmations] = useState<Set<number>>(new Set());
-  const [selectedModel, setSelectedModel] = useState<string>('claude-sonnet-4-20250514');
+  const [selectedModel, setSelectedModel] = useState<string>('claude-sonnet-4-5');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageContainerRef = useRef<HTMLDivElement>(null);
   const userScrolledUpRef = useRef(false);
