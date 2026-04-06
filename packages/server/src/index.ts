@@ -1,3 +1,13 @@
+// Defend against unhandled rejections from the Claude Agent SDK's control
+// plane. When a chat client disconnects mid-stream, the SDK's
+// `handleControlRequest` can throw `ProcessTransport is not ready for
+// writing` from a fire-and-forget async handler — which in Node 22+ would
+// otherwise kill the entire server process. The server is a long-running
+// single-user service; we log the error and keep running.
+process.on('unhandledRejection', (reason) => {
+  console.error('[unhandledRejection]', reason instanceof Error ? reason.stack : reason);
+});
+
 import path from 'path';
 import { fileURLToPath } from 'url';
 import express from 'express';

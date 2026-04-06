@@ -86,6 +86,7 @@ function createMockRes(): Partial<Response> & { _written: string[]; _headers: Re
       return true;
     }),
     end: vi.fn(),
+    on: vi.fn(),
   };
   return res;
 }
@@ -470,7 +471,7 @@ describe('createChatStreamHandler', () => {
   });
 
   describe('Abort Handling', () => {
-    it('wires req close event to abort controller', async () => {
+    it('wires res close event to abort controller', async () => {
       const events: SSEEvent[] = [{ type: 'done', text: 'done' }];
       (chatStream as any).mockReturnValue(mockGenerator(events));
 
@@ -479,7 +480,52 @@ describe('createChatStreamHandler', () => {
 
       await handler(req as Request, res as unknown as Response, vi.fn());
 
-      expect(req.on).toHaveBeenCalledWith('close', expect.any(Function));
+      expect(res.on).toHaveBeenCalledWith('close', expect.any(Function));
+    });
+
+    it('handles client disconnect mid-stream gracefully', async () => {
+      const req = createMockReq({ message: 'hello' });
+      const res = createMockRes();
+
+      // Capture the close callback registered on res
+      let closeCallback: (() => void) | undefined;
+      vi.mocked(res.on).mockImplementation((event: string, cb: () => void) => {
+        if (event === 'close') closeCallback = cb;
+        return res as any;
+      });
+
+      // Track whether the generator was fully consumed
+      let yieldedCount = 0;
+
+      vi.mocked(chatStream).mockImplementation((db: any, ctx: any, msg: any, signal: AbortSignal, state: any) => {
+        async function* gen(): AsyncGenerator<SSEEvent> {
+          yieldedCount++;
+          yield { type: 'text-delta', text: 'Hello' } as SSEEvent;
+
+          // Simulate client disconnect mid-stream
+          (res as any).destroyed = true;
+          closeCallback!();
+
+          yieldedCount++;
+          yield { type: 'text-delta', text: ' world' } as SSEEvent;
+
+          yieldedCount++;
+          yield { type: 'done', text: 'Hello world' } as SSEEvent;
+        }
+        return gen();
+      });
+
+      const handlerPromise = handler(req as Request, res as unknown as Response, vi.fn());
+
+      // Should complete without throwing
+      await handlerPromise;
+
+      // The abort signal should have been triggered by the close callback
+      const signalArg = vi.mocked(chatStream).mock.calls[0]?.[3] as AbortSignal;
+      expect(signalArg.aborted).toBe(true);
+
+      // res.end() should NOT be called on a destroyed response
+      expect(res.end).not.toHaveBeenCalled();
     });
 
     it('writes SSE error event if chatStream throws unexpectedly', async () => {

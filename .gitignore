@@ -12,3 +12,4 @@ backups/
 /playwright-report/
 /blob-report/
 /playwright/.cache/
+.planning
