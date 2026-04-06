@@ -36,7 +36,7 @@ test.describe('Claude Agent SDK isolation', () => {
 
     // Mirror options from packages/server/src/agent/agent-service.ts:147-157
     const options: Record<string, unknown> = {
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-5',
       systemPrompt: 'You are a helpful financial assistant. Use the get_balance tool when asked about balance.',
       mcpServers: { minerva: mcpServer },
       allowedTools: ['mcp__minerva__*'],

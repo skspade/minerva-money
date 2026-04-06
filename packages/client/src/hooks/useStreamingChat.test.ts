@@ -122,12 +122,12 @@ describe('useStreamingChat (integration)', () => {
       onConversation: vi.fn(),
     };
 
-    await processStream('Hello', handlers, { sessionId: 'sess-1', model: 'claude-sonnet-4-20250514' });
+    await processStream('Hello', handlers, { sessionId: 'sess-1', model: 'claude-sonnet-4-5' });
 
     expect(fetchSpy).toHaveBeenCalledWith('/api/chat/stream', expect.objectContaining({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: 'Hello', sessionId: 'sess-1', model: 'claude-sonnet-4-20250514' }),
+      body: JSON.stringify({ message: 'Hello', sessionId: 'sess-1', model: 'claude-sonnet-4-5' }),
     }));
   });
 

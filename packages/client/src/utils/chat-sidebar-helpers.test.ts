@@ -140,13 +140,13 @@ describe('getModelBadge', () => {
   });
 
   it('returns S badge for sonnet models', () => {
-    const badge = getModelBadge('claude-sonnet-4-20250514');
+    const badge = getModelBadge('claude-sonnet-4-5');
     expect(badge.label).toBe('S');
     expect(badge.colorClass).toContain('bg-blue');
   });
 
   it('returns O badge for opus models', () => {
-    const badge = getModelBadge('claude-opus-4-20250514');
+    const badge = getModelBadge('claude-opus-4');
     expect(badge.label).toBe('O');
     expect(badge.colorClass).toContain('bg-purple');
   });
