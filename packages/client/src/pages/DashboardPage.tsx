@@ -419,6 +419,15 @@ export default function DashboardPage() {
                   {syncMut.error.message}
                 </div>
               )}
+              {syncMut.data?.errors && syncMut.data.errors.length > 0 && (
+                <div className="mt-2 p-2 bg-warning-light border border-warning rounded">
+                  <div className="space-y-1">
+                    {syncMut.data.errors.map((err, i) => (
+                      <div key={i} className="text-sm text-warning">{err}</div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

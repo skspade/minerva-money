@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type Database from 'better-sqlite3';
 import type { SimpleFINClient, SimpleFINAccountSet, SimpleFINAccount, SimpleFINError } from './simplefin-types.js';
 import type { RateLimiter } from './rate-limiter.js';
@@ -100,8 +101,14 @@ export async function runSync(
     }
 
     // Process SimpleFIN error list and write warnings (using internal IDs where available)
-    const errList = data.errors ?? data.errlist ?? [];
-    for (const err of errList) {
+    // SimpleFIN may return errors as plain strings or structured objects
+    const rawErrList: (string | SimpleFINError)[] = data.errors ?? data.errlist ?? [];
+    for (const rawErr of rawErrList) {
+      // Normalize: SimpleFIN returns plain strings or { code, msg, account_id?, conn_id? }
+      const err: SimpleFINError = typeof rawErr === 'string'
+        ? { code: 'connection_error', msg: rawErr }
+        : rawErr;
+
       const msg = `SimpleFIN error [${err.code}]: ${err.msg}${err.account_id ? ` (account: ${err.account_id})` : ''}`;
       result.errors.push(msg);
 
@@ -126,6 +133,14 @@ export async function runSync(
             errorSimplefinIds.add(acct.id);
           }
         }
+      } else {
+        // Unmapped error (no account_id or conn_id) — extract institution name
+        // and write a connection-level warning with a stable synthetic ID
+        const nameMatch = err.msg.match(/Connection to (.+?)(?:\s+may\s+need|\s+is\s+having|\s+has\s+)/i);
+        const displayName = nameMatch ? nameMatch[1] : 'Unknown connection';
+        const syntheticId = `conn_err_${createHash('sha256').update(displayName).digest('hex').slice(0, 12)}`;
+        writeWarning(db, syncLogId, syntheticId, displayName, err.code, err.msg);
+        errorSimplefinIds.add(syntheticId);
       }
     }
 

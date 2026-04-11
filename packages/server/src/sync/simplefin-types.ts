@@ -41,7 +41,7 @@ export interface SimpleFINAccount {
 }
 
 export interface SimpleFINAccountSet {
-  errors: SimpleFINError[];
+  errors: (string | SimpleFINError)[];
   accounts: SimpleFINAccount[];
   /** @deprecated Use errors instead — errlist is only in mock/fixture data */
   errlist?: SimpleFINError[];
