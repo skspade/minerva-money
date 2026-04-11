@@ -44,6 +44,10 @@ const REQUIRED_COLUMNS = ['Date', 'Merchant', 'Category', 'Account', 'Original S
 
 const BANK_STATEMENT_COLUMNS = ['Transaction Date', 'Transaction Description', 'Debit', 'Credit'];
 
+// --- Bank export columns (e.g., SimpleFIN CSV export) ---
+
+const BANK_EXPORT_COLUMNS = ['Account ID', 'Transaction ID', 'Date', 'Description', 'Amount'];
+
 function parseCurrencyAmount(value: string): number {
   const cleaned = value.replace(/[$,]/g, '').trim();
   if (!cleaned || cleaned === '0') return 0;
@@ -57,6 +61,19 @@ interface BankStatementRow {
   Debit: string;
   Credit: string;
   Balance?: string;
+}
+
+interface BankExportRow {
+  'Account ID': string;
+  'Transaction ID': string;
+  Date: string;
+  Name: string;
+  Description: string;
+  'Check Number': string;
+  Category: string;
+  Tags: string;
+  Amount: string;
+  Balance: string;
 }
 
 function normalizeBankStatementRows(rows: BankStatementRow[]): RawCsvRow[] {
@@ -79,10 +96,29 @@ function normalizeBankStatementRows(rows: BankStatementRow[]): RawCsvRow[] {
   });
 }
 
+function normalizeBankExportRows(rows: BankExportRow[]): RawCsvRow[] {
+  return rows.map(row => {
+    const amount = parseCurrencyAmount(row.Amount);
+    const description = (row.Description || '').trim();
+
+    return {
+      Date: (row.Date || '').trim(),
+      Merchant: description,
+      Category: (row.Category || '').trim(),
+      Account: (row['Account ID'] || '').trim(),
+      'Original Statement': description,
+      Notes: '',
+      Amount: String(amount),
+      Tags: (row.Tags || '').trim(),
+    };
+  });
+}
+
 // --- Date Parsing ---
 
 const ISO_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
 const US_DATE_RE = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/;
+const US_SHORT_YEAR_RE = /^(\d{1,2})\/(\d{1,2})\/(\d{2})$/;
 
 export function parseDate(dateStr: string): string | null {
   const trimmed = dateStr.trim();
@@ -112,12 +148,25 @@ export function parseDate(dateStr: string): string | null {
     return null;
   }
 
+  // US format with 2-digit year: M/D/YY or MM/DD/YY
+  const shortYearMatch = trimmed.match(US_SHORT_YEAR_RE);
+  if (shortYearMatch) {
+    const [, monthStr, dayStr, yearStr] = shortYearMatch;
+    const m = parseInt(monthStr, 10);
+    const d = parseInt(dayStr, 10);
+    if (m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+      const year = `20${yearStr}`;
+      return `${year}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    }
+    return null;
+  }
+
   return null;
 }
 
 // --- CSV Format Detection ---
 
-export type CsvFormat = 'monarch' | 'bank-statement';
+export type CsvFormat = 'monarch' | 'bank-statement' | 'bank-export';
 
 export interface ParsedCsv {
   rows: RawCsvRow[];
@@ -151,6 +200,19 @@ export function parseCsv(csvText: string): ParsedCsv {
       delimiter,
     }) as BankStatementRow[];
     return { rows: normalizeBankStatementRows(bankRows), format: 'bank-statement' };
+  }
+
+  const isBankExport = BANK_EXPORT_COLUMNS.every(col => headerCols.includes(col));
+  if (isBankExport) {
+    const bankExportRows = parse(text, {
+      columns: true,
+      skip_empty_lines: true,
+      trim: true,
+      relax_column_count: true,
+      bom: true,
+      delimiter,
+    }) as BankExportRow[];
+    return { rows: normalizeBankExportRows(bankExportRows), format: 'bank-export' };
   }
 
   const rows = parse(text, {
@@ -240,9 +302,10 @@ export function validateRow(row: RawCsvRow, rowNumber: number): ValidationResult
 
 // --- Row Transformation ---
 
-export function transformRow(row: RawCsvRow): TransformedRow {
+export function transformRow(row: RawCsvRow, negateAmounts = false): TransformedRow {
   const date = parseDate(row.Date.trim())!;
-  const amount = toCents(parseFloat(row.Amount.trim()));
+  const parsed = parseFloat(row.Amount.trim());
+  const amount = toCents(negateAmounts ? -parsed : parsed);
 
   const origStmt = (row['Original Statement'] || '').trim();
   const merchant = (row.Merchant || '').trim();
@@ -301,7 +364,7 @@ export interface ExecuteResult {
 
 // --- Preview ---
 
-export function previewImport(db: Database.Database, csvText: string): PreviewResult {
+export function previewImport(db: Database.Database, csvText: string, negateAmounts = false): PreviewResult {
   const { rows: rawRows, format } = parseCsv(csvText);
   const allErrors: string[] = [];
   const validTransformed: TransformedRow[] = [];
@@ -310,7 +373,7 @@ export function previewImport(db: Database.Database, csvText: string): PreviewRe
     const rowNumber = i + 2; // 1-based, row 1 is header
     const validation = validateRow(rawRows[i], rowNumber);
     if (validation.valid) {
-      validTransformed.push(transformRow(rawRows[i]));
+      validTransformed.push(transformRow(rawRows[i], negateAmounts));
     } else {
       allErrors.push(...validation.errors!);
     }
@@ -438,6 +501,7 @@ export function executeImport(
   csvText: string,
   accountMappings: Record<string, string>,
   categoryMappings: Record<string, number>,
+  negateAmounts = false,
 ): ExecuteResult {
   // Parse and validate
   const { rows: rawRows, format } = parseCsv(csvText);
@@ -447,7 +511,7 @@ export function executeImport(
     const rowNumber = i + 2;
     const validation = validateRow(rawRows[i], rowNumber);
     if (validation.valid) {
-      validTransformed.push(transformRow(rawRows[i]));
+      validTransformed.push(transformRow(rawRows[i], negateAmounts));
     }
   }
 

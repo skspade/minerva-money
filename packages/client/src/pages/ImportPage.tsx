@@ -66,6 +66,7 @@ export default function ImportPage() {
   const [executeResult, setExecuteResult] = useState<ExecuteResult | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
+  const [negateAmounts, setNegateAmounts] = useState(false);
   const [creatingAccountFor, setCreatingAccountFor] = useState<string | null>(null);
   const [localAccounts, setLocalAccounts] = useState<{ id: string; name: string }[]>([]);
 
@@ -117,7 +118,7 @@ export default function ImportPage() {
     reader.onload = (e) => {
       const text = e.target?.result as string;
       setCsvText(text);
-      previewMutation.mutate({ csvText: text });
+      previewMutation.mutate({ csvText: text, negateAmounts });
     };
     reader.onerror = () => {
       setFileError('Failed to read file. Please ensure it is a valid text file.');
@@ -148,7 +149,7 @@ export default function ImportPage() {
 
   const handleImport = () => {
     const filteredMappings = filterSkippedAccounts(accountMappings);
-    executeMutation.mutate({ csvText, accountMappings: filteredMappings, categoryMappings });
+    executeMutation.mutate({ csvText, accountMappings: filteredMappings, categoryMappings, negateAmounts });
   };
 
   const handleReset = () => {
@@ -159,6 +160,7 @@ export default function ImportPage() {
     setCategoryMappings({});
     setExecuteResult(null);
     setFileError(null);
+    setNegateAmounts(false);
     setCreatingAccountFor(null);
     setLocalAccounts([]);
     previewMutation.reset();
@@ -204,6 +206,11 @@ export default function ImportPage() {
           categoryGroups={categoryGroups ?? []}
           accountMappings={accountMappings}
           categoryMappings={categoryMappings}
+          negateAmounts={negateAmounts}
+          onNegateAmountsChange={(value) => {
+            setNegateAmounts(value);
+            previewMutation.mutate({ csvText, negateAmounts: value });
+          }}
           validationState={validationState}
           onAccountMappingChange={(csvName, accountId) => {
             setAccountMappings(prev => ({ ...prev, [csvName]: accountId }));
@@ -395,6 +402,8 @@ interface PreviewStepProps {
   categoryGroups: { id: number; name: string; categories: { id: number; name: string }[] }[];
   accountMappings: Record<string, string>;
   categoryMappings: Record<string, number>;
+  negateAmounts: boolean;
+  onNegateAmountsChange: (value: boolean) => void;
   validationState: { canContinue: boolean; message: string | null };
   onAccountMappingChange: (csvName: string, accountId: string) => void;
   onCategoryMappingChange: (csvName: string, categoryId: number) => void;
@@ -414,6 +423,8 @@ function PreviewStep({
   categoryGroups,
   accountMappings,
   categoryMappings,
+  negateAmounts,
+  onNegateAmountsChange,
   validationState,
   onAccountMappingChange,
   onCategoryMappingChange,
@@ -457,6 +468,24 @@ function PreviewStep({
           <p className="text-2xl font-bold text-danger">{previewResult.errors.length}</p>
           <p className="text-sm text-text-secondary">Errors</p>
         </div>
+      </div>
+
+      {/* Negate amounts toggle */}
+      <div className="bg-surface rounded-lg shadow p-4 md:p-6">
+        <label className="flex items-center gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={negateAmounts}
+            onChange={(e) => onNegateAmountsChange(e.target.checked)}
+            className="h-4 w-4 rounded border-border-heavy text-accent focus:ring-accent"
+          />
+          <div>
+            <span className="text-sm font-medium text-text-primary">Negate amounts (swap credits/debits)</span>
+            <p className="text-xs text-text-secondary">
+              Enable this if your bank exports debits as positive and credits as negative
+            </p>
+          </div>
+        </label>
       </div>
 
       {/* Sample rows */}

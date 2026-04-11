@@ -35,6 +35,18 @@ describe('parseDate', () => {
   it('returns null for whitespace', () => {
     expect(parseDate('   ')).toBeNull();
   });
+
+  it('parses US 2-digit year format MM/DD/YY', () => {
+    expect(parseDate('04/11/26')).toBe('2026-04-11');
+  });
+
+  it('parses US 2-digit year with single-digit month/day', () => {
+    expect(parseDate('1/5/26')).toBe('2026-01-05');
+  });
+
+  it('returns null for invalid 2-digit year date', () => {
+    expect(parseDate('13/01/26')).toBeNull();
+  });
 });
 
 describe('parseCsv', () => {
@@ -245,6 +257,21 @@ describe('transformRow', () => {
     const row = { ...validRow, Date: '1/5/2024' };
     expect(transformRow(row).date).toBe('2024-01-05');
   });
+
+  it('negates positive amount when negateAmounts is true', () => {
+    const row = { ...validRow, Amount: '54.21' };
+    expect(transformRow(row, true).amount).toBe(-5421);
+  });
+
+  it('negates negative amount when negateAmounts is true', () => {
+    const row = { ...validRow, Amount: '-54.21' };
+    expect(transformRow(row, true).amount).toBe(5421);
+  });
+
+  it('does not negate when negateAmounts is false', () => {
+    const row = { ...validRow, Amount: '54.21' };
+    expect(transformRow(row, false).amount).toBe(5421);
+  });
 });
 
 describe('parseCsv — bank statement format', () => {
@@ -303,6 +330,58 @@ describe('parseCsv — bank statement format', () => {
     ].join('\n');
     const { rows } = parseCsv(csv);
     expect(rows.every(r => r.Account === 'Bank Statement')).toBe(true);
+  });
+});
+
+describe('parseCsv — bank export format', () => {
+  const BANK_EXPORT_HEADER = 'Account ID\tTransaction ID\tDate\tName\tDescription\tCheck Number\tCategory\tTags\tAmount\tBalance';
+
+  it('detects bank export format and normalizes rows', () => {
+    const csv = [
+      BANK_EXPORT_HEADER,
+      '8091669348\t8091669348|6441\t04/11/26\t\tPoint Of Sale Withdrawal INSTACART\t\tATM\t\t-$54.21\t$5,501.62',
+    ].join('\n');
+    const { rows, format } = parseCsv(csv);
+    expect(format).toBe('bank-export');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].Date).toBe('04/11/26');
+    expect(rows[0].Merchant).toBe('Point Of Sale Withdrawal INSTACART');
+    expect(rows[0]['Original Statement']).toBe('Point Of Sale Withdrawal INSTACART');
+    expect(rows[0].Account).toBe('8091669348');
+    expect(rows[0].Category).toBe('ATM');
+    expect(rows[0].Amount).toBe('-54.21');
+  });
+
+  it('strips $ and commas from amounts', () => {
+    const csv = [
+      BANK_EXPORT_HEADER,
+      '8091669348\t8091669348|6441\t04/11/26\t\tBIG PURCHASE\t\tATM\t\t-$1,234.56\t$10,000.00',
+    ].join('\n');
+    const { rows } = parseCsv(csv);
+    expect(rows[0].Amount).toBe('-1234.56');
+  });
+
+  it('parses multiple bank export rows', () => {
+    const csv = [
+      BANK_EXPORT_HEADER,
+      '8091669348\t8091669348|6441\t04/11/26\t\tINSTACART\t\tATM\t\t-$54.21\t$5,501.62',
+      '8091669348\t8091669348|6440\t04/10/26\t\tCHEWY.COM\t\tATM\t\t-$47.41\t$5,555.83',
+      '8091669348\t8091669348|6439\t04/09/26\t\tATM Withdrawal\t\tATM\t\t-$142.99\t$5,603.24',
+    ].join('\n');
+    const { rows } = parseCsv(csv);
+    expect(rows).toHaveLength(3);
+    expect(rows[0].Amount).toBe('-54.21');
+    expect(rows[1].Amount).toBe('-47.41');
+    expect(rows[2].Amount).toBe('-142.99');
+  });
+
+  it('uses Account ID as the account name for mapping', () => {
+    const csv = [
+      BANK_EXPORT_HEADER,
+      '8091669348\t8091669348|6441\t04/11/26\t\tINSTACART\t\tATM\t\t-$54.21\t$5,501.62',
+    ].join('\n');
+    const { rows } = parseCsv(csv);
+    expect(rows[0].Account).toBe('8091669348');
   });
 });
 
