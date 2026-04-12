@@ -27,7 +27,7 @@ const exampleQuestions = [
   "What's my account balance?",
   "How much did I spend on groceries this month?",
   "Show my budget summary",
-  "Any uncategorized transactions?",
+  "Categorize my uncategorized transactions",
 ];
 
 function parseConfirmation(content: string): {

@@ -26,6 +26,7 @@ const KNOWN_TOOLS = [
   'trigger_sync',
   'create_category_group',
   'create_category',
+  'WebSearch',
 ];
 
 describe('getToolLabel', () => {
@@ -43,7 +44,7 @@ describe('getToolLabel', () => {
     expect(getToolLabel('set_budget_allocation')).toBe('Setting budget allocation...');
   });
 
-  it('has explicit labels for all 24 known tools', () => {
+  it('has explicit labels for all 25 known tools', () => {
     for (const tool of KNOWN_TOOLS) {
       const label = getToolLabel(tool);
       // Should NOT use fallback pattern for known tools

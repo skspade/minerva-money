@@ -56,4 +56,20 @@ describe('getSystemPrompt', () => {
     expect(prompt).toContain('SimpleFIN');
     expect(prompt).toMatch(/manual account.*not available|not available.*SimpleFIN/is);
   });
+
+  it('includes Merchant Identification section', () => {
+    expect(prompt).toContain('## Merchant Identification');
+  });
+
+  it('instructs agent to use WebSearch for unknown merchants', () => {
+    expect(prompt).toContain('WebSearch');
+  });
+
+  it('references get_uncategorized_transactions in merchant identification workflow', () => {
+    expect(prompt).toContain('get_uncategorized_transactions');
+  });
+
+  it('requires bulk_categorize confirmation block', () => {
+    expect(prompt).toContain('"action": "bulk_categorize"');
+  });
 });

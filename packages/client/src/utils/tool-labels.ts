@@ -25,6 +25,8 @@ const TOOL_LABELS: Record<string, string> = {
   trigger_sync: 'Syncing accounts...',
   create_category_group: 'Creating category group...',
   create_category: 'Creating category...',
+  // Built-in SDK tools
+  WebSearch: 'Searching the web...',
 };
 
 export function getToolLabel(toolName: string): string {

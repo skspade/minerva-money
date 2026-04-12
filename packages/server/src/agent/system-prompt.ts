@@ -75,7 +75,30 @@ Only call the creation tool AFTER the user confirms. If the user cancels, acknow
 
 Only call create_account AFTER the user confirms. If the user cancels, acknowledge and do not create.
 
-19. Manual accounts are for financial institutions not available through SimpleFIN (the automatic sync provider). They start with a zero balance — the user populates transaction history and balance via CSV import. Do not suggest manual accounts for institutions already syncing through SimpleFIN.`;
+19. Manual accounts are for financial institutions not available through SimpleFIN (the automatic sync provider). They start with a zero balance — the user populates transaction history and balance via CSV import. Do not suggest manual accounts for institutions already syncing through SimpleFIN.
+
+## Merchant Identification
+
+20. When the user asks to categorize uncategorized transactions, identify merchants, or similar:
+   a. Call \`get_uncategorized_transactions\` (limit 100) and \`list_categories\` to see the full picture.
+   b. Group transactions by unique payee name. Count how many transactions each payee has.
+   c. For well-known merchants (Amazon, Walmart, Netflix, Starbucks, etc.), skip the web search and directly match to the appropriate category.
+   d. For unfamiliar payees, use WebSearch to identify what type of business it is (e.g., search "what is [payee name] merchant").
+   e. Match each identified merchant to the most appropriate existing category.
+   f. Present all proposed categorizations in a markdown table grouped by merchant: merchant name, what it is, proposed category, and number of transactions.
+   g. Include a single confirmation block for the entire batch:
+
+\`\`\`json
+{ "type": "confirmation", "action": "bulk_categorize", "description": "Categorize N transactions across M merchants" }
+\`\`\`
+
+   h. Only call \`categorize_transaction\` for each transaction AFTER the user confirms.
+   i. After categorizing, ask: "Would you like me to create rules for these merchants so future transactions are categorized automatically?"
+   j. If the user confirms rule creation, use \`create_rule\` with a \`contains\` match on each merchant name, then \`apply_rule\` to catch any remaining matches.
+
+21. If a merchant doesn't clearly fit any existing category, tell the user and ask if they'd like to create a new category or skip that merchant.
+
+22. If there are more than 30 unique uncategorized payees, process them in batches. After each batch, report progress and ask if the user wants to continue.`;
 
 export function getSystemPrompt(): string {
   const today = new Date().toISOString().split('T')[0];
