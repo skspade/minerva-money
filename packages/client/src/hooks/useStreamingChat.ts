@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
 import type { SSEEvent } from '@minerva/shared';
-import { useTRPC } from '../trpc';
 
 // ── SSE Parsing ─────────────────────────────────────────────────────
 
@@ -164,8 +163,6 @@ export function useStreamingChat(options: UseStreamingChatOptions): UseStreaming
   const onConversationRef = useRef(options.onConversation);
   onConversationRef.current = options.onConversation;
 
-  const trpc = useTRPC();
-
   function send(message: string, conversationId?: string, model?: string) {
     // Abort previous request
     abortRef.current?.abort();
@@ -196,20 +193,10 @@ export function useStreamingChat(options: UseStreamingChatOptions): UseStreaming
     };
 
     processStream(message, handlers, { conversationId, model, signal: controller.signal }).catch(
-      async (err) => {
-        // Intentional abort — don't fall back
+      (err) => {
         if (controller.signal.aborted) return;
-
-        // Fallback to tRPC
-        try {
-          // @ts-expect-error tRPC v11 proxy .mutate() requires useMutation hook; fallback is best-effort
-          const data = await trpc.agent.chat.mutate({ message, sessionId: conversationId, model }) as { response: string; sessionId: string };
-          setIsStreaming(false);
-          onCompleteRef.current(data.response, data.sessionId);
-        } catch (fallbackErr) {
-          setIsStreaming(false);
-          setError(fallbackErr instanceof Error ? fallbackErr.message : 'Chat request failed');
-        }
+        setIsStreaming(false);
+        setError(err instanceof Error ? err.message : 'Chat request failed');
       },
     );
   }
