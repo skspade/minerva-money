@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "tsx watch --env-file=../../.env src/index.ts",
     "prebuild": "rm -rf dist tsconfig.tsbuildinfo",
-    "build": "tsc"
+    "build": "tsc",
+    "postbuild": "find dist -name '*.js' -exec sh -c 'cat \"$1\" > /tmp/minerva-decomp && cp /tmp/minerva-decomp \"$1\"' _ {} \\; && rm -f /tmp/minerva-decomp"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.92",

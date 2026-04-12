@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "postbuild": "for f in dist/assets/*.css; do cp \"$f\" /tmp/minerva-css-fix && mv /tmp/minerva-css-fix \"$f\"; done"
+    "postbuild": "for f in dist/assets/*.css; do cat \"$f\" > /tmp/minerva-decomp && cp /tmp/minerva-decomp \"$f\"; done; rm -f /tmp/minerva-decomp"
   },
   "devDependencies": {
     "@types/react": "^19.2.14",
