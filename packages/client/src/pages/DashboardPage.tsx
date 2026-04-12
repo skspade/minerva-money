@@ -359,25 +359,25 @@ export default function DashboardPage() {
           ) : (
             <div className="space-y-2">
               <div className="flex justify-between">
-                <span className="text-sm text-text-secondary">Last sync</span>
-                <span className="text-sm">{new Date(syncStatus.lastSync.startedAt).toLocaleString()}</span>
+                <span className="text-sm text-text-secondary">Last successful sync</span>
+                <span className="text-sm">
+                  {syncStatus.lastSync.status === 'success'
+                    ? new Date(syncStatus.lastSync.completedAt || syncStatus.lastSync.startedAt).toLocaleString()
+                    : syncStatus.lastSuccessAt
+                      ? new Date(syncStatus.lastSuccessAt).toLocaleString()
+                      : 'Never'}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-text-secondary">Status</span>
-                <span className="flex items-center gap-1">
-                  <span className={`text-sm font-medium ${
-                    syncStatus.lastSync.status === 'success' ? 'text-success' :
-                    syncStatus.lastSync.status === 'partial' ? 'text-warning' : 'text-danger'
-                  }`}>
-                    {syncStatus.lastSync.status.charAt(0).toUpperCase() + syncStatus.lastSync.status.slice(1)}
-                  </span>
-                  {syncStatus.lastSync.status === 'partial' && (
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-warning-light text-warning">
-                      Partial
-                    </span>
-                  )}
+                <span className={`text-sm font-medium ${
+                  syncStatus.lastSync.status === 'success' ? 'text-success' :
+                  syncStatus.lastSync.status === 'partial' ? 'text-warning' : 'text-danger'
+                }`}>
+                  {syncStatus.lastSync.status.charAt(0).toUpperCase() + syncStatus.lastSync.status.slice(1)}
                 </span>
               </div>
+
               <div className="flex justify-between">
                 <span className="text-sm text-text-secondary">Accounts synced</span>
                 <span className="text-sm">{syncStatus.lastSync.accountsSynced}</span>

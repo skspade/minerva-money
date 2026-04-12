@@ -40,13 +40,13 @@ export interface ValidationResult {
 
 const REQUIRED_COLUMNS = ['Date', 'Merchant', 'Category', 'Account', 'Original Statement', 'Amount'];
 
-// --- Bank statement columns (e.g., Discover) ---
+// --- Discover columns ---
 
-const BANK_STATEMENT_COLUMNS = ['Transaction Date', 'Transaction Description', 'Debit', 'Credit'];
+const DISCOVER_COLUMNS = ['Transaction Date', 'Transaction Description', 'Debit', 'Credit'];
 
-// --- Bank export columns (e.g., SimpleFIN CSV export) ---
+// --- Consumer's Credit Union columns ---
 
-const BANK_EXPORT_COLUMNS = ['Account ID', 'Transaction ID', 'Date', 'Description', 'Amount'];
+const CCU_COLUMNS = ['Account ID', 'Transaction ID', 'Date', 'Description', 'Amount'];
 
 function parseCurrencyAmount(value: string): number {
   const cleaned = value.replace(/[$,]/g, '').trim();
@@ -54,7 +54,7 @@ function parseCurrencyAmount(value: string): number {
   return parseFloat(cleaned);
 }
 
-interface BankStatementRow {
+interface DiscoverRow {
   'Transaction Date': string;
   'Transaction Description': string;
   'Transaction Type'?: string;
@@ -63,7 +63,7 @@ interface BankStatementRow {
   Balance?: string;
 }
 
-interface BankExportRow {
+interface CcuRow {
   'Account ID': string;
   'Transaction ID': string;
   Date: string;
@@ -76,7 +76,7 @@ interface BankExportRow {
   Balance: string;
 }
 
-function normalizeBankStatementRows(rows: BankStatementRow[]): RawCsvRow[] {
+function normalizeDiscoverRows(rows: DiscoverRow[]): RawCsvRow[] {
   return rows.map(row => {
     const debit = parseCurrencyAmount(row.Debit);
     const credit = parseCurrencyAmount(row.Credit);
@@ -88,7 +88,7 @@ function normalizeBankStatementRows(rows: BankStatementRow[]): RawCsvRow[] {
       Date: (row['Transaction Date'] || '').trim(),
       Merchant: description,
       Category: '',
-      Account: 'Bank Statement',
+      Account: 'Discover',
       'Original Statement': description,
       Notes: '',
       Amount: String(amount),
@@ -96,7 +96,7 @@ function normalizeBankStatementRows(rows: BankStatementRow[]): RawCsvRow[] {
   });
 }
 
-function normalizeBankExportRows(rows: BankExportRow[]): RawCsvRow[] {
+function normalizeCcuRows(rows: CcuRow[]): RawCsvRow[] {
   return rows.map(row => {
     const amount = parseCurrencyAmount(row.Amount);
     const description = (row.Description || '').trim();
@@ -166,7 +166,7 @@ export function parseDate(dateStr: string): string | null {
 
 // --- CSV Format Detection ---
 
-export type CsvFormat = 'monarch' | 'bank-statement' | 'bank-export';
+export type CsvFormat = 'monarch' | 'discover' | 'ccu';
 
 export interface ParsedCsv {
   rows: RawCsvRow[];
@@ -188,31 +188,31 @@ export function parseCsv(csvText: string): ParsedCsv {
 
   // Detect format from header columns
   const headerCols = firstLine.split(delimiter).map(c => c.trim());
-  const isBankStatement = BANK_STATEMENT_COLUMNS.every(col => headerCols.includes(col));
+  const isDiscover = DISCOVER_COLUMNS.every(col => headerCols.includes(col));
 
-  if (isBankStatement) {
-    const bankRows = parse(text, {
+  if (isDiscover) {
+    const discoverRows = parse(text, {
       columns: true,
       skip_empty_lines: true,
       trim: true,
       relax_column_count: true,
       bom: true,
       delimiter,
-    }) as BankStatementRow[];
-    return { rows: normalizeBankStatementRows(bankRows), format: 'bank-statement' };
+    }) as DiscoverRow[];
+    return { rows: normalizeDiscoverRows(discoverRows), format: 'discover' };
   }
 
-  const isBankExport = BANK_EXPORT_COLUMNS.every(col => headerCols.includes(col));
-  if (isBankExport) {
-    const bankExportRows = parse(text, {
+  const isCcu = CCU_COLUMNS.every(col => headerCols.includes(col));
+  if (isCcu) {
+    const ccuRows = parse(text, {
       columns: true,
       skip_empty_lines: true,
       trim: true,
       relax_column_count: true,
       bom: true,
       delimiter,
-    }) as BankExportRow[];
-    return { rows: normalizeBankExportRows(bankExportRows), format: 'bank-export' };
+    }) as CcuRow[];
+    return { rows: normalizeCcuRows(ccuRows), format: 'ccu' };
   }
 
   const rows = parse(text, {
@@ -364,7 +364,7 @@ export interface ExecuteResult {
 
 // --- Preview ---
 
-export function previewImport(db: Database.Database, csvText: string, negateAmounts = false): PreviewResult {
+export function previewImport(db: Database.Database, csvText: string, negateAmounts = false, userAccountMappings?: Record<string, string>): PreviewResult {
   const { rows: rawRows, format } = parseCsv(csvText);
   const allErrors: string[] = [];
   const validTransformed: TransformedRow[] = [];
@@ -418,12 +418,15 @@ export function previewImport(db: Database.Database, csvText: string, negateAmou
   });
 
   // Dedup stats: strategy depends on format
-  const accountIdMap = new Map(accountMatches.filter(a => a.suggestedId).map(a => [a.csvName, a.suggestedId!]));
+  // Use user-provided account mappings if available, otherwise fall back to auto-suggested
+  const accountIdMap = userAccountMappings
+    ? new Map(Object.entries(userAccountMappings))
+    : new Map(accountMatches.filter(a => a.suggestedId).map(a => [a.csvName, a.suggestedId!]));
   let duplicateCount = 0;
   let newCount = 0;
 
-  if (format === 'bank-statement') {
-    // Bank statements: dedup by account + date + amount (payee differs between sources)
+  if (format !== 'monarch') {
+    // Discover/CCU: dedup by account + date + amount (payee differs between sources)
     const existingTxnStmt = db.prepare(
       `SELECT COUNT(*) as count FROM transactions WHERE account_id = ? AND date = ? AND amount = ?`
     );
@@ -522,8 +525,8 @@ export function executeImport(
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
-    // Bank statement dedup: check by account + date + amount (payee differs between sources)
-    const bankDedupStmt = format === 'bank-statement'
+    // Discover/CCU dedup: check by account + date + amount (payee differs between sources)
+    const bankDedupStmt = format !== 'monarch'
       ? db.prepare(`SELECT COUNT(*) as count FROM transactions WHERE account_id = ? AND date = ? AND amount = ?`)
       : null;
 
@@ -540,7 +543,7 @@ export function executeImport(
         continue;
       }
 
-      // Bank statement: check for existing transaction by account + date + amount
+      // Discover/CCU: check for existing transaction by account + date + amount
       if (bankDedupStmt) {
         const existing = bankDedupStmt.get(accountId, row.date, row.amount) as { count: number };
         if (existing.count > 0) {

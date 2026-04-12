@@ -226,7 +226,13 @@ export default function ImportPage() {
               return next;
             });
           }}
-          onContinue={() => setStep('results')}
+          onContinue={() => {
+            const filteredMappings = filterSkippedAccounts(accountMappings);
+            previewMutation.mutate(
+              { csvText, negateAmounts, accountMappings: filteredMappings },
+              { onSuccess: (data) => { setPreviewResult(data); setStep('results'); } },
+            );
+          }}
           onSkipAllUnmatched={() => {
             setAccountMappings(prev => {
               const next = { ...prev };

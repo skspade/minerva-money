@@ -47,18 +47,16 @@ export default function SyncStatus() {
   }
 
   if (status.lastSync.status === 'partial') {
-    const syncTime = status.lastSync.completedAt || status.lastSync.startedAt;
-    const warningText = status.warnings.length > 0
+    const tooltip = status.warnings.length > 0
       ? `${status.warnings.length} account(s) with sync issues: ${status.warnings.map(w => w.accountName).join(', ')}`
       : 'Some accounts had sync issues';
-    const tooltip = status.lastSuccessAt
-      ? `${warningText}\nLast full sync: ${formatRelativeTime(status.lastSuccessAt)}`
-      : warningText;
 
     return (
       <span className="text-sm text-amber-400" title={tooltip}>
         <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 mr-1.5 align-middle" />
-        Last synced: {formatRelativeTime(syncTime)}
+        {status.lastSuccessAt
+          ? <>Last synced: {formatRelativeTime(status.lastSuccessAt)}</>
+          : 'Sync issues'}
       </span>
     );
   }

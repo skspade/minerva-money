@@ -4,9 +4,13 @@ import { previewImport, executeImport } from './import-service.js';
 
 export const importRouter = router({
   preview: publicProcedure
-    .input(z.object({ csvText: z.string().min(1), negateAmounts: z.boolean().optional() }))
+    .input(z.object({
+      csvText: z.string().min(1),
+      negateAmounts: z.boolean().optional(),
+      accountMappings: z.record(z.string(), z.string()).optional(),
+    }))
     .mutation(({ ctx, input }) => {
-      return previewImport(ctx.db, input.csvText, input.negateAmounts ?? false);
+      return previewImport(ctx.db, input.csvText, input.negateAmounts ?? false, input.accountMappings);
     }),
 
   execute: publicProcedure

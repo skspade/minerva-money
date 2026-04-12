@@ -144,26 +144,36 @@ export async function runSync(
       }
     }
 
-    // Auto-clear warnings using internal IDs for accounts that had no errors
+    // Auto-clear warnings for accounts that synced without errors
     const internalIdsToClear: string[] = [];
+    const successfulOrgNames = new Set<string>();
     for (const rawAccount of data.accounts) {
       if (!errorSimplefinIds.has(rawAccount.id)) {
         const internalId = simplefinToInternal.get(rawAccount.id) ?? rawAccount.id;
         internalIdsToClear.push(internalId);
+        if (rawAccount.org?.name) successfulOrgNames.add(rawAccount.org.name);
       }
     }
     if (internalIdsToClear.length > 0) {
       const placeholders = internalIdsToClear.map(() => '?').join(',');
       db.prepare(`DELETE FROM sync_warnings WHERE account_id IN (${placeholders})`).run(...internalIdsToClear);
     }
+    // Clear synthetic connection-error warnings when the institution's accounts sync fine
+    for (const orgName of successfulOrgNames) {
+      const syntheticId = `conn_err_${createHash('sha256').update(orgName).digest('hex').slice(0, 12)}`;
+      if (!errorSimplefinIds.has(syntheticId)) {
+        db.prepare('DELETE FROM sync_warnings WHERE account_id = ?').run(syntheticId);
+      }
+    }
 
     // Determine sync_log status
     const hasErrors = errorSimplefinIds.size > 0;
+    const hasLingering = (db.prepare('SELECT COUNT(*) as count FROM sync_warnings').get() as { count: number }).count > 0;
     let status: string;
-    if (hasErrors && result.accountsSynced > 0) {
-      status = 'partial';
-    } else if (hasErrors && result.accountsSynced === 0) {
+    if (hasErrors && result.accountsSynced === 0) {
       status = 'error';
+    } else if (hasErrors || hasLingering) {
+      status = 'partial';
     } else {
       status = 'success';
     }

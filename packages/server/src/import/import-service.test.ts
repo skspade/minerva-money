@@ -274,19 +274,19 @@ describe('transformRow', () => {
   });
 });
 
-describe('parseCsv — bank statement format', () => {
+describe('parseCsv — Discover format', () => {
   const BANK_HEADER = 'Transaction Date\tTransaction Description\tTransaction Type\tDebit\tCredit\tBalance';
 
   it('parses tab-delimited bank statement with Debit/Credit columns', () => {
     const csv = `${BANK_HEADER}\n04/03/2026\tACH Withdrawal CITI AUTOPAY PAYMENT\tDebit\t$115.02\t0\t$928.47`;
     const { rows, format } = parseCsv(csv);
-    expect(format).toBe('bank-statement');
+    expect(format).toBe('discover');
     expect(rows).toHaveLength(1);
     expect(rows[0].Date).toBe('04/03/2026');
     expect(rows[0].Merchant).toBe('ACH Withdrawal CITI AUTOPAY PAYMENT');
     expect(rows[0]['Original Statement']).toBe('ACH Withdrawal CITI AUTOPAY PAYMENT');
     expect(rows[0].Amount).toBe('-115.02');
-    expect(rows[0].Account).toBe('Bank Statement');
+    expect(rows[0].Account).toBe('Discover');
     expect(rows[0].Category).toBe('');
   });
 
@@ -322,27 +322,27 @@ describe('parseCsv — bank statement format', () => {
     expect(rows).toHaveLength(1);
   });
 
-  it('sets all rows to Account "Bank Statement"', () => {
+  it('sets all rows to Account "Discover"', () => {
     const csv = [
       BANK_HEADER,
       '04/03/2026\tPAYMENT ONE\tDebit\t$10.00\t0\t$90.00',
       '04/02/2026\tPAYMENT TWO\tDebit\t$20.00\t0\t$80.00',
     ].join('\n');
     const { rows } = parseCsv(csv);
-    expect(rows.every(r => r.Account === 'Bank Statement')).toBe(true);
+    expect(rows.every(r => r.Account === 'Discover')).toBe(true);
   });
 });
 
-describe('parseCsv — bank export format', () => {
-  const BANK_EXPORT_HEADER = 'Account ID\tTransaction ID\tDate\tName\tDescription\tCheck Number\tCategory\tTags\tAmount\tBalance';
+describe('parseCsv — CCU format', () => {
+  const CCU_HEADER = 'Account ID\tTransaction ID\tDate\tName\tDescription\tCheck Number\tCategory\tTags\tAmount\tBalance';
 
   it('detects bank export format and normalizes rows', () => {
     const csv = [
-      BANK_EXPORT_HEADER,
+      CCU_HEADER,
       '8091669348\t8091669348|6441\t04/11/26\t\tPoint Of Sale Withdrawal INSTACART\t\tATM\t\t-$54.21\t$5,501.62',
     ].join('\n');
     const { rows, format } = parseCsv(csv);
-    expect(format).toBe('bank-export');
+    expect(format).toBe('ccu');
     expect(rows).toHaveLength(1);
     expect(rows[0].Date).toBe('04/11/26');
     expect(rows[0].Merchant).toBe('Point Of Sale Withdrawal INSTACART');
@@ -354,7 +354,7 @@ describe('parseCsv — bank export format', () => {
 
   it('strips $ and commas from amounts', () => {
     const csv = [
-      BANK_EXPORT_HEADER,
+      CCU_HEADER,
       '8091669348\t8091669348|6441\t04/11/26\t\tBIG PURCHASE\t\tATM\t\t-$1,234.56\t$10,000.00',
     ].join('\n');
     const { rows } = parseCsv(csv);
@@ -363,7 +363,7 @@ describe('parseCsv — bank export format', () => {
 
   it('parses multiple bank export rows', () => {
     const csv = [
-      BANK_EXPORT_HEADER,
+      CCU_HEADER,
       '8091669348\t8091669348|6441\t04/11/26\t\tINSTACART\t\tATM\t\t-$54.21\t$5,501.62',
       '8091669348\t8091669348|6440\t04/10/26\t\tCHEWY.COM\t\tATM\t\t-$47.41\t$5,555.83',
       '8091669348\t8091669348|6439\t04/09/26\t\tATM Withdrawal\t\tATM\t\t-$142.99\t$5,603.24',
@@ -377,7 +377,7 @@ describe('parseCsv — bank export format', () => {
 
   it('uses Account ID as the account name for mapping', () => {
     const csv = [
-      BANK_EXPORT_HEADER,
+      CCU_HEADER,
       '8091669348\t8091669348|6441\t04/11/26\t\tINSTACART\t\tATM\t\t-$54.21\t$5,501.62',
     ].join('\n');
     const { rows } = parseCsv(csv);
@@ -736,7 +736,7 @@ describe('executeImport', () => {
       '03/31/2026\tACH Withdrawal LOAN PMT\tDebit\t$80.74\t0\t$1120.44',
     ].join('\n');
 
-    const result1 = executeImport(db, csv1, { 'Bank Statement': 'acct-discover' }, {});
+    const result1 = executeImport(db, csv1, { 'Discover': 'acct-discover' }, {});
     expect(result1.importedCount).toBe(2);
 
     // Second export: overlapping + 1 new transaction
@@ -747,7 +747,7 @@ describe('executeImport', () => {
       '03/31/2026\tACH Withdrawal LOAN PMT\tDebit\t$80.74\t0\t$1120.44',
     ].join('\n');
 
-    const result2 = executeImport(db, csv2, { 'Bank Statement': 'acct-discover' }, {});
+    const result2 = executeImport(db, csv2, { 'Discover': 'acct-discover' }, {});
     expect(result2.importedCount).toBe(1);  // Only the new one
     expect(result2.skippedCount).toBe(2);   // The 2 duplicates
 
@@ -769,7 +769,7 @@ describe('executeImport', () => {
       '01/15/2024\tACH Withdrawal GCWW/EZ-PAY UTILITIES\tDebit\t$76.95\t0\t$1043.49',
     ].join('\n');
 
-    const result = executeImport(db, csv, { 'Bank Statement': 'acct-checking' }, {});
+    const result = executeImport(db, csv, { 'Discover': 'acct-checking' }, {});
     expect(result.skippedCount).toBe(1);  // Detected as duplicate despite different payee
     expect(result.importedCount).toBe(0);
 
