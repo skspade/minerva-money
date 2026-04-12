@@ -44,6 +44,22 @@
   /* Chart colors */
   --color-chart-primary: var(--color-chart-primary-val);
   --color-chart-secondary: var(--color-chart-secondary-val);
+
+  /* Day-group palette (cycling backgrounds for date headers) */
+  --color-day-0: var(--color-day-0-val);
+  --color-day-1: var(--color-day-1-val);
+  --color-day-2: var(--color-day-2-val);
+  --color-day-3: var(--color-day-3-val);
+  --color-day-4: var(--color-day-4-val);
+  --color-day-5: var(--color-day-5-val);
+
+  /* Day-group border stripes (more saturated for card left borders) */
+  --color-day-border-0: var(--color-day-border-0-val);
+  --color-day-border-1: var(--color-day-border-1-val);
+  --color-day-border-2: var(--color-day-border-2-val);
+  --color-day-border-3: var(--color-day-border-3-val);
+  --color-day-border-4: var(--color-day-border-4-val);
+  --color-day-border-5: var(--color-day-border-5-val);
 }
 
 :root {
@@ -82,6 +98,20 @@
 
   --color-chart-primary-val: #3b82f6;
   --color-chart-secondary-val: #9ca3af;
+
+  --color-day-0-val: #eff6ff;
+  --color-day-1-val: #fef3c7;
+  --color-day-2-val: #ecfdf5;
+  --color-day-3-val: #fdf2f8;
+  --color-day-4-val: #f5f3ff;
+  --color-day-5-val: #fff7ed;
+
+  --color-day-border-0-val: #93c5fd;
+  --color-day-border-1-val: #fcd34d;
+  --color-day-border-2-val: #6ee7b7;
+  --color-day-border-3-val: #f9a8d4;
+  --color-day-border-4-val: #c4b5fd;
+  --color-day-border-5-val: #fdba74;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -121,6 +151,20 @@
 
     --color-chart-primary-val: #60a5fa;
     --color-chart-secondary-val: #6b7280;
+
+    --color-day-0-val: #1e3a5f;
+    --color-day-1-val: #3b2f1a;
+    --color-day-2-val: #14352a;
+    --color-day-3-val: #3b1f33;
+    --color-day-4-val: #2e1f5e;
+    --color-day-5-val: #3b2714;
+
+    --color-day-border-0-val: #2563eb;
+    --color-day-border-1-val: #d97706;
+    --color-day-border-2-val: #059669;
+    --color-day-border-3-val: #db2777;
+    --color-day-border-4-val: #7c3aed;
+    --color-day-border-5-val: #ea580c;
   }
 }
 

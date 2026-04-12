@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import CategoryPicker from './CategoryPicker';
-import { formatCurrency, formatShortDate, parsePayee } from '../lib/format';
+import { formatCurrency, parsePayee } from '../lib/format';
 
 interface TransactionCardProps {
   txn: {
@@ -15,6 +15,7 @@ interface TransactionCardProps {
     ruleName: string | null;
     isTransfer: boolean;
   };
+  dayColor?: { bg: string; border: string };
   isExpanded: boolean;
   onToggle: () => void;
   onCategoryChange: (categoryId: number | null) => void;
@@ -23,19 +24,25 @@ interface TransactionCardProps {
 
 export default memo(function TransactionCard({
   txn,
+  dayColor,
   isExpanded,
   onToggle,
   onCategoryChange,
   onSplitClick,
 }: TransactionCardProps) {
-  const { displayName, prefix } = parsePayee(txn.payee);
+  const { displayName, rawDisplayName, prefix } = parsePayee(txn.payee);
 
   return (
-    <div className="bg-surface rounded-lg border border-border shadow-sm">
-      {/* Tappable card body */}
-      <button
+    <div
+      className="bg-surface rounded-lg border border-border shadow-sm"
+      style={dayColor ? { borderLeftWidth: '4px', borderLeftColor: dayColor.border } : undefined}
+    >
+      <div
+        role="button"
+        tabIndex={0}
         onClick={onToggle}
-        className="w-full text-left px-3 py-2 min-h-[44px]"
+        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(); } }}
+        className="w-full text-left px-3 py-2 min-h-[44px] cursor-pointer"
       >
         {/* Row 1: Merchant name + Transfer badge + Amount */}
         <div className="flex items-center gap-2">
@@ -51,21 +58,18 @@ export default memo(function TransactionCard({
             {formatCurrency(txn.amount)}
           </span>
         </div>
-        {/* Row 2: Prefix + Date + Account */}
-        <div className="text-sm text-text-secondary mt-0.5 truncate">
-          {prefix && <>{prefix} &middot; </>}
-          {formatShortDate(txn.date)}
-          {' \u00b7 '}
-          {txn.accountName}
+        {/* Row 2: Account + Category pill */}
+        <div className="flex items-center gap-1.5 mt-0.5 text-sm text-text-secondary">
+          <span className="truncate">{txn.accountName}</span>
         </div>
-      </button>
+      </div>
 
-      {/* Category / Split — separate tap zone */}
-      <div className="px-3 pb-2">
+      {/* Category / Split — inline compact */}
+      <div className="px-3 pb-2 -mt-1">
         {txn.splitCount > 0 ? (
           <button
             onClick={onSplitClick}
-            className="min-h-[44px] text-accent text-sm font-medium"
+            className="min-h-[36px] text-accent text-xs font-medium"
           >
             Split ({txn.splitCount})
           </button>
@@ -73,7 +77,7 @@ export default memo(function TransactionCard({
           <CategoryPicker
             value={txn.categoryId}
             onChange={onCategoryChange}
-            className="text-base w-full"
+            className="text-xs !rounded-full !px-2 !py-0.5 !border-0 !bg-surface-secondary"
           />
         )}
       </div>
@@ -81,9 +85,14 @@ export default memo(function TransactionCard({
       {/* Expanded details */}
       {isExpanded && (
         <div className="border-t border-border-light px-3 py-2 text-sm text-text-secondary space-y-1">
+          {rawDisplayName !== displayName && (
+            <div>
+              <span className="font-medium text-text-primary">Full name:</span> {rawDisplayName}
+            </div>
+          )}
           {prefix && (
             <div>
-              <span className="font-medium text-text-primary">Full payee:</span> {txn.payee}
+              <span className="font-medium text-text-primary">Original payee:</span> {txn.payee}
             </div>
           )}
           {txn.memo && (

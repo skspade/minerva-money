@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTRPC } from '../trpc';
-import { formatCurrency } from '../lib/format';
+import { formatCurrency, formatRelativeDate } from '../lib/format';
 import CategoryPicker from '../components/CategoryPicker';
 import { Drawer } from 'vaul';
 import SplitModal from '../components/SplitModal';
@@ -10,6 +10,15 @@ import TransactionCard from '../components/TransactionCard';
 import { Filter, ChevronDown, ChevronUp, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const PAGE_SIZE = 50;
+
+const DAY_COLORS = [
+  { bg: 'var(--color-day-0)', border: 'var(--color-day-border-0)' },
+  { bg: 'var(--color-day-1)', border: 'var(--color-day-border-1)' },
+  { bg: 'var(--color-day-2)', border: 'var(--color-day-border-2)' },
+  { bg: 'var(--color-day-3)', border: 'var(--color-day-border-3)' },
+  { bg: 'var(--color-day-4)', border: 'var(--color-day-border-4)' },
+  { bg: 'var(--color-day-5)', border: 'var(--color-day-border-5)' },
+];
 
 type SortColumn = 'date' | 'payee' | 'amount' | 'account';
 type SortDirection = 'asc' | 'desc';
@@ -207,6 +216,27 @@ export default function TransactionsPage() {
     () => filtered.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE),
     [filtered, safePage],
   );
+
+  const dayGroups = useMemo(() => {
+    if (sortColumn !== 'date') return null;
+    const groups: Map<string, typeof paginatedRows> = new Map();
+    for (const txn of paginatedRows) {
+      const existing = groups.get(txn.date);
+      if (existing) {
+        existing.push(txn);
+      } else {
+        groups.set(txn.date, [txn]);
+      }
+    }
+    let colorIndex = 0;
+    return Array.from(groups.entries()).map(([date, transactions]) => ({
+      date,
+      label: formatRelativeDate(date),
+      color: DAY_COLORS[colorIndex++ % DAY_COLORS.length],
+      dailyTotal: transactions.reduce((sum, t) => sum + t.amount, 0),
+      transactions,
+    }));
+  }, [paginatedRows, sortColumn]);
 
   const activeFilterCount = [dateFrom, dateTo, debouncedSearch, amountMin, amountMax, categoryFilter]
     .filter(v => v !== '').length;
@@ -440,17 +470,48 @@ export default function TransactionsPage() {
         </div>
 
         {/* Mobile cards */}
-        <div className="md:hidden space-y-2">
-          {paginatedRows.map(txn => (
-            <TransactionCard
-              key={txn.id}
-              txn={txn}
-              isExpanded={expandedId === txn.id}
-              onToggle={() => setExpandedId(prev => prev === txn.id ? null : txn.id)}
-              onCategoryChange={categoryId => updateCategoryMut.mutate({ transactionId: txn.id, categoryId })}
-              onSplitClick={() => setSplitTransactionId(txn.id)}
-            />
-          ))}
+        <div className="md:hidden">
+          {dayGroups ? (
+            dayGroups.map(group => (
+              <div key={group.date} className="mb-1">
+                <div
+                  className="sticky top-0 z-10 flex items-center justify-between px-3 py-1.5 text-sm font-semibold rounded-md mb-1"
+                  style={{ backgroundColor: group.color.bg }}
+                >
+                  <span className="text-text-primary">{group.label}</span>
+                  <span className={`text-xs font-medium ${group.dailyTotal < 0 ? 'text-danger' : 'text-text-secondary'}`}>
+                    {formatCurrency(group.dailyTotal)}
+                  </span>
+                </div>
+                <div className="space-y-1.5 mb-3">
+                  {group.transactions.map(txn => (
+                    <TransactionCard
+                      key={txn.id}
+                      txn={txn}
+                      dayColor={group.color}
+                      isExpanded={expandedId === txn.id}
+                      onToggle={() => setExpandedId(prev => prev === txn.id ? null : txn.id)}
+                      onCategoryChange={categoryId => updateCategoryMut.mutate({ transactionId: txn.id, categoryId })}
+                      onSplitClick={() => setSplitTransactionId(txn.id)}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="space-y-1.5">
+              {paginatedRows.map(txn => (
+                <TransactionCard
+                  key={txn.id}
+                  txn={txn}
+                  isExpanded={expandedId === txn.id}
+                  onToggle={() => setExpandedId(prev => prev === txn.id ? null : txn.id)}
+                  onCategoryChange={categoryId => updateCategoryMut.mutate({ transactionId: txn.id, categoryId })}
+                  onSplitClick={() => setSplitTransactionId(txn.id)}
+                />
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Pagination controls */}
