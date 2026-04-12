@@ -263,6 +263,9 @@ export async function* chatStream(
               yield { type: 'tool-start', tool: contentBlock.name };
             }
           }
+          if (contentBlock && contentBlock.type === 'thinking') {
+            yield { type: 'thinking' };
+          }
         }
 
         continue;
@@ -279,6 +282,7 @@ export async function* chatStream(
           yield { type: 'tool-end', tool: toolName };
         }
         activeTools.clear();
+        yield { type: 'thinking' };
         continue;
       }
 

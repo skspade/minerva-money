@@ -42,6 +42,11 @@ export interface SSEDoneEvent {
   readonly text: string;
 }
 
+/** Emitted when the model is thinking (processing, reasoning about tool results, etc.). */
+export interface SSEThinkingEvent {
+  readonly type: 'thinking';
+}
+
 /** Emitted when an error occurs during streaming. */
 export interface SSEErrorEvent {
   readonly type: 'error';
@@ -59,6 +64,7 @@ export type SSEEvent =
   | SSETextDeltaEvent
   | SSEToolStartEvent
   | SSEToolEndEvent
+  | SSEThinkingEvent
   | SSEDoneEvent
   | SSEErrorEvent;
 

@@ -76,10 +76,11 @@ describe('SSE Event Types', () => {
       'text-delta',
       'tool-start',
       'tool-end',
+      'thinking',
       'done',
       'error',
     ];
-    expect(types).toHaveLength(7);
+    expect(types).toHaveLength(8);
   });
 
   it('should narrow types correctly in exhaustive switch', () => {
@@ -95,6 +96,8 @@ describe('SSE Event Types', () => {
           return event.tool;
         case 'tool-end':
           return event.tool;
+        case 'thinking':
+          return 'thinking';
         case 'done':
           return event.text;
         case 'error':

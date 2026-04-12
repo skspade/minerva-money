@@ -42,6 +42,7 @@ export interface StreamHandlers {
   onTextDelta: (text: string) => void;
   onToolStart: (tool: string) => void;
   onToolEnd: (tool: string) => void;
+  onThinking: () => void;
   onDone: (text: string, sessionId: string) => void;
   onError: (message: string) => void;
   onSession: (sessionId: string) => void;
@@ -119,6 +120,9 @@ export async function processStream(
           case 'tool-end':
             handlers.onToolEnd(event.tool);
             break;
+          case 'thinking':
+            handlers.onThinking();
+            break;
           case 'done':
             handlers.onDone(event.text, capturedSessionId || sessionId || '');
             break;
@@ -135,15 +139,21 @@ export async function processStream(
 
 // ── React Hook ──────────────────────────────────────────────────────
 
+export interface ToolCallState {
+  tool: string;
+  status: 'running' | 'done';
+}
+
 export interface UseStreamingChatOptions {
-  onComplete: (text: string, sessionId: string) => void;
+  onComplete: (text: string, sessionId: string, toolCalls: string[]) => void;
   onConversation?: (conversationId: string) => void;
 }
 
 export interface UseStreamingChatReturn {
   send: (message: string, conversationId?: string, model?: string) => void;
   streamingText: string;
-  activeTool: string | null;
+  toolCalls: ToolCallState[];
+  isThinking: boolean;
   isStreaming: boolean;
   error: string | null;
 }
@@ -154,41 +164,66 @@ export interface UseStreamingChatReturn {
  */
 export function useStreamingChat(options: UseStreamingChatOptions): UseStreamingChatReturn {
   const [streamingText, setStreamingText] = useState('');
-  const [activeTool, setActiveTool] = useState<string | null>(null);
+  const [toolCalls, setToolCalls] = useState<ToolCallState[]>([]);
+  const [isThinking, setIsThinking] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const toolCallsRef = useRef<ToolCallState[]>([]);
   const onCompleteRef = useRef(options.onComplete);
   onCompleteRef.current = options.onComplete;
   const onConversationRef = useRef(options.onConversation);
   onConversationRef.current = options.onConversation;
 
   function send(message: string, conversationId?: string, model?: string) {
-    // Abort previous request
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
 
-    // Reset state
     setStreamingText('');
-    setActiveTool(null);
+    setToolCalls([]);
+    toolCallsRef.current = [];
+    setIsThinking(true);
     setError(null);
     setIsStreaming(true);
 
     const handlers: StreamHandlers = {
-      onTextDelta: (text) => setStreamingText((prev) => prev + text),
-      onToolStart: (tool) => setActiveTool(tool),
-      onToolEnd: () => setActiveTool(null),
+      onTextDelta: (text) => {
+        setStreamingText((prev) => prev + text);
+        setIsThinking(false);
+      },
+      onToolStart: (tool) => {
+        const entry: ToolCallState = { tool, status: 'running' };
+        toolCallsRef.current = [...toolCallsRef.current, entry];
+        setToolCalls(toolCallsRef.current);
+        setIsThinking(false);
+      },
+      onToolEnd: (tool) => {
+        let found = false;
+        toolCallsRef.current = toolCallsRef.current.map(tc => {
+          if (!found && tc.tool === tool && tc.status === 'running') {
+            found = true;
+            return { ...tc, status: 'done' as const };
+          }
+          return tc;
+        });
+        setToolCalls([...toolCallsRef.current]);
+      },
+      onThinking: () => setIsThinking(true),
       onDone: (text, sid) => {
-        setActiveTool(null);
+        const tools = toolCallsRef.current.map(tc => tc.tool);
+        setToolCalls([]);
+        toolCallsRef.current = [];
+        setIsThinking(false);
         setIsStreaming(false);
-        onCompleteRef.current(text, sid);
+        onCompleteRef.current(text, sid, tools);
       },
       onError: (msg) => {
         setError(msg);
+        setIsThinking(false);
         setIsStreaming(false);
       },
-      onSession: () => {}, // sessionId captured internally by processStream
+      onSession: () => {},
       onConversation: (id) => onConversationRef.current?.(id),
     };
 
@@ -196,17 +231,17 @@ export function useStreamingChat(options: UseStreamingChatOptions): UseStreaming
       (err) => {
         if (controller.signal.aborted) return;
         setIsStreaming(false);
+        setIsThinking(false);
         setError(err instanceof Error ? err.message : 'Chat request failed');
       },
     );
   }
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       abortRef.current?.abort();
     };
   }, []);
 
-  return { send, streamingText, activeTool, isStreaming, error };
+  return { send, streamingText, toolCalls, isThinking, isStreaming, error };
 }

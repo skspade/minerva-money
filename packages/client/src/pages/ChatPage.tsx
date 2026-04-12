@@ -15,6 +15,7 @@ interface ChatMessage {
   role: MessageRole;
   content: string;
   confirmation: Confirmation | null;
+  toolCalls?: string[];
 }
 
 interface Confirmation {
@@ -122,11 +123,16 @@ export default function ChatPage() {
     }
   }, [urlConversationId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const onComplete = useCallback((text: string, _sessionId: string) => {
+  const onComplete = useCallback((text: string, _sessionId: string, completedToolCalls: string[]) => {
     const { textContent, confirmation } = parseConfirmation(text);
     setMessages((prev) => [
       ...prev,
-      { role: 'assistant', content: textContent, confirmation },
+      {
+        role: 'assistant',
+        content: textContent,
+        confirmation,
+        toolCalls: completedToolCalls.length > 0 ? completedToolCalls : undefined,
+      },
     ]);
   }, []);
 
@@ -137,7 +143,7 @@ export default function ChatPage() {
     queryClient.invalidateQueries({ queryKey: trpc.chatHistory.list.queryKey() });
   }, [navigate, queryClient, trpc.chatHistory.list]);
 
-  const { send, streamingText, activeTool, isStreaming, error } = useStreamingChat({ onComplete, onConversation });
+  const { send, streamingText, toolCalls, isThinking, isStreaming, error } = useStreamingChat({ onComplete, onConversation });
 
   // Append error messages reactively
   useEffect(() => {
@@ -303,6 +309,16 @@ export default function ChatPage() {
                 )}
                 {msg.role === 'assistant' && (
                   <div className="bg-surface border border-border rounded-2xl rounded-bl-sm px-4 py-2 max-w-[80%]">
+                    {msg.toolCalls && msg.toolCalls.length > 0 && (
+                      <div className="space-y-1 mb-2 pb-2 border-b border-border">
+                        {msg.toolCalls.map((tool, j) => (
+                          <div key={j} className="flex items-center gap-2 text-xs text-text-tertiary">
+                            <span className="inline-block w-1.5 h-1.5 bg-success rounded-full" />
+                            {getToolLabel(tool)}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     <div className="prose prose-sm max-w-none">
                       <Markdown remarkPlugins={[remarkGfm]}>{msg.content}</Markdown>
                     </div>
@@ -338,32 +354,39 @@ export default function ChatPage() {
               </div>
             ))}
             {/* Live streaming bubble */}
-            {isStreaming && streamingText && (
+            {isStreaming && (streamingText || toolCalls.length > 0 || isThinking) && (
               <div className="flex justify-start">
                 <div className="bg-surface border border-border rounded-2xl rounded-bl-sm px-4 py-2 max-w-[80%]">
-                  <div className="prose prose-sm max-w-none">
-                    <Markdown remarkPlugins={[remarkGfm]}>{streamingText}</Markdown>
-                  </div>
-                  {activeTool && (
-                    <div className="mt-2 flex items-center gap-2 text-sm text-text-tertiary italic">
+                  {toolCalls.length > 0 && (
+                    <div className={`space-y-1${streamingText ? ' mb-2 pb-2 border-b border-border' : ''}`}>
+                      {toolCalls.map((tc, i) => (
+                        <div key={i} className="flex items-center gap-2 text-xs text-text-tertiary">
+                          {tc.status === 'running' ? (
+                            <span className="inline-block w-1.5 h-1.5 bg-accent rounded-full animate-pulse" />
+                          ) : (
+                            <span className="inline-block w-1.5 h-1.5 bg-success rounded-full" />
+                          )}
+                          {getToolLabel(tc.tool)}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {streamingText && (
+                    <div className="prose prose-sm max-w-none">
+                      <Markdown remarkPlugins={[remarkGfm]}>{streamingText}</Markdown>
+                    </div>
+                  )}
+                  {isThinking && (
+                    <div className="flex items-center gap-2 mt-1 text-xs text-text-tertiary italic">
                       <span className="inline-block w-1.5 h-1.5 bg-text-tertiary rounded-full animate-pulse" />
-                      {getToolLabel(activeTool)}
+                      Thinking…
                     </div>
                   )}
                 </div>
               </div>
             )}
-            {/* Tool activity indicator before first text token */}
-            {isStreaming && !streamingText && activeTool && (
-              <div className="flex justify-start">
-                <div className="flex items-center gap-2 px-4 py-3 text-sm text-text-tertiary italic">
-                  <span className="inline-block w-1.5 h-1.5 bg-text-tertiary rounded-full animate-pulse" />
-                  {getToolLabel(activeTool)}
-                </div>
-              </div>
-            )}
-            {/* Bouncing dots — only before first text token and no tool active */}
-            {isStreaming && !streamingText && !activeTool && (
+            {/* Initial loading — before any events arrive */}
+            {isStreaming && !streamingText && toolCalls.length === 0 && !isThinking && (
               <div className="flex justify-start">
                 <div className="flex items-center gap-1 px-4 py-3">
                   <span className="w-2 h-2 bg-text-tertiary rounded-full animate-bounce [animation-delay:0ms]" />
