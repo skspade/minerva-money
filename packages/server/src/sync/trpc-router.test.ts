@@ -147,6 +147,42 @@ describe('trpc-router', () => {
     expect(status.warnings[1].accountId).toBe('acct-1'); // older
   });
 
+  it('sync.status returns lastSuccessAt when most recent sync is an error', async () => {
+    const caller = createCaller();
+    await caller.sync.trigger(); // creates a success entry
+
+    db.prepare(
+      "INSERT INTO sync_log (started_at, completed_at, status, error_message, accounts_synced, transactions_added) VALUES (datetime('now'), datetime('now'), 'error', 'Connection failed', 0, 0)"
+    ).run();
+
+    const status = await caller.sync.status();
+
+    expect(status.lastSync!.status).toBe('error');
+    expect(status.lastSuccessAt).toBeTruthy();
+  });
+
+  it('sync.status returns null lastSuccessAt when most recent sync is a success', async () => {
+    const caller = createCaller();
+    await caller.sync.trigger();
+
+    const status = await caller.sync.status();
+
+    expect(status.lastSync!.status).toBe('success');
+    expect(status.lastSuccessAt).toBeNull();
+  });
+
+  it('sync.status returns null lastSuccessAt when no successful syncs exist', async () => {
+    const caller = createCaller();
+    db.prepare(
+      "INSERT INTO sync_log (started_at, completed_at, status, error_message, accounts_synced, transactions_added) VALUES (datetime('now'), datetime('now'), 'error', 'Connection failed', 0, 0)"
+    ).run();
+
+    const status = await caller.sync.status();
+
+    expect(status.lastSync!.status).toBe('error');
+    expect(status.lastSuccessAt).toBeNull();
+  });
+
   it('sync.status existing fields unchanged when warnings exist', async () => {
     const caller = createCaller();
     await caller.sync.trigger();

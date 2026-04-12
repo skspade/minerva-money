@@ -117,6 +117,14 @@ const syncRouter = router({
       last_seen: string;
     }[];
 
+    let lastSuccessAt: string | null = null;
+    if (lastSync && lastSync.status !== 'success') {
+      const row = ctx.db.prepare(
+        "SELECT completed_at FROM sync_log WHERE status = 'success' ORDER BY id DESC LIMIT 1",
+      ).get() as { completed_at: string } | undefined;
+      lastSuccessAt = row?.completed_at ?? null;
+    }
+
     return {
       lastSync: lastSync ? {
         startedAt: lastSync.started_at,
@@ -126,6 +134,7 @@ const syncRouter = router({
         accountsSynced: lastSync.accounts_synced,
         transactionsAdded: lastSync.transactions_added,
       } : null,
+      lastSuccessAt,
       errorCount,
       accounts,
       warnings: warnings.map(w => ({

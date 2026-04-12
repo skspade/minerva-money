@@ -35,17 +35,25 @@ export default function SyncStatus() {
 
   if (status.lastSync.status === 'error') {
     return (
-      <span className="text-sm text-red-400" title={status.lastSync.errorMessage ?? undefined}>
-        Sync error: {status.lastSync.errorMessage || 'Unknown error'}
+      <span className="text-sm text-red-400">
+        <span title={status.lastSync.errorMessage ?? undefined}>Sync error</span>
+        {status.lastSuccessAt && (
+          <span className="text-text-tertiary">
+            {' · '}Data from {formatRelativeTime(status.lastSuccessAt)}
+          </span>
+        )}
       </span>
     );
   }
 
   if (status.lastSync.status === 'partial') {
     const syncTime = status.lastSync.completedAt || status.lastSync.startedAt;
-    const tooltip = status.warnings.length > 0
+    const warningText = status.warnings.length > 0
       ? `${status.warnings.length} account(s) with sync issues: ${status.warnings.map(w => w.accountName).join(', ')}`
       : 'Some accounts had sync issues';
+    const tooltip = status.lastSuccessAt
+      ? `${warningText}\nLast full sync: ${formatRelativeTime(status.lastSuccessAt)}`
+      : warningText;
 
     return (
       <span className="text-sm text-amber-400" title={tooltip}>
