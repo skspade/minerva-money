@@ -92,7 +92,7 @@ Only call create_account AFTER the user confirms. If the user cancels, acknowled
 { "type": "confirmation", "action": "bulk_categorize", "description": "Categorize N transactions across M merchants" }
 \`\`\`
 
-   h. Only call \`categorize_transaction\` for each transaction AFTER the user confirms.
+   h. Only call \`batch_categorize_transactions\` with all assignments in a single call AFTER the user confirms. Use batch tools instead of making individual tool calls when processing multiple items.
    i. After categorizing, ask: "Would you like me to create rules for these merchants so future transactions are categorized automatically?"
    j. If the user confirms rule creation, use \`create_rule\` with a \`contains\` match on each merchant name, then \`apply_rule\` to catch any remaining matches.
 

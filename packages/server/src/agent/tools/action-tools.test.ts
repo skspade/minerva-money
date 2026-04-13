@@ -48,9 +48,9 @@ describe('action-tools', () => {
     rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('returns 13 tools', () => {
+  it('returns 17 tools', () => {
     const tools = createActionTools(db, ctx);
-    expect(tools).toHaveLength(13);
+    expect(tools).toHaveLength(17);
   });
 
   it('returns tools with expected names', () => {
@@ -67,6 +67,10 @@ describe('action-tools', () => {
       'confirm_transfer',
       'dismiss_transfer',
       'trigger_sync',
+      'batch_categorize_transactions',
+      'batch_set_budget_allocations',
+      'batch_set_default_allocations',
+      'batch_resolve_transfers',
       'create_category_group',
       'create_category',
       'create_account',
@@ -362,6 +366,180 @@ describe('action-tools', () => {
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain('Rate limit');
       expect(result.content[0].text).toContain('Checking');
+    });
+  });
+
+  describe('batch_categorize_transactions', () => {
+    it('categorizes multiple transactions to different categories', async () => {
+      const group = createGroup(db, 'Food');
+      const dining = createCategory(db, group.id, 'Dining');
+      const groceries = createCategory(db, group.id, 'Groceries');
+      db.prepare("INSERT INTO accounts (id, name, institution, type, balance) VALUES ('acc1', 'Checking', 'Bank', 'checking', 10000)").run();
+      db.prepare("INSERT INTO transactions (id, account_id, date, amount, payee) VALUES ('txn1', 'acc1', '2026-03-01', -500, 'Starbucks')").run();
+      db.prepare("INSERT INTO transactions (id, account_id, date, amount, payee) VALUES ('txn2', 'acc1', '2026-03-02', -3000, 'Kroger')").run();
+      db.prepare("INSERT INTO transactions (id, account_id, date, amount, payee) VALUES ('txn3', 'acc1', '2026-03-03', -800, 'McDonalds')").run();
+
+      const result = await findTool('batch_categorize_transactions').handler({
+        items: [
+          { transactionId: 'txn1', categoryId: dining.id },
+          { transactionId: 'txn2', categoryId: groceries.id },
+          { transactionId: 'txn3', categoryId: dining.id },
+        ],
+      });
+      expect(result.isError).toBeUndefined();
+      const data = parseResult(result);
+      expect(data.success).toBe(true);
+      expect(data.count).toBe(3);
+
+      const rows = db.prepare('SELECT id, category_id FROM transactions ORDER BY id').all() as { id: string; category_id: number }[];
+      expect(rows[0].category_id).toBe(dining.id);
+      expect(rows[1].category_id).toBe(groceries.id);
+      expect(rows[2].category_id).toBe(dining.id);
+    });
+
+    it('returns error when any transaction ID is invalid (no partial updates)', async () => {
+      const group = createGroup(db, 'Food');
+      const category = createCategory(db, group.id, 'Dining');
+      db.prepare("INSERT INTO accounts (id, name, institution, type, balance) VALUES ('acc1', 'Checking', 'Bank', 'checking', 10000)").run();
+      db.prepare("INSERT INTO transactions (id, account_id, date, amount, payee) VALUES ('txn1', 'acc1', '2026-03-01', -500, 'Starbucks')").run();
+
+      const result = await findTool('batch_categorize_transactions').handler({
+        items: [
+          { transactionId: 'txn1', categoryId: category.id },
+          { transactionId: 'nope', categoryId: category.id },
+        ],
+      });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('nope');
+      expect(result.content[0].text).toContain('not found');
+
+      const row = db.prepare('SELECT category_id FROM transactions WHERE id = ?').get('txn1') as { category_id: number | null };
+      expect(row.category_id).toBeNull();
+    });
+
+    it('returns error when any category ID is invalid', async () => {
+      db.prepare("INSERT INTO accounts (id, name, institution, type, balance) VALUES ('acc1', 'Checking', 'Bank', 'checking', 10000)").run();
+      db.prepare("INSERT INTO transactions (id, account_id, date, amount, payee) VALUES ('txn1', 'acc1', '2026-03-01', -500, 'Starbucks')").run();
+
+      const result = await findTool('batch_categorize_transactions').handler({
+        items: [{ transactionId: 'txn1', categoryId: 99999 }],
+      });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Category 99999 not found');
+    });
+  });
+
+  describe('batch_set_budget_allocations', () => {
+    it('sets allocations for multiple categories in one period', async () => {
+      const group = createGroup(db, 'Living');
+      const rent = createCategory(db, group.id, 'Rent');
+      const groceries = createCategory(db, group.id, 'Groceries');
+
+      const result = await findTool('batch_set_budget_allocations').handler({
+        period: '2026-04',
+        items: [
+          { categoryId: rent.id, amountInCents: 150000 },
+          { categoryId: groceries.id, amountInCents: 60000 },
+        ],
+      });
+      expect(result.isError).toBeUndefined();
+      const data = parseResult(result);
+      expect(data.success).toBe(true);
+      expect(data.period).toBe('2026-04');
+      expect(data.count).toBe(2);
+
+      const alloc = db.prepare('SELECT amount FROM budget_allocations WHERE category_id = ? AND period = ?').get(rent.id, '2026-04') as { amount: number };
+      expect(alloc.amount).toBe(150000);
+    });
+
+    it('returns error for non-existent category', async () => {
+      const result = await findTool('batch_set_budget_allocations').handler({
+        period: '2026-04',
+        items: [{ categoryId: 99999, amountInCents: 50000 }],
+      });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('not found');
+    });
+  });
+
+  describe('batch_set_default_allocations', () => {
+    it('sets defaults for multiple categories', async () => {
+      const group = createGroup(db, 'Living');
+      const rent = createCategory(db, group.id, 'Rent');
+      const groceries = createCategory(db, group.id, 'Groceries');
+
+      const result = await findTool('batch_set_default_allocations').handler({
+        items: [
+          { categoryId: rent.id, amountInCents: 150000 },
+          { categoryId: groceries.id, amountInCents: 60000 },
+        ],
+      });
+      expect(result.isError).toBeUndefined();
+      const data = parseResult(result);
+      expect(data.success).toBe(true);
+      expect(data.count).toBe(2);
+
+      const alloc = db.prepare("SELECT amount FROM budget_allocations WHERE category_id = ? AND period = 'default'").get(groceries.id) as { amount: number };
+      expect(alloc.amount).toBe(60000);
+    });
+
+    it('returns error for non-existent category', async () => {
+      const result = await findTool('batch_set_default_allocations').handler({
+        items: [{ categoryId: 99999, amountInCents: 50000 }],
+      });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('not found');
+    });
+  });
+
+  describe('batch_resolve_transfers', () => {
+    it('confirms and dismisses transfers in one call', async () => {
+      db.prepare("INSERT INTO accounts (id, name, institution, type, balance) VALUES ('acc1', 'Checking', 'Bank', 'checking', 10000)").run();
+      db.prepare("INSERT INTO accounts (id, name, institution, type, balance) VALUES ('acc2', 'Savings', 'Bank', 'savings', 20000)").run();
+      db.prepare("INSERT INTO transactions (id, account_id, date, amount, payee) VALUES ('txn1', 'acc1', '2026-03-01', -1000, 'Transfer')").run();
+      db.prepare("INSERT INTO transactions (id, account_id, date, amount, payee) VALUES ('txn2', 'acc2', '2026-03-01', 1000, 'Transfer')").run();
+      db.prepare("INSERT INTO transactions (id, account_id, date, amount, payee) VALUES ('txn3', 'acc1', '2026-03-05', -2000, 'Transfer')").run();
+      db.prepare("INSERT INTO transactions (id, account_id, date, amount, payee) VALUES ('txn4', 'acc2', '2026-03-05', 2000, 'Transfer')").run();
+      db.prepare("INSERT INTO transfer_links (transaction_a_id, transaction_b_id, confirmed) VALUES ('txn1', 'txn2', 0)").run();
+      db.prepare("INSERT INTO transfer_links (transaction_a_id, transaction_b_id, confirmed) VALUES ('txn3', 'txn4', 0)").run();
+
+      const links = db.prepare('SELECT id FROM transfer_links ORDER BY id').all() as { id: number }[];
+      const result = await findTool('batch_resolve_transfers').handler({
+        items: [
+          { linkId: links[0].id, action: 'confirm' },
+          { linkId: links[1].id, action: 'dismiss' },
+        ],
+      });
+      expect(result.isError).toBeUndefined();
+      const data = parseResult(result);
+      expect(data.success).toBe(true);
+      expect(data.confirmed).toBe(1);
+      expect(data.dismissed).toBe(1);
+
+      const rows = db.prepare('SELECT id, confirmed FROM transfer_links ORDER BY id').all() as { id: number; confirmed: number }[];
+      expect(rows[0].confirmed).toBe(1);
+      expect(rows[1].confirmed).toBe(-1);
+    });
+
+    it('returns error for non-existent link ID (rolls back all)', async () => {
+      db.prepare("INSERT INTO accounts (id, name, institution, type, balance) VALUES ('acc1', 'Checking', 'Bank', 'checking', 10000)").run();
+      db.prepare("INSERT INTO accounts (id, name, institution, type, balance) VALUES ('acc2', 'Savings', 'Bank', 'savings', 20000)").run();
+      db.prepare("INSERT INTO transactions (id, account_id, date, amount, payee) VALUES ('txn1', 'acc1', '2026-03-01', -1000, 'Transfer')").run();
+      db.prepare("INSERT INTO transactions (id, account_id, date, amount, payee) VALUES ('txn2', 'acc2', '2026-03-01', 1000, 'Transfer')").run();
+      db.prepare("INSERT INTO transfer_links (transaction_a_id, transaction_b_id, confirmed) VALUES ('txn1', 'txn2', 0)").run();
+
+      const link = db.prepare('SELECT id FROM transfer_links LIMIT 1').get() as { id: number };
+      const result = await findTool('batch_resolve_transfers').handler({
+        items: [
+          { linkId: link.id, action: 'confirm' },
+          { linkId: 99999, action: 'dismiss' },
+        ],
+      });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('not found');
+
+      const row = db.prepare('SELECT confirmed FROM transfer_links WHERE id = ?').get(link.id) as { confirmed: number };
+      expect(row.confirmed).toBe(0);
     });
   });
 
