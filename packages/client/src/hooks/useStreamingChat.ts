@@ -3,21 +3,14 @@ import type { SSEEvent } from '@minerva/shared';
 
 // ── SSE Parsing ─────────────────────────────────────────────────────
 
-/**
- * Parse a chunk of SSE-formatted text into typed SSE events.
- * Only returns fully complete events (terminated by \n\n).
- * Skips comment lines (: prefix) and empty segments.
- */
 export function parseSSEChunk(chunk: string): SSEEvent[] {
   const events: SSEEvent[] = [];
   const segments = chunk.split('\n\n');
 
-  // Last segment may be incomplete (no trailing \n\n), discard it
   for (let i = 0; i < segments.length - 1; i++) {
     const segment = segments[i].trim();
     if (!segment) continue;
 
-    // Process each line in the segment
     for (const line of segment.split('\n')) {
       const trimmed = line.trim();
       if (!trimmed || trimmed.startsWith(':')) continue;
@@ -50,38 +43,24 @@ export interface StreamHandlers {
 }
 
 export interface StreamOptions {
-  sessionId?: string;
   conversationId?: string;
   model?: string;
   signal?: AbortSignal;
 }
 
-/**
- * Send a message to the SSE endpoint and process the stream.
- * Throws on network errors, non-200 responses, or non-SSE content types
- * so the caller can fall back to tRPC.
- */
-export async function processStream(
-  message: string,
+export async function connectToEvents(
+  conversationId: string,
   handlers: StreamHandlers,
-  options: StreamOptions = {},
+  signal?: AbortSignal,
 ): Promise<void> {
-  const { sessionId, conversationId, model, signal } = options;
+  const response = await fetch(`/api/chat/events/${conversationId}`, { signal });
 
-  const response = await fetch('/api/chat/stream', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, sessionId, model, conversationId }),
-    signal,
-  });
-
-  if (!response.ok) {
-    throw new Error(`SSE request failed with status ${response.status}`);
+  if (response.status === 404) {
+    return;
   }
 
-  const contentType = response.headers.get('content-type') ?? '';
-  if (!contentType.includes('text/event-stream')) {
-    throw new Error('SSE not available: unexpected content type');
+  if (!response.ok) {
+    throw new Error(`Events request failed with status ${response.status}`);
   }
 
   const reader = response.body!.getReader();
@@ -124,7 +103,7 @@ export async function processStream(
             handlers.onThinking();
             break;
           case 'done':
-            handlers.onDone(event.text, capturedSessionId || sessionId || '');
+            handlers.onDone(event.text, capturedSessionId);
             break;
           case 'error':
             handlers.onError(event.message);
@@ -135,6 +114,35 @@ export async function processStream(
   } finally {
     reader.releaseLock();
   }
+}
+
+export async function processStream(
+  message: string,
+  handlers: StreamHandlers,
+  options: StreamOptions = {},
+): Promise<void> {
+  const { conversationId, model, signal } = options;
+
+  const postResponse = await fetch('/api/chat/stream', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message, model, conversationId }),
+    signal,
+  });
+
+  if (!postResponse.ok) {
+    let errorMsg = `Request failed with status ${postResponse.status}`;
+    try {
+      const body = await postResponse.json();
+      if (body.error) errorMsg = body.error;
+    } catch { /* use default message */ }
+    throw new Error(errorMsg);
+  }
+
+  const { conversationId: jobConversationId } = await postResponse.json();
+  handlers.onConversation(jobConversationId);
+
+  await connectToEvents(jobConversationId, handlers, signal);
 }
 
 // ── React Hook ──────────────────────────────────────────────────────
@@ -151,6 +159,7 @@ export interface UseStreamingChatOptions {
 
 export interface UseStreamingChatReturn {
   send: (message: string, conversationId?: string, model?: string) => void;
+  reconnect: (conversationId: string) => void;
   streamingText: string;
   toolCalls: ToolCallState[];
   isThinking: boolean;
@@ -158,10 +167,6 @@ export interface UseStreamingChatReturn {
   error: string | null;
 }
 
-/**
- * React hook for consuming SSE streaming chat responses.
- * Falls back to tRPC chat mutation if SSE connection fails.
- */
 export function useStreamingChat(options: UseStreamingChatOptions): UseStreamingChatReturn {
   const [streamingText, setStreamingText] = useState('');
   const [toolCalls, setToolCalls] = useState<ToolCallState[]>([]);
@@ -175,19 +180,8 @@ export function useStreamingChat(options: UseStreamingChatOptions): UseStreaming
   const onConversationRef = useRef(options.onConversation);
   onConversationRef.current = options.onConversation;
 
-  function send(message: string, conversationId?: string, model?: string) {
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    setStreamingText('');
-    setToolCalls([]);
-    toolCallsRef.current = [];
-    setIsThinking(true);
-    setError(null);
-    setIsStreaming(true);
-
-    const handlers: StreamHandlers = {
+  function createHandlers(): StreamHandlers {
+    return {
       onTextDelta: (text) => {
         setStreamingText((prev) => prev + text);
         setIsThinking(false);
@@ -226,6 +220,24 @@ export function useStreamingChat(options: UseStreamingChatOptions): UseStreaming
       onSession: () => {},
       onConversation: (id) => onConversationRef.current?.(id),
     };
+  }
+
+  function resetState() {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setStreamingText('');
+    setToolCalls([]);
+    toolCallsRef.current = [];
+    setIsThinking(true);
+    setError(null);
+    setIsStreaming(true);
+    return controller;
+  }
+
+  function send(message: string, conversationId?: string, model?: string) {
+    const controller = resetState();
+    const handlers = createHandlers();
 
     processStream(message, handlers, { conversationId, model, signal: controller.signal }).catch(
       (err) => {
@@ -237,11 +249,25 @@ export function useStreamingChat(options: UseStreamingChatOptions): UseStreaming
     );
   }
 
+  function reconnect(conversationId: string) {
+    const controller = resetState();
+    const handlers = createHandlers();
+
+    connectToEvents(conversationId, handlers, controller.signal).catch(
+      (err) => {
+        if (controller.signal.aborted) return;
+        setIsStreaming(false);
+        setIsThinking(false);
+        setError(err instanceof Error ? err.message : 'Failed to reconnect to chat');
+      },
+    );
+  }
+
   useEffect(() => {
     return () => {
       abortRef.current?.abort();
     };
   }, []);
 
-  return { send, streamingText, toolCalls, isThinking, isStreaming, error };
+  return { send, reconnect, streamingText, toolCalls, isThinking, isStreaming, error };
 }

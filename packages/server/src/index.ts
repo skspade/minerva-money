@@ -21,6 +21,8 @@ import { startBudgetScheduler, stopBudgetScheduler } from './budget/budget-sched
 import { startChatCleanupScheduler, stopChatCleanupScheduler } from './chat-history/chat-cleanup-scheduler.js';
 import type { Context } from './sync/trpc.js';
 import { createChatStreamHandler } from './agent/chat-stream-handler.js';
+import { ChatJobManager } from './agent/chat-job-manager.js';
+import { createChatEventsHandler, createActiveJobHandler } from './agent/chat-events-handler.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -39,8 +41,11 @@ if (process.env.NODE_ENV !== 'test') {
   const client = getSimpleFINClient();
 
   const ctx: Context = { db, rateLimiter, client };
+  const jobManager = new ChatJobManager();
 
-  app.post('/api/chat/stream', createChatStreamHandler(db, ctx));
+  app.post('/api/chat/stream', createChatStreamHandler(db, ctx, jobManager));
+  app.get('/api/chat/events/:conversationId', createChatEventsHandler(jobManager));
+  app.get('/api/chat/active', createActiveJobHandler(jobManager));
 
   app.use(
     '/trpc',

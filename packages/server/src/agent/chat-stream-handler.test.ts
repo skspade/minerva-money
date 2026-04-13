@@ -1,13 +1,7 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Request, Response } from 'express';
-import type { SSEEvent } from '@minerva/shared';
 
-// Mock agent-service to avoid SDK dependency
-vi.mock('./agent-service.js', () => ({
-  chatStream: vi.fn(),
-}));
-
-// Mock models
 vi.mock('./models.js', () => ({
   isValidModelId: vi.fn((id: string) => ['claude-haiku-4-5', 'claude-sonnet-4-6', 'claude-opus-4-6'].includes(id)),
   MODELS: [
@@ -18,7 +12,6 @@ vi.mock('./models.js', () => ({
   DEFAULT_MODEL_ID: 'claude-sonnet-4-6',
 }));
 
-// Mock chat-history-service
 vi.mock('../chat-history/chat-history-service.js', () => ({
   createConversation: vi.fn(() => ({
     id: 'new-conv-uuid',
@@ -27,7 +20,7 @@ vi.mock('../chat-history/chat-history-service.js', () => ({
     created_at: '2026-03-28',
     updated_at: '2026-03-28',
   })),
-  getConversation: vi.fn((db: unknown, id: string) => {
+  getConversation: vi.fn((_db: unknown, id: string) => {
     if (id === 'a1b2c3d4-e5f6-4a7b-8c9d-e0f1a2b3c4d5') {
       return {
         id: 'a1b2c3d4-e5f6-4a7b-8c9d-e0f1a2b3c4d5',
@@ -42,29 +35,18 @@ vi.mock('../chat-history/chat-history-service.js', () => ({
     return null;
   }),
   appendMessage: vi.fn(),
-  updateSdkSessionId: vi.fn(),
 }));
 
-const { chatStream } = await import('./agent-service.js');
 const { createChatStreamHandler } = await import('./chat-stream-handler.js');
-const { createConversation, getConversation, appendMessage, updateSdkSessionId } = await import('../chat-history/chat-history-service.js');
+const { createConversation, getConversation, appendMessage } = await import('../chat-history/chat-history-service.js');
 
 function createMockReq(body: Record<string, unknown> = {}): Partial<Request> {
-  const listeners: Record<string, Array<() => void>> = {};
-  return {
-    body,
-    on: vi.fn((event: string, handler: () => void) => {
-      if (!listeners[event]) listeners[event] = [];
-      listeners[event].push(handler);
-    }) as any,
-    _listeners: listeners,
-  } as any;
+  return { body } as any;
 }
 
-function createMockRes(): Partial<Response> & { _written: string[]; _headers: Record<string, string>; _statusCode: number } {
+function createMockRes(): Partial<Response> & { _written: string[]; _statusCode: number } {
   const res: any = {
     _written: [] as string[],
-    _headers: {} as Record<string, string>,
     _statusCode: 200,
     statusCode: 200,
     status: vi.fn(function (this: any, code: number) {
@@ -76,45 +58,29 @@ function createMockRes(): Partial<Response> & { _written: string[]; _headers: Re
       this._written.push(JSON.stringify(data));
       return this;
     }),
-    setHeader: vi.fn(function (this: any, key: string, value: string) {
-      this._headers[key] = value;
-      return this;
-    }),
-    flushHeaders: vi.fn(),
-    write: vi.fn(function (this: any, data: string) {
-      this._written.push(data);
-      return true;
-    }),
-    end: vi.fn(),
-    on: vi.fn(),
   };
   return res;
 }
 
-async function* mockGenerator(events: SSEEvent[]): AsyncGenerator<SSEEvent> {
-  for (const event of events) {
-    yield event;
-  }
-}
-
-function parseWrittenEvents(res: { _written: string[] }): Array<Record<string, unknown>> {
-  return res._written
-    .filter(w => w.startsWith('data: '))
-    .map(w => JSON.parse(w.replace('data: ', '').trim()));
+function createMockJobManager(overrides: Record<string, unknown> = {}) {
+  return {
+    hasActiveJob: vi.fn(() => null),
+    startJob: vi.fn(),
+    ...overrides,
+  } as any;
 }
 
 describe('createChatStreamHandler', () => {
   const mockDb = {} as any;
   const mockCtx = { db: mockDb, rateLimiter: {}, client: {} } as any;
-  let handler: ReturnType<typeof createChatStreamHandler>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    handler = createChatStreamHandler(mockDb, mockCtx);
   });
 
   describe('Input Validation', () => {
     it('returns 400 when message field is missing', async () => {
+      const handler = createChatStreamHandler(mockDb, mockCtx, createMockJobManager());
       const req = createMockReq({});
       const res = createMockRes();
 
@@ -125,6 +91,7 @@ describe('createChatStreamHandler', () => {
     });
 
     it('returns 400 when message is empty string', async () => {
+      const handler = createChatStreamHandler(mockDb, mockCtx, createMockJobManager());
       const req = createMockReq({ message: '' });
       const res = createMockRes();
 
@@ -134,6 +101,7 @@ describe('createChatStreamHandler', () => {
     });
 
     it('returns 400 when model is invalid', async () => {
+      const handler = createChatStreamHandler(mockDb, mockCtx, createMockJobManager());
       const req = createMockReq({ message: 'hello', model: 'invalid-model' });
       const res = createMockRes();
 
@@ -145,6 +113,7 @@ describe('createChatStreamHandler', () => {
     });
 
     it('returns 400 when conversationId is not a valid UUID', async () => {
+      const handler = createChatStreamHandler(mockDb, mockCtx, createMockJobManager());
       const req = createMockReq({ message: 'hello', conversationId: 'not-a-uuid' });
       const res = createMockRes();
 
@@ -152,23 +121,12 @@ describe('createChatStreamHandler', () => {
 
       expect(res.status).toHaveBeenCalledWith(400);
     });
-
-    it('does not set SSE headers on validation failure', async () => {
-      const req = createMockReq({});
-      const res = createMockRes();
-
-      await handler(req as Request, res as unknown as Response, vi.fn());
-
-      expect(res.setHeader).not.toHaveBeenCalledWith('Content-Type', 'text/event-stream');
-      expect(res.flushHeaders).not.toHaveBeenCalled();
-    });
   });
 
-  describe('Conversation Creation (API-05)', () => {
+  describe('Conversation Management', () => {
     it('creates new conversation when no conversationId provided', async () => {
-      const events: SSEEvent[] = [{ type: 'done', text: 'Hello' }];
-      (chatStream as any).mockReturnValue(mockGenerator(events));
-
+      const jobManager = createMockJobManager();
+      const handler = createChatStreamHandler(mockDb, mockCtx, jobManager);
       const req = createMockReq({ message: 'hello' });
       const res = createMockRes();
 
@@ -181,9 +139,8 @@ describe('createChatStreamHandler', () => {
     });
 
     it('loads existing conversation when valid conversationId provided', async () => {
-      const events: SSEEvent[] = [{ type: 'done', text: 'Hello' }];
-      (chatStream as any).mockReturnValue(mockGenerator(events));
-
+      const jobManager = createMockJobManager();
+      const handler = createChatStreamHandler(mockDb, mockCtx, jobManager);
       const req = createMockReq({ message: 'hello', conversationId: 'a1b2c3d4-e5f6-4a7b-8c9d-e0f1a2b3c4d5' });
       const res = createMockRes();
 
@@ -194,6 +151,8 @@ describe('createChatStreamHandler', () => {
     });
 
     it('returns 400 when conversationId not found in DB', async () => {
+      const jobManager = createMockJobManager();
+      const handler = createChatStreamHandler(mockDb, mockCtx, jobManager);
       const req = createMockReq({
         message: 'hello',
         conversationId: '00000000-0000-0000-0000-000000000000',
@@ -205,347 +164,102 @@ describe('createChatStreamHandler', () => {
       expect(res.status).toHaveBeenCalledWith(400);
       const errorBody = JSON.parse(res._written[0]);
       expect(errorBody.error).toContain('Conversation not found');
-      expect(res.setHeader).not.toHaveBeenCalledWith('Content-Type', 'text/event-stream');
     });
   });
 
-  describe('SSE Conversation Event (API-06)', () => {
-    it('emits conversation event as first SSE event', async () => {
-      const events: SSEEvent[] = [{ type: 'done', text: 'Hello' }];
-      (chatStream as any).mockReturnValue(mockGenerator(events));
-
+  describe('Job Management', () => {
+    it('returns conversationId as JSON', async () => {
+      const jobManager = createMockJobManager();
+      const handler = createChatStreamHandler(mockDb, mockCtx, jobManager);
       const req = createMockReq({ message: 'hello' });
       const res = createMockRes();
 
       await handler(req as Request, res as unknown as Response, vi.fn());
 
-      const written = parseWrittenEvents(res);
-      expect(written[0]).toEqual({
-        type: 'conversation',
-        conversationId: 'new-conv-uuid',
-      });
+      expect(res.json).toHaveBeenCalledWith({ conversationId: 'new-conv-uuid' });
     });
 
-    it('emits conversation event with existing conversationId', async () => {
-      const events: SSEEvent[] = [{ type: 'done', text: 'Hello' }];
-      (chatStream as any).mockReturnValue(mockGenerator(events));
-
-      const req = createMockReq({ message: 'hello', conversationId: 'a1b2c3d4-e5f6-4a7b-8c9d-e0f1a2b3c4d5' });
-      const res = createMockRes();
-
-      await handler(req as Request, res as unknown as Response, vi.fn());
-
-      const written = parseWrittenEvents(res);
-      expect(written[0]).toEqual({
-        type: 'conversation',
-        conversationId: 'a1b2c3d4-e5f6-4a7b-8c9d-e0f1a2b3c4d5',
-      });
-    });
-  });
-
-  describe('Message Persistence (API-07)', () => {
-    it('persists user message before stream starts', async () => {
-      let chatStreamCallOrder = -1;
-      let appendMessageCallOrder = -1;
+    it('persists user message before starting job', async () => {
+      let appendOrder = -1;
+      let startJobOrder = -1;
       let callIndex = 0;
 
-      (appendMessage as any).mockImplementation(() => {
-        if (appendMessageCallOrder === -1) {
-          appendMessageCallOrder = callIndex++;
-        } else {
-          callIndex++;
-        }
+      (appendMessage as any).mockImplementation(() => { appendOrder = callIndex++; });
+      const jobManager = createMockJobManager({
+        startJob: vi.fn(() => { startJobOrder = callIndex++; }),
       });
-
-      (chatStream as any).mockImplementation(() => {
-        chatStreamCallOrder = callIndex++;
-        return mockGenerator([{ type: 'done', text: 'Hello' }]);
-      });
-
+      const handler = createChatStreamHandler(mockDb, mockCtx, jobManager);
       const req = createMockReq({ message: 'hello' });
       const res = createMockRes();
 
       await handler(req as Request, res as unknown as Response, vi.fn());
 
-      // appendMessage for user message should be called before chatStream
       expect(appendMessage).toHaveBeenCalledWith(mockDb, {
         conversationId: 'new-conv-uuid',
         role: 'user',
         content: 'hello',
       });
-      expect(appendMessageCallOrder).toBeLessThan(chatStreamCallOrder);
+      expect(appendOrder).toBeLessThan(startJobOrder);
     });
 
-    it('persists assistant message after stream done event', async () => {
-      const events: SSEEvent[] = [
-        { type: 'session', sessionId: 'sess-1' },
-        { type: 'text-delta', text: 'Hello' },
-        { type: 'done', text: 'Hello' },
-      ];
-
-      // Mock chatStream to populate state.fullText
-      (chatStream as any).mockImplementation((db: any, ctx: any, msg: any, signal: any, state: any) => {
-        async function* gen(): AsyncGenerator<SSEEvent> {
-          for (const event of events) {
-            if (event.type === 'text-delta' && event.type === 'text-delta') {
-              state.fullText += event.text;
-            }
-            yield event;
-          }
-        }
-        return gen();
-      });
-
-      const req = createMockReq({ message: 'hello' });
-      const res = createMockRes();
-
-      await handler(req as Request, res as unknown as Response, vi.fn());
-
-      // Second appendMessage call should be for assistant
-      const appendCalls = (appendMessage as any).mock.calls;
-      expect(appendCalls.length).toBeGreaterThanOrEqual(2);
-      expect(appendCalls[1][1]).toMatchObject({
-        conversationId: 'new-conv-uuid',
-        role: 'assistant',
-        content: 'Hello',
-      });
-    });
-
-    it('does NOT persist assistant message on error event', async () => {
-      const events: SSEEvent[] = [
-        { type: 'error', message: 'Something went wrong', partialText: 'partial' },
-      ];
-      (chatStream as any).mockReturnValue(mockGenerator(events));
-
-      const req = createMockReq({ message: 'hello' });
-      const res = createMockRes();
-
-      await handler(req as Request, res as unknown as Response, vi.fn());
-
-      // Only user message should be persisted
-      const appendCalls = (appendMessage as any).mock.calls;
-      expect(appendCalls).toHaveLength(1);
-      expect(appendCalls[0][1].role).toBe('user');
-    });
-
-    it('persists done event AFTER assistant message', async () => {
-      const doneWriteOrder: number[] = [];
-      let writeCallIndex = 0;
-
-      const events: SSEEvent[] = [{ type: 'done', text: 'Hello' }];
-
-      (chatStream as any).mockImplementation((db: any, ctx: any, msg: any, signal: any, state: any) => {
-        state.fullText = 'Hello';
-        return mockGenerator(events);
-      });
-
-      (appendMessage as any).mockImplementation(() => {
-        doneWriteOrder.push(writeCallIndex++);
-      });
-
-      const req = createMockReq({ message: 'hello' });
-      const res = createMockRes();
-      const originalWrite = res.write;
-      (res as any).write = vi.fn(function (this: any, data: string) {
-        if (data.includes('"done"')) {
-          doneWriteOrder.push(writeCallIndex++);
-        }
-        return originalWrite.call(this, data);
-      });
-
-      await handler(req as Request, res as unknown as Response, vi.fn());
-
-      // appendMessage for assistant (index 1 from mock) should happen before done write
-      // doneWriteOrder[0] = user appendMessage, [1] = assistant appendMessage, [2] = done write
-      expect(doneWriteOrder.length).toBeGreaterThanOrEqual(2);
-    });
-  });
-
-  describe('SDK Session ID Management', () => {
-    it('passes sdk_session_id from conversation as state.sessionId', async () => {
-      const events: SSEEvent[] = [{ type: 'done', text: 'Hello' }];
-      (chatStream as any).mockReturnValue(mockGenerator(events));
-
+    it('starts job with correct params', async () => {
+      const jobManager = createMockJobManager();
+      const handler = createChatStreamHandler(mockDb, mockCtx, jobManager);
       const req = createMockReq({ message: 'hello', conversationId: 'a1b2c3d4-e5f6-4a7b-8c9d-e0f1a2b3c4d5' });
       const res = createMockRes();
 
       await handler(req as Request, res as unknown as Response, vi.fn());
 
-      expect(chatStream).toHaveBeenCalledWith(
-        mockDb,
-        mockCtx,
-        'hello',
-        expect.any(AbortSignal),
-        expect.objectContaining({ sessionId: 'sdk-sess-123', conversationId: 'a1b2c3d4-e5f6-4a7b-8c9d-e0f1a2b3c4d5' }),
-        undefined,
-      );
+      expect(jobManager.startJob).toHaveBeenCalledWith({
+        db: mockDb,
+        ctx: mockCtx,
+        conversationId: 'a1b2c3d4-e5f6-4a7b-8c9d-e0f1a2b3c4d5',
+        message: 'hello',
+        sdkSessionId: 'sdk-sess-123',
+        model: undefined,
+      });
     });
 
-    it('calls updateSdkSessionId when session ID changes', async () => {
-      const events: SSEEvent[] = [{ type: 'done', text: 'Hello' }];
-
-      (chatStream as any).mockImplementation((db: any, ctx: any, msg: any, signal: any, state: any) => {
-        // Simulate SDK assigning a new session ID
-        state.sessionId = 'new-sdk-sess';
-        state.fullText = 'Hello';
-        return mockGenerator(events);
+    it('returns 409 when another job is active for a different conversation', async () => {
+      const jobManager = createMockJobManager({
+        hasActiveJob: vi.fn(() => ({ conversationId: 'other-conv-id' })),
       });
-
+      const handler = createChatStreamHandler(mockDb, mockCtx, jobManager);
       const req = createMockReq({ message: 'hello' });
       const res = createMockRes();
 
       await handler(req as Request, res as unknown as Response, vi.fn());
 
-      expect(updateSdkSessionId).toHaveBeenCalledWith(mockDb, 'new-conv-uuid', 'new-sdk-sess');
+      expect(res.status).toHaveBeenCalledWith(409);
+      const errorBody = JSON.parse(res._written[0]);
+      expect(errorBody.error).toContain('already running');
+      expect(errorBody.activeConversationId).toBe('other-conv-id');
     });
 
-    it('does not call updateSdkSessionId when session ID unchanged', async () => {
-      const events: SSEEvent[] = [{ type: 'done', text: 'Hello' }];
-
-      (chatStream as any).mockImplementation((db: any, ctx: any, msg: any, signal: any, state: any) => {
-        // Session ID stays as the one from conversation
-        state.sessionId = 'sdk-sess-123';
-        state.fullText = 'Hello';
-        return mockGenerator(events);
+    it('allows request when active job is for the same conversation', async () => {
+      const jobManager = createMockJobManager({
+        hasActiveJob: vi.fn(() => ({ conversationId: 'a1b2c3d4-e5f6-4a7b-8c9d-e0f1a2b3c4d5' })),
       });
-
+      const handler = createChatStreamHandler(mockDb, mockCtx, jobManager);
       const req = createMockReq({ message: 'hello', conversationId: 'a1b2c3d4-e5f6-4a7b-8c9d-e0f1a2b3c4d5' });
       const res = createMockRes();
 
       await handler(req as Request, res as unknown as Response, vi.fn());
 
-      expect(updateSdkSessionId).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('SSE Response Format', () => {
-    it('sets SSE headers for valid request', async () => {
-      const events: SSEEvent[] = [{ type: 'done', text: 'Hello' }];
-      (chatStream as any).mockReturnValue(mockGenerator(events));
-
-      const req = createMockReq({ message: 'hello' });
-      const res = createMockRes();
-
-      await handler(req as Request, res as unknown as Response, vi.fn());
-
-      expect(res.setHeader).toHaveBeenCalledWith('Content-Type', 'text/event-stream');
-      expect(res.setHeader).toHaveBeenCalledWith('Cache-Control', 'no-cache');
-      expect(res.setHeader).toHaveBeenCalledWith('Connection', 'keep-alive');
-      expect(res.flushHeaders).toHaveBeenCalled();
+      expect(res.json).toHaveBeenCalledWith({ conversationId: 'a1b2c3d4-e5f6-4a7b-8c9d-e0f1a2b3c4d5' });
     });
 
-    it('writes each event as SSE data line', async () => {
-      const events: SSEEvent[] = [
-        { type: 'session', sessionId: 'sess-1' },
-        { type: 'text-delta', text: 'Hello' },
-        { type: 'done', text: 'Hello' },
-      ];
-
-      (chatStream as any).mockImplementation((db: any, ctx: any, msg: any, signal: any, state: any) => {
-        state.fullText = 'Hello';
-        return mockGenerator(events);
+    it('returns 409 if jobManager.startJob throws', async () => {
+      const jobManager = createMockJobManager({
+        startJob: vi.fn(() => { throw new Error('Another chat job is already running'); }),
       });
-
+      const handler = createChatStreamHandler(mockDb, mockCtx, jobManager);
       const req = createMockReq({ message: 'hello' });
       const res = createMockRes();
 
       await handler(req as Request, res as unknown as Response, vi.fn());
 
-      // Conversation event + all generator events
-      for (const event of events) {
-        expect(res.write).toHaveBeenCalledWith(`data: ${JSON.stringify(event)}\n\n`);
-      }
-    });
-
-    it('calls res.end() after generator completes', async () => {
-      const events: SSEEvent[] = [{ type: 'done', text: 'done' }];
-      (chatStream as any).mockReturnValue(mockGenerator(events));
-
-      const req = createMockReq({ message: 'hello' });
-      const res = createMockRes();
-
-      await handler(req as Request, res as unknown as Response, vi.fn());
-
-      expect(res.end).toHaveBeenCalled();
-    });
-  });
-
-  describe('Abort Handling', () => {
-    it('wires res close event to abort controller', async () => {
-      const events: SSEEvent[] = [{ type: 'done', text: 'done' }];
-      (chatStream as any).mockReturnValue(mockGenerator(events));
-
-      const req = createMockReq({ message: 'hello' });
-      const res = createMockRes();
-
-      await handler(req as Request, res as unknown as Response, vi.fn());
-
-      expect(res.on).toHaveBeenCalledWith('close', expect.any(Function));
-    });
-
-    it('handles client disconnect mid-stream gracefully', async () => {
-      const req = createMockReq({ message: 'hello' });
-      const res = createMockRes();
-
-      // Capture the close callback registered on res
-      let closeCallback: (() => void) | undefined;
-      vi.mocked(res.on).mockImplementation((event: string, cb: () => void) => {
-        if (event === 'close') closeCallback = cb;
-        return res as any;
-      });
-
-      // Track whether the generator was fully consumed
-      let yieldedCount = 0;
-
-      vi.mocked(chatStream).mockImplementation((db: any, ctx: any, msg: any, signal: AbortSignal, state: any) => {
-        async function* gen(): AsyncGenerator<SSEEvent> {
-          yieldedCount++;
-          yield { type: 'text-delta', text: 'Hello' } as SSEEvent;
-
-          // Simulate client disconnect mid-stream
-          (res as any).destroyed = true;
-          closeCallback!();
-
-          yieldedCount++;
-          yield { type: 'text-delta', text: ' world' } as SSEEvent;
-
-          yieldedCount++;
-          yield { type: 'done', text: 'Hello world' } as SSEEvent;
-        }
-        return gen();
-      });
-
-      const handlerPromise = handler(req as Request, res as unknown as Response, vi.fn());
-
-      // Should complete without throwing
-      await handlerPromise;
-
-      // The abort signal should have been triggered by the close callback
-      const signalArg = vi.mocked(chatStream).mock.calls[0]?.[3] as AbortSignal;
-      expect(signalArg.aborted).toBe(true);
-
-      // res.end() should NOT be called on a destroyed response
-      expect(res.end).not.toHaveBeenCalled();
-    });
-
-    it('writes SSE error event if chatStream throws unexpectedly', async () => {
-      (chatStream as any).mockImplementation(() => {
-        async function* gen(): AsyncGenerator<SSEEvent> {
-          throw new Error('Unexpected crash');
-        }
-        return gen();
-      });
-
-      const req = createMockReq({ message: 'hello' });
-      const res = createMockRes();
-
-      await handler(req as Request, res as unknown as Response, vi.fn());
-
-      const errorWrite = (res.write as any).mock.calls.find(
-        (call: string[]) => call[0].includes('"type":"error"'),
-      );
-      expect(errorWrite).toBeDefined();
-      expect(res.end).toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(409);
     });
   });
 });

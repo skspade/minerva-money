@@ -143,7 +143,23 @@ export default function ChatPage() {
     queryClient.invalidateQueries({ queryKey: trpc.chatHistory.list.queryKey() });
   }, [navigate, queryClient, trpc.chatHistory.list]);
 
-  const { send, streamingText, toolCalls, isThinking, isStreaming, error } = useStreamingChat({ onComplete, onConversation });
+  const { send, reconnect, streamingText, toolCalls, isThinking, isStreaming, error } = useStreamingChat({ onComplete, onConversation });
+
+  // Check for active job on mount — reconnect if the agent is still running
+  useEffect(() => {
+    fetch('/api/chat/active')
+      .then(res => res.json())
+      .then((data: { conversationId: string } | null) => {
+        if (data?.conversationId) {
+          if (data.conversationId !== conversationId) {
+            setConversationId(data.conversationId);
+            navigate(`/chat/${data.conversationId}`, { replace: true });
+          }
+          reconnect(data.conversationId);
+        }
+      })
+      .catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Append error messages reactively
   useEffect(() => {
