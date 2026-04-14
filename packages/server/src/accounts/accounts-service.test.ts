@@ -41,7 +41,7 @@ describe('accounts-service', () => {
     it('account appears in database after creation', () => {
       const account = createAccount(db, { name: 'Test Account', institution: 'Test Bank' });
 
-      const row = db.prepare('SELECT * FROM accounts WHERE id = ?').get(account.id) as any;
+      const row = db.prepare('SELECT * FROM accounts WHERE id = ?').get(account.id) as Record<string, unknown>;
       expect(row).toBeDefined();
       expect(row.name).toBe('Test Account');
       expect(row.source).toBe('manual');

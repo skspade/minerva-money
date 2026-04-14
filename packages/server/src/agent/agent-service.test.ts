@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type Database from 'better-sqlite3';
 import type { SSEEvent } from '@minerva/shared';
+import type { Context } from '../sync/trpc.js';
 import type { StreamState } from './agent-service.js';
+
+const mockDb = {} as Database.Database;
+const mockCtx = {} as Context;
 
 // Mock the SDK query function
 const mockClose = vi.fn();
@@ -75,7 +80,7 @@ describe('chatStream', () => {
 
       const state = makeState();
       const events = await collectEvents(
-        chatStream({} as any, {} as any, 'hello', abortController.signal, state),
+        chatStream(mockDb, mockCtx, 'hello', abortController.signal, state),
       );
 
       expect(events[0]).toEqual({ type: 'session', sessionId: 'sess-123' });
@@ -89,7 +94,7 @@ describe('chatStream', () => {
 
       const state = makeState();
       await collectEvents(
-        chatStream({} as any, {} as any, 'hello', abortController.signal, state),
+        chatStream(mockDb, mockCtx, 'hello', abortController.signal, state),
       );
 
       expect(state.sessionId).toBe('sess-456');
@@ -119,7 +124,7 @@ describe('chatStream', () => {
 
       const state = makeState();
       const events = await collectEvents(
-        chatStream({} as any, {} as any, 'hello', abortController.signal, state),
+        chatStream(mockDb, mockCtx, 'hello', abortController.signal, state),
       );
 
       const textDeltas = events.filter(e => e.type === 'text-delta');
@@ -147,7 +152,7 @@ describe('chatStream', () => {
 
       const state = makeState();
       await collectEvents(
-        chatStream({} as any, {} as any, 'hello', abortController.signal, state),
+        chatStream(mockDb, mockCtx, 'hello', abortController.signal, state),
       );
 
       expect(state.fullText).toBe('Hello world!');
@@ -171,7 +176,7 @@ describe('chatStream', () => {
 
       const state = makeState();
       const events = await collectEvents(
-        chatStream({} as any, {} as any, 'hello', abortController.signal, state),
+        chatStream(mockDb, mockCtx, 'hello', abortController.signal, state),
       );
 
       const doneEvents = events.filter(e => e.type === 'done');
@@ -197,7 +202,7 @@ describe('chatStream', () => {
 
       const state = makeState();
       const events = await collectEvents(
-        chatStream({} as any, {} as any, 'hello', abortController.signal, state),
+        chatStream(mockDb, mockCtx, 'hello', abortController.signal, state),
       );
 
       const errorEvents = events.filter(e => e.type === 'error');
@@ -220,7 +225,7 @@ describe('chatStream', () => {
 
       const state = makeState();
       const events = await collectEvents(
-        chatStream({} as any, {} as any, 'hello', abortController.signal, state),
+        chatStream(mockDb, mockCtx, 'hello', abortController.signal, state),
       );
 
       // Should only have session + done events, not status/compact/tool_progress
@@ -247,7 +252,7 @@ describe('chatStream', () => {
 
       const state = makeState();
       const events = await collectEvents(
-        chatStream({} as any, {} as any, 'hello', abortController.signal, state),
+        chatStream(mockDb, mockCtx, 'hello', abortController.signal, state),
       );
 
       const toolStarts = events.filter(e => e.type === 'tool-start');
@@ -271,7 +276,7 @@ describe('chatStream', () => {
 
       const state = makeState();
       const events = await collectEvents(
-        chatStream({} as any, {} as any, 'hello', abortController.signal, state),
+        chatStream(mockDb, mockCtx, 'hello', abortController.signal, state),
       );
 
       const toolEnds = events.filter(e => e.type === 'tool-end');
@@ -303,7 +308,7 @@ describe('chatStream', () => {
 
       const state = makeState();
       const events = await collectEvents(
-        chatStream({} as any, {} as any, 'hello', abortController.signal, state),
+        chatStream(mockDb, mockCtx, 'hello', abortController.signal, state),
       );
 
       const toolStarts = events.filter(e => e.type === 'tool-start');
@@ -327,7 +332,7 @@ describe('chatStream', () => {
 
       const state = makeState();
       await collectEvents(
-        chatStream({} as any, {} as any, 'hello', abortController.signal, state),
+        chatStream(mockDb, mockCtx, 'hello', abortController.signal, state),
       );
 
       expect(state.toolCalls).toHaveLength(1);
@@ -356,7 +361,7 @@ describe('chatStream', () => {
 
       const state = makeState();
       const events = await collectEvents(
-        chatStream({} as any, {} as any, 'hello', preAbortController.signal, state),
+        chatStream(mockDb, mockCtx, 'hello', preAbortController.signal, state),
       );
 
       // With pre-aborted signal, the loop should break immediately
@@ -372,7 +377,7 @@ describe('chatStream', () => {
 
       // Start iterating
       const state = makeState();
-      const gen = chatStream({} as any, {} as any, 'hello', abortController.signal, state);
+      const gen = chatStream(mockDb, mockCtx, 'hello', abortController.signal, state);
       await gen.next(); // get session event
 
       // Abort
@@ -390,7 +395,7 @@ describe('chatStream', () => {
       let hangResolve: () => void;
       const hangPromise = new Promise<void>(r => { hangResolve = r; });
 
-      (mockQuery as any).mockImplementationOnce(() => {
+      vi.mocked(mockQuery).mockImplementationOnce(() => {
         let sent = false;
         const gen = {
           [Symbol.asyncIterator]() { return this; },
@@ -412,7 +417,7 @@ describe('chatStream', () => {
 
       const state = makeState();
       const eventsPromise = collectEvents(
-        chatStream({} as any, {} as any, 'hello', abortController.signal, state),
+        chatStream(mockDb, mockCtx, 'hello', abortController.signal, state),
       );
 
       // Advance past the idle timeout (default model is sonnet = 30s)
@@ -441,7 +446,7 @@ describe('chatStream', () => {
         },
       ];
 
-      (mockQuery as any).mockImplementationOnce(() => {
+      vi.mocked(mockQuery).mockImplementationOnce(() => {
         const gen = {
           [Symbol.asyncIterator]() { return this; },
           async next() {
@@ -460,7 +465,7 @@ describe('chatStream', () => {
 
       const state = makeState();
       const eventsPromise = collectEvents(
-        chatStream({} as any, {} as any, 'hello', abortController.signal, state),
+        chatStream(mockDb, mockCtx, 'hello', abortController.signal, state),
       );
 
       await vi.advanceTimersByTimeAsync(31_000);
@@ -493,7 +498,7 @@ describe('chatStream', () => {
 
       const state = makeState();
       const events = await collectEvents(
-        chatStream({} as any, {} as any, 'hello', abortController.signal, state),
+        chatStream(mockDb, mockCtx, 'hello', abortController.signal, state),
       );
 
       const doneEvent = events.find(e => e.type === 'done');
@@ -504,7 +509,7 @@ describe('chatStream', () => {
   describe('Error Handling', () => {
     it('yields SSEErrorEvent on unexpected exceptions', async () => {
       const { query: mockQuery } = await import('@anthropic-ai/claude-agent-sdk');
-      (mockQuery as any).mockImplementationOnce(() => {
+      vi.mocked(mockQuery).mockImplementationOnce(() => {
         const gen = {
           [Symbol.asyncIterator]() { return this; },
           async next() {
@@ -519,7 +524,7 @@ describe('chatStream', () => {
 
       const state = makeState();
       const events = await collectEvents(
-        chatStream({} as any, {} as any, 'hello', abortController.signal, state),
+        chatStream(mockDb, mockCtx, 'hello', abortController.signal, state),
       );
 
       const errorEvents = events.filter(e => e.type === 'error');
@@ -531,7 +536,7 @@ describe('chatStream', () => {
 
     it('never re-throws from the generator', async () => {
       const { query: mockQuery } = await import('@anthropic-ai/claude-agent-sdk');
-      (mockQuery as any).mockImplementationOnce(() => {
+      vi.mocked(mockQuery).mockImplementationOnce(() => {
         const gen = {
           [Symbol.asyncIterator]() { return this; },
           async next() {
@@ -547,7 +552,7 @@ describe('chatStream', () => {
       // Should not throw - should yield error event and complete
       const state = makeState();
       await expect(
-        collectEvents(chatStream({} as any, {} as any, 'hello', abortController.signal, state)),
+        collectEvents(chatStream(mockDb, mockCtx, 'hello', abortController.signal, state)),
       ).resolves.toBeDefined();
     });
   });
@@ -563,7 +568,7 @@ describe('chatStream', () => {
 
       const state = makeState({ sessionId: 'old-sess' });
       await collectEvents(
-        chatStream({} as any, {} as any, 'hello', abortController.signal, state),
+        chatStream(mockDb, mockCtx, 'hello', abortController.signal, state),
       );
 
       // The first call should include resume in options

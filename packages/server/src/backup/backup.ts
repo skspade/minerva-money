@@ -18,14 +18,6 @@ const ICLOUD_PARENT = path.join(
   'com~apple~CloudDrive'
 );
 
-const DEFAULT_BACKUP_DIR = path.join(
-  os.homedir(),
-  ICLOUD_PARENT,
-  'MinervaBackups'
-);
-
-const LOCAL_BACKUP_DIR = path.join(os.homedir(), 'minerva-money', 'backups');
-
 const RETENTION_DAYS = 30;
 
 export function resolveBackupDir(homeDir?: string): { dir: string; isCloud: boolean } {

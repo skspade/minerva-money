@@ -13,7 +13,7 @@ export interface CreateRuleInput extends RuleConditions {
   categoryId: number;
 }
 
-export interface UpdateRuleInput extends CreateRuleInput {}
+export type UpdateRuleInput = CreateRuleInput;
 
 export interface Rule {
   id: number;

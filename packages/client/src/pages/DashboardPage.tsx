@@ -200,11 +200,11 @@ export default function DashboardPage() {
                     <XAxis dataKey="day" />
                     <YAxis tickFormatter={(value: number) => formatCurrency(value)} width={80} />
                     <Tooltip
-                      formatter={(value: number, name: string) => [
-                        formatCurrency(value),
+                      formatter={(value, name) => [
+                        formatCurrency(Number(value ?? 0)),
                         name === 'thisMonth' ? 'This Month' : 'Last Month',
                       ]}
-                      labelFormatter={(day: number) => `Day ${day}`}
+                      labelFormatter={(label) => `Day ${label}`}
                     />
                     <Line
                       type="monotone"

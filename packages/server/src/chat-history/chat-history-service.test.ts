@@ -125,8 +125,6 @@ describe('chat-history-service', () => {
         model: 'claude-sonnet-4-6',
         firstMessage: 'Hi',
       });
-      const originalUpdatedAt = conv.updated_at;
-
       // Force a different timestamp by manipulating the DB directly
       db.prepare(
         "UPDATE chat_conversations SET updated_at = datetime('now', '-1 hour') WHERE id = ?",
