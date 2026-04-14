@@ -256,6 +256,56 @@ export default function TransactionsPage() {
     return sortDirection === 'asc' ? ' \u2191' : ' \u2193';
   };
 
+  const renderTransactionCells = (txn: typeof paginatedRows[number]) => (
+    <>
+      <td className="px-4 py-2 text-sm">
+        {txn.payee}
+        {txn.isTransfer && (
+          <span className="ml-2 inline-block px-1.5 py-0.5 text-xs font-medium bg-highlight text-highlight-text rounded">
+            Transfer
+          </span>
+        )}
+      </td>
+      <td className={`px-4 py-2 text-sm text-right ${txn.amount < 0 ? 'text-danger' : 'text-text-primary'}`}>
+        {formatCurrency(txn.amount)}
+      </td>
+      <td className="px-4 py-2 text-sm">{txn.accountName}</td>
+      <td className="px-4 py-2 text-sm">
+        <div className="flex items-center gap-1">
+          {txn.splitCount > 0 ? (
+            <button
+              onClick={() => setSplitTransactionId(txn.id)}
+              className="text-accent hover:text-accent-hover text-sm"
+            >
+              Split ({txn.splitCount})
+            </button>
+          ) : (
+            <div>
+              <CategoryPicker
+                value={txn.categoryId}
+                onChange={categoryId => updateCategoryMut.mutate({ transactionId: txn.id, categoryId })}
+              />
+              {txn.ruleName && (
+                <div className="text-xs text-text-tertiary mt-0.5" title={`Categorized by rule: ${txn.ruleName}`}>
+                  Rule: {txn.ruleName}
+                </div>
+              )}
+            </div>
+          )}
+          {txn.splitCount === 0 && (
+            <button
+              onClick={() => setSplitTransactionId(txn.id)}
+              className="text-xs text-text-tertiary hover:text-accent"
+              title="Split transaction"
+            >
+              Split
+            </button>
+          )}
+        </div>
+      </td>
+    </>
+  );
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
@@ -386,7 +436,7 @@ export default function TransactionsPage() {
             <thead>
               <tr className="bg-surface-secondary text-left text-sm font-semibold text-text-primary">
                 <th
-                  className="px-4 py-2 cursor-pointer hover:bg-surface-tertiary"
+                  className="px-4 py-2 min-w-[100px] cursor-pointer hover:bg-surface-tertiary"
                   onClick={() => handleSort('date')}
                 >
                   Date{sortIndicator('date')}
@@ -412,60 +462,46 @@ export default function TransactionsPage() {
                 <th className="px-4 py-2">Category</th>
               </tr>
             </thead>
-            <tbody>
-              {paginatedRows.map(txn => (
-                <tr key={txn.id} className="border-b border-border even:bg-surface-alt hover:bg-surface-secondary">
-                  <td className="px-4 py-2 text-sm">
-                    {new Date(txn.date + 'T00:00:00').toLocaleDateString()}
-                  </td>
-                  <td className="px-4 py-2 text-sm">
-                    {txn.payee}
-                    {txn.isTransfer && (
-                      <span className="ml-2 inline-block px-1.5 py-0.5 text-xs font-medium bg-highlight text-highlight-text rounded">
-                        Transfer
-                      </span>
-                    )}
-                  </td>
-                  <td className={`px-4 py-2 text-sm text-right ${txn.amount < 0 ? 'text-danger' : 'text-text-primary'}`}>
-                    {formatCurrency(txn.amount)}
-                  </td>
-                  <td className="px-4 py-2 text-sm">{txn.accountName}</td>
-                  <td className="px-4 py-2 text-sm">
-                    <div className="flex items-center gap-1">
-                      {txn.splitCount > 0 ? (
-                        <button
-                          onClick={() => setSplitTransactionId(txn.id)}
-                          className="text-accent hover:text-accent-hover text-sm"
-                        >
-                          Split ({txn.splitCount})
-                        </button>
-                      ) : (
-                        <div>
-                          <CategoryPicker
-                            value={txn.categoryId}
-                            onChange={categoryId => updateCategoryMut.mutate({ transactionId: txn.id, categoryId })}
-                          />
-                          {txn.ruleName && (
-                            <div className="text-xs text-text-tertiary mt-0.5" title={`Categorized by rule: ${txn.ruleName}`}>
-                              Rule: {txn.ruleName}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      {txn.splitCount === 0 && (
-                        <button
-                          onClick={() => setSplitTransactionId(txn.id)}
-                          className="text-xs text-text-tertiary hover:text-accent"
-                          title="Split transaction"
-                        >
-                          Split
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
+            {dayGroups ? (
+              dayGroups.map(group => (
+                <tbody key={group.date}>
+                  <tr>
+                    <td
+                      colSpan={5}
+                      className="px-4 py-2 text-sm font-semibold"
+                      style={{ backgroundColor: group.color.bg, borderLeft: `3px solid ${group.color.border}` }}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-text-primary">{group.label}</span>
+                        <span className={`text-xs font-medium ${group.dailyTotal < 0 ? 'text-danger' : 'text-text-secondary'}`}>
+                          {formatCurrency(group.dailyTotal)}
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
+                  {group.transactions.map(txn => (
+                    <tr key={txn.id} className="border-b border-border hover:bg-surface-secondary">
+                      <td
+                        className="px-4 py-2 text-sm"
+                        style={{ borderLeft: `3px solid ${group.color.border}` }}
+                      />
+                      {renderTransactionCells(txn)}
+                    </tr>
+                  ))}
+                </tbody>
+              ))
+            ) : (
+              <tbody>
+                {paginatedRows.map(txn => (
+                  <tr key={txn.id} className="border-b border-border even:bg-surface-alt hover:bg-surface-secondary">
+                    <td className="px-4 py-2 text-sm">
+                      {new Date(txn.date + 'T00:00:00').toLocaleDateString()}
+                    </td>
+                    {renderTransactionCells(txn)}
+                  </tr>
+                ))}
+              </tbody>
+            )}
           </table>
         </div>
 
